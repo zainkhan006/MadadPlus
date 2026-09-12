@@ -130,10 +130,105 @@ app.post("/api/v1/emergency-requests", async (req, res) => {
       result
     );
 
+    if (result.assignedAmbulance) {
+      const location = await db("ambulances")
+        .select(
+          db.raw("ST_Y(location::geometry) as lat"),
+          db.raw("ST_X(location::geometry) as lng")
+        )
+        .where("id", result.assignedAmbulance.id)
+        .first();
+
+      io.to("dispatch").emit("ambulance.updated", {
+        id: result.assignedAmbulance.id,
+        status: "BUSY",
+        ...location
+      });
+    }
+
     res.status(201).json(result);
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Unable to create emergency request" });
+  }
+});
+
+app.patch("/api/v1/emergency-requests/:requestId/complete", async (req, res) => {
+  try {
+    const result = await db.transaction(async (trx) => {
+      const request = await trx("emergency_requests")
+        .select("id", "status", "assigned_ambulance_id")
+        .where("id", req.params.requestId)
+        .forUpdate()
+        .first();
+
+      if (!request) {
+        return { statusCode: 404, body: { error: "Request not found" } };
+      }
+
+      if (request.status === "COMPLETED") {
+        return {
+          statusCode: 200,
+          body: { requestId: request.id, status: "COMPLETED" }
+        };
+      }
+
+      if (!request.assigned_ambulance_id) {
+        return {
+          statusCode: 409,
+          body: { error: "This request has no assigned ambulance" }
+        };
+      }
+
+      const ambulance = await trx("ambulances")
+        .select(
+          "id",
+          "label",
+          db.raw("ST_Y(location::geometry) as lat"),
+          db.raw("ST_X(location::geometry) as lng")
+        )
+        .where("id", request.assigned_ambulance_id)
+        .first();
+
+      await trx("emergency_requests")
+        .where("id", request.id)
+        .update({ status: "COMPLETED", updated_at: trx.fn.now() });
+
+      await trx("ambulances")
+        .where({ id: request.assigned_ambulance_id, status: "BUSY" })
+        .update({ status: "AVAILABLE", updated_at: trx.fn.now() });
+
+      return {
+        statusCode: 200,
+        body: {
+          requestId: request.id,
+          status: "COMPLETED",
+          assignedAmbulance: ambulance
+            ? { id: ambulance.id, label: ambulance.label }
+            : null,
+          ambulanceLocation: ambulance
+            ? { lat: Number(ambulance.lat), lng: Number(ambulance.lng) }
+            : null
+        }
+      };
+    });
+
+    if (result.statusCode === 200 && result.body.status === "COMPLETED") {
+      io.to(`request:${result.body.requestId}`).emit("request.completed", result.body);
+
+      if (result.body.assignedAmbulance && result.body.ambulanceLocation) {
+        io.to("dispatch").emit("ambulance.updated", {
+          id: result.body.assignedAmbulance.id,
+          status: "AVAILABLE",
+          ...result.body.ambulanceLocation
+        });
+      }
+    }
+
+    res.status(result.statusCode).json(result.body);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to complete emergency request" });
   }
 });
 
