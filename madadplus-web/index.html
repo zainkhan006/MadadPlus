@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Madad+ &middot; Dispatcher</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="app">
+
+  <header class="topbar">
+    <div class="topbar__brand">
+      <span class="topbar__mark">Madad+</span>
+      <span class="topbar__divider">&middot;</span>
+      <span class="topbar__org" id="orgName">City Emergency Services</span>
+    </div>
+    <div class="topbar__status" id="connectionStatus" data-state="connecting">
+      <span class="status-dot"></span>
+      <span class="topbar__status-text" id="statusText">Connecting&hellip;</span>
+    </div>
+  </header>
+
+  <main class="console">
+
+    <section class="map-pane">
+      <div id="map"></div>
+      <div class="map-pane__legend">
+        <span class="legend-item"><i class="legend-dot legend-dot--available"></i>Available</span>
+        <span class="legend-item"><i class="legend-dot legend-dot--busy"></i>Busy</span>
+        <span class="legend-item"><i class="legend-dot legend-dot--offline"></i>Offline</span>
+      </div>
+    </section>
+
+    <aside class="queue-pane">
+      <div class="queue-pane__header">
+        <h1>Requests</h1>
+        <span class="queue-count" id="queueCount">0</span>
+      </div>
+      <ul class="queue-list" id="queueList">
+        <li class="queue-empty" id="queueEmpty">No active requests yet. New emergencies will appear here the moment they come in.</li>
+      </ul>
+    </aside>
+
+  </main>
+
+</div>
+
+<!-- Socket.IO client -->
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+<!-- App logic (defines window.initMap before the Maps script below runs its callback) -->
+<script src="app.js"></script>
+
+<!-- Google Maps JS SDK — replace YOUR_GOOGLE_MAPS_WEB_KEY with the restricted web key -->
+<script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_WEB_KEY&callback=initMap" async defer></script>
+
+</body>
+</html>
