@@ -4,6 +4,7 @@
  */
 exports.up = function(knex) {
   return knex.raw("create extension if not exists pgcrypto")
+    .then(() => knex.raw("create extension if not exists postgis"))
     .then(() => knex.schema.createTable("organizations", (table) => {
       table.uuid("id").primary().defaultTo(knex.raw("gen_random_uuid()"));
       table.string("name", 150).notNullable();
