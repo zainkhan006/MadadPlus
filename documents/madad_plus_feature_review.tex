@@ -1,0 +1,164 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{setspace}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{hyperref}
+\usepackage{xurl}
+
+\definecolor{ibaBlue}{HTML}{163A5F}
+\definecolor{ibaTeal}{HTML}{0E7480}
+\definecolor{ibaGray}{HTML}{465560}
+\definecolor{ibaRisk}{HTML}{8A3E2C}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=ibaBlue,
+  citecolor=ibaTeal,
+  urlcolor=ibaTeal,
+  pdftitle={Madad+ Feature Review},
+  pdfauthor={Zain Ul Ebad, Ibad Ul Rehman Khan, Syed Ahmed Farrukh}
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Madad+ Feature Review}
+\fancyhead[R]{BS Computer Science}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\titleformat{\section}{\Large\bfseries\color{ibaBlue}}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\large\bfseries\color{ibaTeal}}{\thesubsection}{0.6em}{}
+
+\setlist[itemize]{leftmargin=1.5em,itemsep=0.3em,topsep=0.4em}
+\setlist[enumerate]{leftmargin=1.8em,itemsep=0.3em,topsep=0.4em}
+\renewcommand{\arraystretch}{1.25}
+\setstretch{1.1}
+\setlength{\emergencystretch}{2em}
+
+\begin{document}
+
+\section*{Where this document comes from}
+
+We went through Ahmed's full write-up of Madad+ line by line, checked it against what Karachi's actual apps and emergency numbers already do, and tested each feature against a simple question: can two or three students actually build this in one semester, without a government partnership or a payment license. What follows is the result. It is not a rewrite of the idea. It is a filter. Some features from the original write-up survive untouched. Some survive in a smaller, simulated form. A few had to go, and we say exactly why.
+
+\section*{The shape of the app}
+
+Two tabs, one app: Emergencies and Services. The split borrows the idea from Foodpanda's food-versus-shop layout, but not the mood. Foodpanda's two tabs both feel like browsing, because ordering biryani and ordering rice are the same kind of decision. Emergencies are not the same kind of decision as booking a plumber. One tab has to feel calm and let people compare a few options. The other has to be almost empty, with three or four buttons big enough to hit without thinking, because whoever opens it might have shaking hands.
+
+\section{Features confirmed for the build}
+
+\subsection{Emergencies tab}
+
+\begin{itemize}
+  \item The user types what happened, in English, Urdu, or Roman Urdu. A classifier reads it and sorts it into police, fire, ambulance, or out of scope. This is typed text, not a phone call, and that difference is deliberate; see the cut list below for why.
+  \item Screen shows almost nothing else. Three or four large tiles, high contrast, no browsing, no offers, no carousel.
+  \item Real Karachi numbers stay on screen at all times: 15 for police, 16 for the fire brigade, 1122 for Rescue, 115 for Edhi, 1020 for Chhipa, 1101 for Aman.
+  \item A real OpenStreetMap pin shows the nearest mapped police station, hospital, or fire station.
+  \item Guest access, no signup wall before you can act, the same choice HOPE 24/7 made for exactly this reason.
+  \item One tap can auto-dial the relevant number and, in the same motion, send a GPS location link over SMS or WhatsApp. This needs no partnership with anyone; it is automating what a person would do by hand anyway.
+  \item A tracker and an ETA appear after the request, but both are simulated: distance divided by an assumed city speed, not a feed from Rescue 1122's real fleet.
+  \item A visible line on screen states plainly that this app is not Rescue 1122, not the police, and does not replace either. It routes; it does not dispatch.
+\end{itemize}
+
+\subsection{Services tab}
+
+\begin{itemize}
+  \item Four trades only for version one: plumber, electrician, AC technician, mechanic. Nothing else yet.
+  \item Worker cards show a photo, their general area, a star rating, and a price that is already fixed, not a starting offer.
+  \item Instant matching. The app picks the nearest available worker automatically. If that worker is busy, it slides to the next nearest one, still showing price and rating, with no waiting for anyone to respond. This replaces bidding entirely.
+  \item Pre-job price lock. The number shown before booking is the number charged after the job, full stop.
+  \item A simulated escrow wallet: the app treats the payment as held until the user taps "job done," or releases it automatically after twenty-four hours if the user never responds.
+  \item A rating and short written review after each job.
+  \item A dispute option with photo upload and a fixed review window, roughly a day, before the platform decides who was right.
+  \item An "urgent, within the hour" toggle on a request, borrowed from Karsaaz because it is cheap to build and genuinely useful.
+  \item Area-aware pricing: each worker sets their own rate for their own neighborhood. DHA and Lyari do not have to cost the same.
+\end{itemize}
+
+\subsection{Shared across both tabs}
+
+\begin{itemize}
+  \item Karachi only, for now. No claim about Lahore, Islamabad, or anywhere else.
+  \item One shared header: logo, location pin, the two tabs. Everything below that header looks and feels different depending on which tab you're in.
+  \item A worker onboarding dashboard that shows real, live status, so an account never just sits there unactivated with no explanation. This directly answers a real complaint people have made about Karsaaz.
+  \item Under the hood, both tabs lean on the same core technical piece: a "find the nearest available match" geospatial query. This alone satisfies the database and backend requirements of the project without needing an auction system on top of it.
+\end{itemize}
+
+\section{Features cut from the FYP, and why}
+
+\begin{longtable}{p{0.28\textwidth} p{0.40\textwidth} p{0.26\textwidth}}
+\toprule
+\textbf{Feature} & \textbf{Why it's cut} & \textbf{What replaces it} \\
+\midrule
+\endhead
+Live phone-call voice triage &
+No usable dataset of Urdu or Roman Urdu emergency speech exists. The best tested speech models still get roughly nine words out of ten wrong on Urdu-English code-switched audio, phone audio is worse than the clean recordings those models were even tested on, and a live call needs a running phone number that Pakistan's telecom regulator has to approve first. &
+Typed text triage inside the app. \\
+\addlinespace
+Direct integration with 1122, 15, or 16 dispatch &
+No public API exists. Rescue 1122's dispatch runs on private software called EMDS, owned and operated internally. The one time a private app connected to a government rescue service, it was Careem in Khyber Pakhtunkhwa, through a signed government agreement, not an open door anyone can walk through. &
+The app becomes a router to the real numbers. It never pretends to be the dispatcher. \\
+\addlinespace
+Real money through JazzCash, EasyPaisa, or an actual escrow wallet &
+Holding a stranger's money before releasing it is a regulated financial activity in Pakistan, the kind that normally needs State Bank authorization or a licensed partner. Not something to casually wire up for a class project. &
+A fully simulated wallet and escrow flow, clearly labeled as simulated. \\
+\addlinespace
+A bidding system with multiple live offers &
+Too slow for a burst pipe at midnight, and heavier to build than the problem needs: providers have to be notified, given a window, and their offers collected live. &
+Instant match with automatic fallback to the next nearest available worker. \\
+\addlinespace
+An "emergency boost fee" for faster response &
+This one is worth pausing on. As written in the original business model, this fee sat right next to the ambulance and fire discussion, which reads as pay-to-get-help-faster. That directly contradicts the promise, stated a few lines earlier in the same document, that emergencies have no marketplace and no price negotiation. It is the kind of line that can end a supervisor meeting badly if it is not fixed first. &
+Dropped for anything police, fire, or ambulance related. If kept at all, it applies only to home-service urgency, and should say so explicitly. \\
+\addlinespace
+A fraud-detection model and a bid-recommendation model &
+Two more full machine learning subsystems, stacked on top of the triage classifier, the escrow logic, and live tracking, is closer to two or three FYPs' worth of work than one. &
+Left as a sentence in the future-work section, not a built feature. \\
+\addlinespace
+Voice support for low-literacy users &
+Same wall as the phone-call triage above. Reliable Urdu speech understanding is still an open research problem, not a solved one. &
+Future work. \\
+\addlinespace
+Full two-way SMS triage &
+Describing an emergency by text message and having it correctly classified is the same hard language problem as the phone call, just squeezed into a worse channel with a strict character limit. &
+Keep SMS for one job only: sending a GPS location link. Not a full triage channel. \\
+\addlinespace
+Building or society subscriptions, premium worker listings, in-app ads &
+Real, reasonable pricing ideas, but they belong in the business plan. None of them require anything to be built for a technical FYP. &
+Kept in the business model section, left out of the build. \\
+\addlinespace
+React Native as the stated tech stack &
+Nobody actually decided this out loud. The working demo that already exists is a web app built on FastAPI. &
+Keep building on what already runs; only switch stacks for a real, stated reason. \\
+\bottomrule
+\end{longtable}
+
+\section{Claims worth fixing before the next meeting}
+
+\begin{itemize}
+  \item \textbf{"Karsaaz mainly serves Lahore, Karachi is underserved."} This is no longer true, and it is one search away from being disproven live in the room. Karsaaz's own website and its Play Store listing both name Karachi as one of four cities they cover, alongside Lahore, Islamabad, and Rawalpindi. The fairer version of this argument is that Karsaaz is present in Karachi but thinner and less trusted there, not that it is absent.
+  \item \textbf{Tasdeeq Pakistan as a stated advantage.} Mahir's own app listing already says their workers are screened by Tasdeeq. Using the same verification partner as a rival is not a differentiator, it is a baseline. The actual edge is what Madad+ does around that verification: the escrow, the dispute window, the suspension rule, not the verification service itself.
+  \item \textbf{The emergency boost fee wording}, covered above, but worth repeating here because it is a claim in the original document, not just a feature to cut. It needs a rewrite, not a footnote.
+\end{itemize}
+
+\section{Small decisions still open}
+
+\begin{itemize}
+  \item How does the app know a worker is busy. For the demo, this can be seeded fake data. In anything beyond a demo, someone has to actually toggle that status.
+  \item How the fallback ranks alternatives. Purely by distance, or by a mix of distance and rating. If it is pure distance, a two-star worker one street closer will always beat a five-star worker a block further away, which is probably not what anyone wants.
+  \item What the user sees if everyone nearby is busy. This needs an honest screen, something like "no one is free right now, try again shortly," rather than a request that just quietly goes nowhere.
+  \item How far "nearby" is allowed to stretch. Worth setting an actual distance cap, so a fallback never quietly recommends someone across the city and calls it close.
+\end{itemize}
+
+\end{document}

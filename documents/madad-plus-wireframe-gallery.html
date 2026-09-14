@@ -1,0 +1,1001 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Madad+ — Complete Wireframe Gallery (FYP Blueprint)</title>
+<style>
+  :root{
+    --red:#E63946; --blue:#1D3557; --green:#2A9D8F; --orange:#F4A261;
+    --gray:#6C757D; --light:#F8F9FA; --line:#DEE3EA; --ink:#1A2433;
+    --radius:12px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:#E9EDF3;color:var(--ink);
+    font-family:Inter,Roboto,"Segoe UI",system-ui,sans-serif;font-size:14px;line-height:1.45}
+  /* ---------- page chrome ---------- */
+  header.top{background:var(--blue);color:#fff;padding:22px 28px}
+  header.top h1{margin:0;font-size:24px;letter-spacing:-.02em}
+  header.top p{margin:6px 0 0;color:#C7D3E4;font-size:13px}
+  .badges{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+  .badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;
+    letter-spacing:.03em;text-transform:uppercase}
+  .badge.sim{background:rgba(230,57,70,.18);color:#FFD5D9;border:1px solid rgba(255,180,187,.4)}
+  .badge.info{background:rgba(255,255,255,.12);color:#E6EDF7;border:1px solid rgba(255,255,255,.25)}
+  nav.jump{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid var(--line);
+    padding:10px 20px;display:flex;gap:6px;flex-wrap:wrap}
+  nav.jump a{font-size:12px;font-weight:600;text-decoration:none;color:var(--blue);
+    padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--light)}
+  nav.jump a:hover{background:var(--blue);color:#fff}
+  main{max-width:1280px;margin:0 auto;padding:28px 20px 80px}
+  section.block{margin:44px 0 8px}
+  section.block>h2{font-size:20px;margin:0 0 4px;color:var(--blue)}
+  section.block>p.sub{margin:0 0 18px;color:var(--gray);font-size:13px;max-width:820px}
+  .flow-tag{display:inline-block;background:var(--light);border:1px solid var(--line);
+    border-radius:8px;padding:8px 14px;font-size:12px;color:var(--gray);margin-bottom:16px}
+  /* ---------- gallery grid ---------- */
+  .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:26px}
+  .shot{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;
+    box-shadow:0 6px 18px rgba(21,37,58,.06)}
+  .shot .meta h3{margin:0 0 2px;font-size:14px}
+  .shot .meta .num{color:#fff;background:var(--blue);border-radius:6px;padding:1px 7px;
+    font-size:11px;margin-right:6px}
+  .shot .meta p{margin:2px 0 12px;color:var(--gray);font-size:12px}
+  .states{margin-top:10px;font-size:11px;color:var(--gray);border-top:1px dashed var(--line);padding-top:8px}
+  .states b{color:var(--ink)}
+  /* ---------- phone frame ---------- */
+  .phone{width:270px;margin:0 auto;background:#fff;border:3px solid #22304A;border-radius:30px;
+    overflow:hidden;box-shadow:0 10px 24px rgba(21,37,58,.14)}
+  .notch{height:22px;background:#22304A;display:flex;justify-content:center;align-items:flex-end}
+  .notch span{width:80px;height:12px;background:#22304A;border-radius:0 0 10px 10px}
+  .scr{min-height:480px;display:flex;flex-direction:column;font-size:11px;background:var(--light)}
+  .scr .body{flex:1;padding:12px 12px 8px;display:flex;flex-direction:column;gap:8px}
+  .scr-hd{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12px;color:var(--blue);
+    padding:2px 0}
+  .scr-hd .back{color:var(--gray);font-weight:400}
+  .center{text-align:center}
+  .spacer{flex:1}
+  /* UI primitives inside phone */
+  .card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:10px}
+  .card.em{border-left:4px solid var(--red);background:#FFF5F5}
+  .card.sv{border-left:4px solid var(--green);background:#F3FAF8}
+  .card h4{margin:0 0 2px;font-size:12px}
+  .card small{color:var(--gray)}
+  .btn{display:block;text-align:center;border-radius:8px;padding:9px 10px;font-weight:600;font-size:11px;
+    border:1px solid transparent;text-decoration:none}
+  .btn.pri{background:var(--blue);color:#fff}
+  .btn.sec{background:#fff;color:var(--blue);border-color:var(--blue)}
+  .btn.emg{background:var(--red);color:#fff;padding:11px;font-size:12px}
+  .btn.grn{background:var(--green);color:#fff}
+  .btn:disabled,.btn.dis{background:var(--light);color:var(--gray);border-color:var(--line)}
+  .row{display:flex;gap:8px}
+  .row .btn{flex:1}
+  .chip{display:inline-block;border:1px solid var(--line);background:#fff;border-radius:999px;
+    padding:5px 10px;font-size:10px;margin:2px}
+  .chip.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+  .input{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+    color:var(--gray);font-size:11px}
+  .otp{display:flex;gap:6px;justify-content:center}
+  .otp i{width:32px;height:38px;background:#fff;border:1px solid var(--line);border-radius:8px}
+  .warn{background:#FFF3E4;border:1px solid #F2D3A0;color:#8A5A00;border-radius:8px;
+    padding:8px;font-size:10px}
+  .demo{background:#FDECEE;border:1px solid #F5C2C7;color:var(--red);border-radius:8px;
+    padding:8px;font-size:10px;font-weight:600}
+  .dots{display:flex;gap:5px;justify-content:center}
+  .dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}
+  .dots i.on{background:var(--blue)}
+  .map{background:
+      linear-gradient(0deg,transparent 24%,rgba(29,53,87,.06) 25%,rgba(29,53,87,.06) 26%,transparent 27%,transparent 74%,rgba(29,53,87,.06) 75%,rgba(29,53,87,.06) 76%,transparent 77%),
+      linear-gradient(90deg,transparent 24%,rgba(29,53,87,.06) 25%,rgba(29,53,87,.06) 26%,transparent 27%,transparent 74%,rgba(29,53,87,.06) 75%,rgba(29,53,87,.06) 76%,transparent 77%),
+      #EDF2F7;
+    background-size:44px 44px;border:1px solid var(--line);border-radius:var(--radius);
+    position:relative;min-height:150px}
+  .pin{position:absolute;font-size:15px;transform:translate(-50%,-50%)}
+  .pin small{display:block;font-size:8px;background:#fff;border:1px solid var(--line);
+    border-radius:4px;padding:0 3px;white-space:nowrap}
+  .pulse{position:absolute;width:14px;height:14px;border-radius:50%;background:#3B82F6;
+    border:3px solid #fff;box-shadow:0 0 0 5px rgba(59,130,246,.25);transform:translate(-50%,-50%)}
+  .bnav{display:flex;border-top:1px solid var(--line);background:#fff}
+  .bnav div{flex:1;text-align:center;padding:7px 0 6px;font-size:8.5px;color:var(--gray)}
+  .bnav div b{display:block;font-size:14px}
+  .bnav div.on{color:var(--blue);font-weight:700}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .tile{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:10px 8px;text-align:center}
+  .tile .ic{font-size:18px}
+  .tile small{color:var(--gray);display:block;font-size:9px}
+  .eta-big{font-size:26px;font-weight:800;color:var(--blue);letter-spacing:-.02em}
+  .prog{height:8px;background:var(--line);border-radius:99px;overflow:hidden}
+  .prog i{display:block;height:100%;background:var(--blue);width:35%}
+  .status{display:inline-block;border-radius:999px;padding:2px 8px;font-size:9px;font-weight:700}
+  .st-ok{background:#E2F4F0;color:var(--green)}
+  .st-busy{background:#FDECEE;color:var(--red)}
+  .st-off{background:#EDF0F3;color:var(--gray)}
+  .st-route{background:#E3EAF6;color:var(--blue)}
+  .st-appr{background:#FFF0DF;color:#B96A00}
+  .stars{color:#F4B400;font-size:15px;letter-spacing:3px}
+  /* ---------- browser frame ---------- */
+  .browser{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;
+    box-shadow:0 10px 26px rgba(21,37,58,.1);margin:18px 0}
+  .chrome{display:flex;align-items:center;gap:6px;background:#EDF1F6;padding:8px 12px;
+    border-bottom:1px solid var(--line)}
+  .chrome i{width:10px;height:10px;border-radius:50%}
+  .chrome i:nth-child(1){background:#F26D6D}.chrome i:nth-child(2){background:#F4C150}.chrome i:nth-child(3){background:#5FC98E}
+  .chrome .url{flex:1;margin-left:10px;background:#fff;border:1px solid var(--line);border-radius:6px;
+    font-size:10px;color:var(--gray);padding:3px 10px}
+  .dash{display:grid;grid-template-columns:300px 1fr;min-height:520px;font-size:11px}
+  .dash .left{border-right:1px solid var(--line);background:var(--light);padding:12px;overflow:auto}
+  .dash .right{padding:12px;display:flex;flex-direction:column;gap:10px}
+  .dash-hd{background:var(--blue);color:#fff;padding:10px 14px;display:flex;justify-content:space-between;
+    align-items:center;font-size:12px}
+  .sim-strip{background:var(--red);color:#fff;font-size:9.5px;font-weight:700;text-align:center;padding:3px}
+  .req{border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff;margin-bottom:8px}
+  .req.new{border-left:4px solid var(--red)}
+  .req small{color:var(--gray);display:block}
+  .fleetmap{flex:1;min-height:260px}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;text-align:center}
+  .stat b{display:block;font-size:20px;color:var(--blue)}
+  .stat small{color:var(--gray)}
+  table.t{width:100%;border-collapse:collapse;font-size:11px;background:#fff}
+  table.t th{background:var(--light);text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);color:var(--gray)}
+  table.t td{padding:7px 9px;border-bottom:1px solid #EEF1F5}
+  .mini-btn{display:inline-block;border:1px solid var(--blue);color:var(--blue);border-radius:6px;
+    padding:2px 8px;font-size:9.5px;font-weight:600;background:#fff}
+  .modal-wrap{display:flex;gap:20px;flex-wrap:wrap}
+  .modal{width:300px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;
+    box-shadow:0 10px 26px rgba(21,37,58,.12);font-size:11px}
+  .modal h4{margin:0 0 6px;font-size:13px}
+  /* design tokens */
+  .swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+  .sw{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+  .sw i{display:block;height:52px}
+  .sw div{padding:7px 9px;font-size:10.5px}
+  .sw small{color:var(--gray);display:block}
+  footer{max-width:1280px;margin:0 auto;padding:0 20px 60px;color:var(--gray);font-size:12px}
+  @media print{nav.jump{position:static}.gallery{gap:14px}section.block{page-break-before:always}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>Madad+ — Complete Wireframe Gallery</h1>
+  <p>One app for all help needs — from fixing a leak to saving a life. Karachi · FYP Design Stage · No implementation.</p>
+  <div class="badges">
+    <span class="badge sim">⚠ Simulation Mode — No Real Emergency Response</span>
+    <span class="badge info">USP #1 · Unified Domestic + Emergency</span>
+    <span class="badge info">USP #2 · Cross-Organization Ambulance Dispatch</span>
+  </div>
+</header>
+
+<nav class="jump">
+  <a href="#auth">① Onboarding &amp; Auth</a>
+  <a href="#home">② Home</a>
+  <a href="#emergency">③ Emergency Flow (11 stages)</a>
+  <a href="#domestic">④ Domestic Services Flow</a>
+  <a href="#requests">⑤ My Requests &amp; Profile</a>
+  <a href="#provider">⑥ Provider Mode</a>
+  <a href="#dispatcher">⑦ Dispatcher Dashboard</a>
+  <a href="#admin">⑧ Admin Dashboard</a>
+  <a href="#design">⑨ Design System</a>
+</nav>
+
+<main>
+
+<!-- ============================ 1. ONBOARDING & AUTH ============================ -->
+<section class="block" id="auth">
+  <h2>1 · Onboarding &amp; Authentication</h2>
+  <p class="sub">First-launch introduction of both USPs, then phone-first login (+92 pre-filled) with OTP. Demo disclaimer appears from the very first session.</p>
+  <div class="gallery">
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">1</span>Splash</h3><p>Brand intro while app initializes.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body center">
+          <div class="spacer"></div>
+          <div style="width:92px;height:92px;margin:0 auto;background:var(--blue);border-radius:24px;display:grid;place-items:center;color:#fff;font-size:34px;font-weight:800">M+</div>
+          <div style="font-size:18px;font-weight:800;color:var(--blue)">Madad+</div>
+          <small style="color:var(--gray)">Helping You Fast</small>
+          <div class="spacer"></div>
+          <small style="color:var(--gray)">⏳ Loading…</small>
+        </div></div>
+      </div>
+      <div class="states"><b>States:</b> Loading · Error → "Check internet connection" + Retry</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">2</span>Onboarding — 3 Slides</h3><p>Emergency → Domestic → Unified value proposition.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body center">
+          <div class="spacer"></div>
+          <div style="font-size:44px">🚨</div>
+          <h4 style="margin:4px 0">Instant Emergency Assistance</h4>
+          <small style="color:var(--gray)">One tap to request ambulance, fire, or police assistance.</small>
+          <div class="spacer"></div>
+          <div class="dots"><i class="on"></i><i></i><i></i></div>
+          <div class="row"><a class="btn sec">Skip</a><a class="btn pri">Next →</a></div>
+        </div></div>
+      </div>
+      <div class="states"><b>Slides:</b> ① 🚨 Emergency ② 🔧 Trusted providers ③ 🏠 One app for all → Get Started</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">3</span>Login</h3><p>Phone-first auth, Pakistan country code pre-filled.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">←</span> Welcome Back</div>
+          <div class="input">📱 Phone Number&nbsp;&nbsp;+92 3__ _______</div>
+          <div class="center" style="color:var(--gray)">— or continue with —</div>
+          <div class="input">✉ Email</div>
+          <a class="btn pri">Login with OTP</a>
+          <div class="center"><small style="color:var(--gray)">Don't have an account?</small></div>
+          <a class="btn sec">Create Account</a>
+          <div class="center"><small style="color:var(--gray);font-size:9px">By continuing you agree to our Terms of Service &amp; Privacy Policy</small></div>
+        </div></div>
+      </div>
+      <div class="states"><b>States:</b> Default · Loading (spinner) · Error (invalid) · Success → OTP</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">4</span>OTP Verification</h3><p>6-digit code with auto-advance boxes.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">←</span> Verify Your Number</div>
+          <p style="margin:4px 0">We've sent a 6-digit code to<br><b>+92 300 1234567</b></p>
+          <div class="otp"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="center"><small style="color:var(--gray)">Didn't receive code?</small></div>
+          <a class="btn sec">Resend OTP (00:59)</a>
+          <a class="btn pri">Verify &amp; Continue</a>
+        </div></div>
+      </div>
+      <div class="states"><b>States:</b> Inputting · Verifying · Wrong OTP error · Success → Home</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================ 2. HOME ============================ -->
+<section class="block" id="home">
+  <h2>2 · Home Screen ⭐</h2>
+  <p class="sub">Primary landing. Emergency card on top (red accent, urgency) balanced by domestic services card (green/blue, friendly) — critical without feeling like a hospital app. Tagline: "How can we help today?" not "What's your emergency?"</p>
+  <div class="gallery">
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">5</span>Home — Default (with Active Request)</h3><p>Context-aware: active request widget surfaces ETA live.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd" style="justify-content:space-between"><span>📍 Karachi, DHA Phase 5</span><span>🔔</span></div>
+          <h4 style="margin:2px 0">How can we help today?</h4>
+          <div class="card em"><h4>🚨 EMERGENCY</h4><small>Get immediate assistance<br>→ Ambulance, Fire, Police</small></div>
+          <div class="card sv"><h4>🔧 DOMESTIC SERVICES</h4><small>Find a service provider<br>→ Plumber, Electrician, AC</small></div>
+          <small><b>Your Active Request</b></small>
+          <div class="card" style="border-color:var(--blue)"><b>🚑 Ambulance · <span class="status st-route">En Route</span></b><br><small>ETA: 8 min • 2.3 km away</small><a class="btn pri" style="margin-top:6px">Track Request →</a></div>
+          <small><b>Recent Requests</b></small>
+          <div class="grid2">
+            <div class="tile"><span class="ic">🔧</span>Plumber<small>2 days ago</small></div>
+            <div class="tile"><span class="ic">🚑</span>Ambulance<small>1 week ago</small></div>
+          </div>
+        </div>
+        <div class="bnav"><div class="on"><b>🏠</b>Home</div><div><b>🚨</b>Emergency</div><div><b>🔧</b>Services</div><div><b>📋</b>Requests</div><div><b>👤</b>Profile</div></div>
+        </div>
+      </div>
+      <div class="states"><b>States:</b> Default · No active request (widget hidden) · Loading skeletons · Location permission denied → banner</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">5b</span>Home — Empty State</h3><p>No active or recent requests; calm, welcoming.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd" style="justify-content:space-between"><span>📍 Karachi, Gulshan</span><span>🔔</span></div>
+          <h4 style="margin:2px 0">How can we help today?</h4>
+          <div class="card em"><h4>🚨 EMERGENCY</h4><small>Get immediate assistance<br>→ Ambulance, Fire, Police</small></div>
+          <div class="card sv"><h4>🔧 DOMESTIC SERVICES</h4><small>Find a service provider<br>→ Plumber, Electrician, AC</small></div>
+          <div class="card center" style="border-style:dashed;color:var(--gray)">🕘<br>No recent requests<br><small>We're here when you need us</small></div>
+          <small><b>Quick Actions</b></small>
+          <div class="row">
+            <div class="tile" style="flex:1"><span class="ic">📍</span>My Loc.</div>
+            <div class="tile" style="flex:1"><span class="ic">🕘</span>History</div>
+            <div class="tile" style="flex:1"><span class="ic">👤</span>Profile</div>
+          </div>
+        </div>
+        <div class="bnav"><div class="on"><b>🏠</b>Home</div><div><b>🚨</b>Emergency</div><div><b>🔧</b>Services</div><div><b>📋</b>Requests</div><div><b>👤</b>Profile</div></div>
+        </div>
+      </div>
+      <div class="states"><b>Nav:</b> 5 tabs — Emergency gets a dedicated tab (USP #1 embodied in navigation)</div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ============================ 3. EMERGENCY FLOW ============================ -->
+<section class="block" id="emergency">
+  <h2>3 · Emergency Flow — Ambulance (11 Stages)</h2>
+  <p class="sub">Speed-first design: details optional and skippable. Statuses auto-advance on simulated timers; only Arrived → Completed requires user action. Demo disclaimers are mandatory at every step.</p>
+  <div class="flow-tag">Home → Type → Location → Details (skip-able) → Confirm → Searching → Assigned → En Route → Approaching → Arrived → Completed</div>
+  <div class="gallery">
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">6</span>Emergency Type Selection</h3><p>Ambulance primary; fire/police show USP #1 breadth.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">←</span> Emergency</div>
+          <h4 style="margin:2px 0">Select Emergency Type</h4>
+          <div class="card em"><h4>🚑 AMBULANCE</h4><small>Medical emergency, accident, injury, cardiac issue</small></div>
+          <div class="card"><h4>🔥 FIRE EMERGENCY</h4><small>Fire, smoke, gas leak</small></div>
+          <div class="card"><h4>🚔 POLICE ASSISTANCE</h4><small>Security threat, urgent help</small></div>
+          <div class="card"><h4>⋯ OTHER EMERGENCY</h4><small>Any other urgent situation</small></div>
+          <div class="demo">⚠ Demo simulation. In a real emergency, call 1122.</div>
+        </div></div>
+      </div>
+      <div class="states"><b>Note:</b> Disclaimer always visible — non-negotiable</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">7</span>Location Confirmation</h3><p>Landmark-first addressing for Karachi.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">←</span> Location</div>
+          <h4 style="margin:2px 0">Where is the emergency?</h4>
+          <div class="card" style="border-color:var(--blue)"><b>📍 Current Location</b><br><small>DHA Phase 5, Street 12</small><a class="btn pri" style="margin-top:6px">Use Current Location</a></div>
+          <div class="card"><b>🔖 Saved Addresses</b><br><small>• Home: DHA Phase 5<br>• Office: Shahrah-e-Faisal</small></div>
+          <div class="row">
+            <a class="btn sec">🗺 Pick on Map</a>
+            <a class="btn sec">✏ Enter Manually</a>
+          </div>
+          <div class="input">Area: DHA ▼ &nbsp; Landmark: Near XYZ Mall, Gate 3</div>
+          <a class="btn pri">Continue</a>
+        </div></div>
+      </div>
+      <div class="states"><b>States:</b> Detected · Permission denied (manual-only) · Saved · Map-picked</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">8</span>Emergency Details (Optional)</h3><p>Everything skippable; chips beat typing.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">←</span> Details</div>
+          <h4 style="margin:2px 0">Emergency Details</h4>
+          <small style="color:var(--gray)">Optional — Skip for speed</small>
+          <small><b>What type of emergency?</b></small>
+          <div><span class="chip on">❤ Cardiac</span><span class="chip">🚗 Accident</span><span class="chip">🩹 Injury</span><span class="chip">🏥 Medical</span><span class="chip">⋯ Other</span></div>
+          <small><b>People needing help:</b></small>
+          <div><span class="chip on">1</span><span class="chip">2</span><span class="chip">3</span><span class="chip">4+</span></div>
+          <div class="input" style="min-height:52px">Additional info: age, condition, landmarks, gate code…</div>
+          <small>☑ Share location with trusted contacts</small>
+          <div class="row"><a class="btn sec">Skip</a><a class="btn pri">Continue</a></div>
+        </div></div>
+      </div>
+      <div class="states"><b>Principle:</b> Speed-first — user can skip entirely</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">9</span>Confirm Emergency Request</h3><p>Final review + mandatory demo warning.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">←</span> Confirm</div>
+          <h4 style="margin:2px 0">Confirm Emergency Request</h4>
+          <div class="card em"><h4>🚑 Ambulance</h4></div>
+          <div class="card"><small><b>Location:</b><br>📍 DHA Phase 5, Street 12<br>(Near XYZ Mall, Gate 3)</small></div>
+          <div class="card"><small><b>Details:</b> Cardiac emergency, 1 patient</small></div>
+          <div class="card center"><small>Estimated Response</small><div class="eta-big">8–12 min</div></div>
+          <div class="demo">⚠ DEMO MODE: This is a simulation. No real ambulance will be sent.</div>
+          <div class="row"><a class="btn sec">Cancel</a><a class="btn emg">🚨 Request Now</a></div>
+        </div></div>
+      </div>
+      <div class="states"><b>States:</b> Default · Requesting (spinner) · Success → Searching</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">10</span>Searching for Ambulance</h3><p>The algorithm, made visible — demos USP #2.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body center">
+          <div class="spacer"></div>
+          <div style="font-size:40px">🔍</div>
+          <h4 style="margin:4px 0">Finding Help</h4>
+          <small style="color:var(--gray)">Finding the nearest available ambulance from our network…</small>
+          <div class="card"><b>Scanning 12 ambulances</b><br><small>from 4 organizations…</small></div>
+          <div class="prog"><i></i></div>
+          <small style="color:var(--gray)">Estimated time: 5–10 seconds</small>
+          <div class="spacer"></div>
+          <a class="btn sec">Cancel Request</a>
+        </div></div>
+      </div>
+      <div class="states"><b>States:</b> Searching (3–5s) → Found · None available → "All busy" · Cancelled → Home</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">11</span>Ambulance Assigned</h3><p>Org name visible — cross-org concept shown to user.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">← Cancel</span> Ambulance Assigned</div>
+          <div class="center"><span class="status st-ok">✅ Ambulance Found!</span></div>
+          <div class="card">
+            <b>🚑 AMBULANCE #A-12</b><br>
+            <small>City Emergency Services</small>
+            <div style="margin-top:6px"><small>📍 2.3 km away &nbsp;•&nbsp; ⏱ ETA: <b>8 min</b><br>🏥 Basic Life Support</small></div>
+          </div>
+          <div class="card"><small><b>Driver:</b> Muhammad Ahmed</small>
+            <div class="row" style="margin-top:6px"><a class="btn pri">📞 Call</a><a class="btn sec">💬 Chat</a></div>
+          </div>
+          <div class="map" style="min-height:90px"><span class="pulse" style="left:50%;top:65%"></span><span class="pin" style="left:30%;top:25%">🚑</span></div>
+          <a class="btn sec">📤 Share Location with Contacts</a>
+        </div></div>
+      </div>
+      <div class="states"><b>Data:</b> All synthetic — fictional orgs ("City Emergency Services", "Karachi Rescue")</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">12</span>Ambulance En Route (Tracking)</h3><p>Live map; position updates every 5–10s.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">←</span> En Route</div>
+          <div class="card"><b>🚑 #A-12</b> · City Emergency Svcs<br><small>Driver: Muhammad Ahmed</small>
+            <div class="row" style="margin-top:4px"><a class="btn pri">📞 Call</a><a class="btn sec">💬 Chat</a></div>
+          </div>
+          <div class="map" style="flex:1">
+            <span class="pulse" style="left:50%;top:72%"></span>
+            <span class="pin" style="left:50%;top:60%"><small>You</small></span>
+            <span class="pin" style="left:34%;top:28%">🚑<small>A-12 · moving</small></span>
+          </div>
+          <div class="card"><small>Status: <span class="status st-route">En Route</span><br>Distance: 2.3 → 1.8 → <b>1.2 km</b><br>ETA: 8 → 6 → <b>4 min</b></small></div>
+          <a class="btn sec">📤 Share Live Status</a>
+        </div></div>
+      </div>
+      <div class="states"><b>States:</b> En route · Approaching (&lt;500m auto-advance) · Delayed → "Running late"</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">13</span>Ambulance Approaching</h3><p>Proximity alert — prepare the user.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body center">
+          <span class="status st-appr" style="font-size:12px">🚨 Ambulance Approaching!</span>
+          <div class="map" style="min-height:120px">
+            <span class="pulse" style="left:50%;top:55%"></span>
+            <span class="pin" style="left:56%;top:45%">🚑</span>
+          </div>
+          <div class="card"><small>Distance</small><div class="eta-big">200 m</div><small>ETA: 1–2 minutes</small></div>
+          <div class="card"><small>Please be ready at:<br><b>📍 DHA Phase 5, Street 12</b><br>Driver will call on arrival:<br>📞 Muhammad Ahmed · +92 300 1234567</small></div>
+        </div></div>
+      </div>
+      <div class="states"><b>States:</b> Approaching · Arrived → auto-advance</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">14</span>Ambulance Arrived</h3><p>Arrival confirmed; user closes the request.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body center">
+          <div class="spacer"></div>
+          <div style="font-size:40px">✅</div>
+          <h4 style="margin:4px 0">Ambulance Arrived</h4>
+          <div class="card" style="text-align:left"><b>🚑 #A-12</b> · City Emergency Svcs<br><small>Driver: Muhammad Ahmed</small></div>
+          <small style="color:var(--gray)">The ambulance has arrived at your location.</small>
+          <div class="card"><small>📍 Arrival Confirmed<br>Time: 10:45 AM • Sep 2, 2026</small></div>
+          <div class="spacer"></div>
+          <a class="btn grn">Mark as Completed</a>
+        </div></div>
+      </div>
+      <div class="states"><b>States:</b> Arrived · Completed → next screen (user action required)</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">15</span>Request Completed</h3><p>Closure + optional rating.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body center">
+          <div class="spacer"></div>
+          <div style="font-size:40px">✅</div>
+          <h4 style="margin:4px 0">Request Completed</h4>
+          <div class="card"><b>🚑 #A-12</b> · City Emergency Services</div>
+          <small style="color:var(--gray)">Thank you for using Madad+.<br>We hope everything is okay.</small>
+          <small><b>How was your experience?</b></small>
+          <div class="stars">☆ ☆ ☆ ☆ ☆</div>
+          <div class="spacer"></div>
+          <a class="btn sec">View Request Details</a>
+          <a class="btn pri">Back to Home</a>
+        </div></div>
+      </div>
+      <div class="states"><b>States:</b> Completed · Rated → "Thank you for feedback"</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">16</span>All Ambulances Busy (Edge Case)</h3><p>Queue + real-world fallback. Pre-programmed for demo.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body center">
+          <div class="spacer"></div>
+          <div style="font-size:40px">⚠️</div>
+          <h4 style="margin:4px 0">All Ambulances Busy</h4>
+          <small style="color:var(--gray)">All ambulances in our network are currently responding to other emergencies.</small>
+          <div class="card" style="text-align:left"><small><b>Options:</b><br>• Wait in queue (we'll notify you)<br>• Call 1122 directly<br>• Try again in a few minutes</small></div>
+          <div class="spacer"></div>
+          <a class="btn pri">Join Queue</a>
+          <a class="btn emg">📞 Call 1122</a>
+        </div></div>
+      </div>
+      <div class="states"><b>System:</b> Queue → watch availability → auto-assign + notify. 1122 fallback always prominent.</div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ============================ 4. DOMESTIC FLOW ============================ -->
+<section class="block" id="domestic">
+  <h2>4 · Domestic Services Flow</h2>
+  <p class="sub">Reuses the same request/tracking/state-machine machinery as the emergency flow — one tracking engine, two visual skins. This is what keeps a dual-product app feasible for 3 students.</p>
+  <div class="flow-tag">Categories → Service Details → Describe Problem → Location (shared) → Time → Price &amp; Confirm → Searching → Assigned → En Route → In Progress → Completed + Rate</div>
+  <div class="gallery">
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">17</span>Service Categories</h3><p>2-column grid rendered from API — new categories need no code.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">←</span> Services</div>
+          <h4 style="margin:2px 0">Select a Service</h4>
+          <div class="grid2">
+            <div class="tile"><span class="ic">🔧</span><b>PLUMBER</b><small>Leaks, pipes, taps</small></div>
+            <div class="tile"><span class="ic">⚡</span><b>ELECTRICIAN</b><small>Wiring, repairs</small></div>
+            <div class="tile"><span class="ic">🪚</span><b>CARPENTER</b><small>Furniture, repairs</small></div>
+            <div class="tile"><span class="ic">❄️</span><b>AC TECH</b><small>Repair, service</small></div>
+            <div class="tile"><span class="ic">🔩</span><b>MECHANIC</b><small>Car/bike repair</small></div>
+            <div class="tile"><span class="ic">🖌️</span><b>PAINTER</b><small>Interior, exterior</small></div>
+          </div>
+          <a class="btn sec">⋯ More Services</a>
+        </div>
+        <div class="bnav"><div><b>🏠</b>Home</div><div><b>🚨</b>Emergency</div><div class="on"><b>🔧</b>Services</div><div><b>📋</b>Requests</div><div><b>👤</b>Profile</div></div>
+        </div>
+      </div>
+      <div class="states"><b>States:</b> Default · Skeleton loading · Error with retry</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">18</span>Service Details (Plumber)</h3><p>Base price + ETA transparency builds trust.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">←</span> Plumber</div>
+          <div class="card sv center"><span style="font-size:30px">🔧</span><h4 style="margin:2px 0">PLUMBER</h4></div>
+          <small style="color:var(--gray)">Professional plumbing for leaks, pipe repairs, taps, water motor.</small>
+          <div class="card"><small>Starting from: <b>Rs. 1,500</b> &nbsp;•&nbsp; ⏱ 45–60 min</small></div>
+          <small><b>What do you need?</b></small>
+          <div><span class="chip on">Pipe Leak Repair</span><span class="chip">Tap Installation</span><span class="chip">Water Motor Repair</span><span class="chip">Bathroom Plumbing</span><span class="chip">⋯ Other</span></div>
+          <div class="spacer"></div>
+          <a class="btn pri">Book Now</a>
+        </div></div>
+      </div>
+      <div class="states"><b>Components:</b> header, description, base price, sub-services, Book Now</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">19</span>Describe Problem</h3><p>Quick-select chips + detail text + photos.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">←</span> Details</div>
+          <h4 style="margin:2px 0">Describe Your Problem</h4>
+          <small><b>Select specific issue:</b></small>
+          <div><span class="chip on">Water leak</span><span class="chip">Low pressure</span><span class="chip">Motor not working</span><span class="chip">Clogged</span><span class="chip">Other</span></div>
+          <div class="input" style="min-height:56px">Kitchen sink leaking from pipe joint. Need urgent repair.</div>
+          <small><b>Add photos (optional):</b></small>
+          <div class="row"><a class="btn sec">📷 Add Photo</a><a class="btn sec">📷 Add Photo</a></div>
+          <div class="spacer"></div>
+          <a class="btn pri">Continue</a>
+        </div></div>
+      </div>
+      <div class="states"><b>Next:</b> Location (shared component with emergency flow)</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">20</span>Time Preference</h3><p>ASAP or scheduled — scheduling increases flexibility.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">←</span> Schedule</div>
+          <h4 style="margin:2px 0">When do you need service?</h4>
+          <div class="card" style="border-color:var(--green)"><h4>⚡ ASAP</h4><small>Within 1 hour<br>(No extra charge)</small></div>
+          <div class="card"><h4>📅 Schedule for Later</h4><small>Choose date &amp; time</small><a class="btn sec" style="margin-top:6px">Select Date &amp; Time →</a></div>
+          <div class="spacer"></div>
+          <a class="btn pri">Continue</a>
+        </div></div>
+      </div>
+      <div class="states"><b>States:</b> ASAP selected (default) · Date-time picker open</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">21</span>Price Estimate &amp; Confirm</h3><p>Transparent range, pay-after-service.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">←</span> Confirm</div>
+          <h4 style="margin:2px 0">Confirm Service Request</h4>
+          <div class="card"><small><b>Service:</b> Plumber<br><b>Issue:</b> Pipe Leak Repair<br><b>Location:</b> 📍 DHA Phase 5, Street 12<br><b>Time:</b> ASAP (within 1 hour)</small></div>
+          <div class="card center"><small>Estimated Cost</small><div class="eta-big" style="font-size:20px">Rs. 1,500 – 2,500</div><small>(Final price after service)</small></div>
+          <div class="spacer"></div>
+          <div class="row"><a class="btn sec">Cancel</a><a class="btn pri">Confirm</a></div>
+        </div></div>
+      </div>
+      <div class="states"><b>Next:</b> Searching for Provider (3–5s, same pattern as ambulance)</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">22</span>Provider Assigned</h3><p>Ratings + face build trust for in-home services.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">← Cancel</span> Provider Assigned</div>
+          <div class="center"><span class="status st-ok">✅ Provider Found!</span></div>
+          <div class="card">
+            <div class="row" style="align-items:center">
+              <div style="width:44px;height:44px;border-radius:50%;background:var(--green);color:#fff;display:grid;place-items:center;font-size:20px">👨‍🔧</div>
+              <div><b>Ali Khan</b><br><small>⭐ 4.8 (127 reviews)<br>🔧 Plumber • 5 years exp.</small></div>
+            </div>
+            <div style="margin-top:6px"><small>📍 3.2 km away • ⏱ ETA: <b>25 min</b></small></div>
+          </div>
+          <div class="row"><a class="btn pri">📞 Call</a><a class="btn sec">💬 Chat</a></div>
+          <div class="card"><small><b>Service:</b> Pipe Leak Repair<br><b>Est. Cost:</b> Rs. 1,500 – 2,500</small></div>
+          <div class="row"><a class="btn sec">View Profile</a><a class="btn pri">Track on Map</a></div>
+        </div></div>
+      </div>
+      <div class="states"><b>States:</b> Assigned · Contact active · Tracking active</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">23</span>Provider En Route</h3><p>Same tracking component as ambulance — green skin.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">←</span> En Route</div>
+          <div class="card"><b>👨‍🔧 Ali Khan</b> · ⭐ 4.8 · Plumber
+            <div class="row" style="margin-top:4px"><a class="btn pri">📞 Call</a><a class="btn sec">💬 Chat</a></div>
+          </div>
+          <div class="map" style="flex:1">
+            <span class="pulse" style="left:50%;top:70%"></span>
+            <span class="pin" style="left:60%;top:30%">🚐<small>Provider</small></span>
+          </div>
+          <div class="card"><small>Status: <span class="status st-ok">En Route</span><br>ETA: 25 → 22 → <b>18 min</b><br>Service: Pipe Leak Repair • Rs. 1,500–2,500</small></div>
+        </div></div>
+      </div>
+      <div class="states"><b>Note:</b> Identical machinery to Screen 12 — one engine, two skins</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">24</span>Service In Progress</h3><p>Job started; support reachable.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body center">
+          <div class="spacer"></div>
+          <div style="font-size:36px">🔧</div>
+          <h4 style="margin:4px 0">Service In Progress</h4>
+          <small style="color:var(--gray)">Provider has arrived and started the service.</small>
+          <div class="card"><b>👨‍🔧 Ali Khan</b><br><small>Working on: Pipe Leak Repair<br>Started at: 11:15 AM</small></div>
+          <div class="spacer"></div>
+          <a class="btn grn">Mark as Completed</a>
+          <a class="btn sec">Contact Support</a>
+        </div></div>
+      </div>
+      <div class="states"><b>States:</b> In progress · Issue → Contact Support</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">25</span>Completed + Rate</h3><p>Rating closes the trust loop.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body center">
+          <div class="spacer"></div>
+          <div style="font-size:36px">✅</div>
+          <h4 style="margin:4px 0">Service Completed</h4>
+          <small>How was your experience with <b>Ali Khan</b>?</small>
+          <div class="stars">☆ ☆ ☆ ☆ ☆</div>
+          <div class="input" style="min-height:48px;text-align:left">Add a review (optional)…</div>
+          <div class="card"><small>Final Cost: <b>Rs. 2,000</b><br>(Paid to provider directly)</small></div>
+          <div class="spacer"></div>
+          <a class="btn pri">Submit Rating</a>
+          <a class="btn sec">Skip</a>
+        </div></div>
+      </div>
+      <div class="states"><b>Note:</b> Cash-first, pay-after-service — matches Karachi norms</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================ 5. MY REQUESTS & PROFILE ============================ -->
+<section class="block" id="requests">
+  <h2>5 · My Requests &amp; Profile</h2>
+  <p class="sub">One centralized place for both emergency and domestic history — USP #1 embodied in a single screen.</p>
+  <div class="gallery">
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">26</span>My Requests</h3><p>Active tab surfaces live tracking; history shows both types.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">←</span> My Requests</div>
+          <div><span class="chip on">Active</span><span class="chip">History</span></div>
+          <small><b>ACTIVE REQUESTS (1)</b></small>
+          <div class="card" style="border-color:var(--blue)"><b>🚑 Ambulance · <span class="status st-route">En Route</span></b><br><small>City Emergency Services<br>ETA: 6 min • 1.8 km</small><a class="btn pri" style="margin-top:6px">Track Request →</a></div>
+          <small><b>HISTORY</b></small>
+          <div class="card"><b>🔧 Plumber</b> · <span class="status st-ok">Completed</span><br><small>Sep 1, 2026 • Rs. 2,000 • ★★★★★</small></div>
+          <div class="card"><b>🚑 Ambulance</b> · <span class="status st-ok">Completed</span><br><small>Aug 28, 2026</small></div>
+        </div>
+        <div class="bnav"><div><b>🏠</b>Home</div><div><b>🚨</b>Emergency</div><div><b>🔧</b>Services</div><div class="on"><b>📋</b>Requests</div><div><b>👤</b>Profile</div></div>
+        </div>
+      </div>
+      <div class="states"><b>Empty state:</b> "No requests yet — we're here when you need us."</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">27</span>Profile</h3><p>Account, addresses, language, demo version label.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd center" style="justify-content:center">Profile</div>
+          <div class="center">
+            <div style="width:56px;height:56px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;font-size:24px;margin:0 auto">👤</div>
+            <b>Muhammad Usman</b><br><small style="color:var(--gray)">+92 300 1234567</small><br>
+            <span class="mini-btn">Edit Profile</span>
+          </div>
+          <div class="card"><small>📍 <b>Saved Addresses</b> — 3 saved</small></div>
+          <div class="card"><small>🔔 <b>Notification Settings</b></small></div>
+          <div class="card"><small>🌐 <b>Language</b> — English</small></div>
+          <div class="card"><small>❓ <b>Help &amp; Support</b></small></div>
+          <div class="card"><small>ℹ️ <b>About Madad+</b></small></div>
+          <div class="card"><small style="color:var(--red)">🚪 <b>Logout</b></small></div>
+          <div class="center"><small style="color:var(--gray)">Version 1.0.0 (FYP Demo)</small></div>
+        </div></div>
+      </div>
+      <div class="states"><b>Note:</b> Version label makes demo nature visible to evaluators</div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ============================ 6. PROVIDER MODE ============================ -->
+<section class="block" id="provider">
+  <h2>6 · Provider Mode (Same App, Role-Switched UI)</h2>
+  <p class="sub">For the FYP, providers use the same Flutter app with a role-based interface — saving an entire second app while keeping the UX separate.</p>
+  <div class="gallery">
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">28</span>Provider Login</h3><p>Admin-approved accounts only.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body center">
+          <div class="spacer"></div>
+          <div style="font-size:36px">👨‍🔧</div>
+          <h4 style="margin:4px 0">Provider Login</h4>
+          <div class="input" style="text-align:left">📱 +92 3__ _______</div>
+          <a class="btn pri">Login with OTP</a>
+          <small style="color:var(--gray)">Not registered?<br>Contact admin for approval.</small>
+          <div class="spacer"></div>
+        </div></div>
+      </div>
+      <div class="states"><b>Note:</b> Registration pending admin approval — quality control</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">29</span>Provider Dashboard</h3><p>Availability toggle is the primary control.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd" style="justify-content:space-between"><span>👨‍🔧 Ali Khan</span><span>⚙️</span></div>
+          <small>⭐ 4.8 • 127 jobs</small>
+          <div class="card center" style="border-color:var(--green)"><span class="status st-ok" style="font-size:11px">🟢 AVAILABLE</span>
+            <div class="prog" style="margin-top:8px"><i style="width:100%;background:var(--green)"></i></div>
+            <small>Tap to go offline</small>
+          </div>
+          <div class="card"><small>Today: <b>Jobs 3</b> | <b>Rs. 5,500</b></small></div>
+          <small><b>Incoming Requests (1)</b></small>
+          <div class="card" style="border-color:var(--orange)"><b>🔧 Pipe Leak Repair</b><br><small>📍 DHA Phase 5<br>💰 Rs. 1,500–2,500</small>
+            <div class="row" style="margin-top:6px"><a class="btn grn">Accept</a><a class="btn sec">Decline</a></div>
+          </div>
+          <small><b>Upcoming Jobs (0)</b> — none today</small>
+        </div>
+        <div class="bnav"><div class="on"><b>🏠</b>Home</div><div><b>📋</b>Requests</div><div><b>💼</b>Jobs</div><div><b>👤</b>Profile</div></div>
+        </div>
+      </div>
+      <div class="states"><b>States:</b> Available · Offline · Incoming request (sound + vibration)</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">30</span>Request Details (Provider)</h3><p>Full context before accept/decline.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd"><span class="back">←</span> Request Details</div>
+          <div class="card sv"><h4>🔧 Pipe Leak Repair</h4></div>
+          <div class="card"><small><b>Customer:</b> Muhammad Usman<br>📞 +92 300 1234567</small></div>
+          <div class="card"><small><b>Location:</b><br>📍 DHA Phase 5, Street 12<br>(Near XYZ Mall, Gate 3)</small></div>
+          <div class="card"><small><b>Description:</b> Kitchen sink leaking from pipe joint. Need urgent repair.<br>Photos: 🖼 🖼</small></div>
+          <div class="card center"><small>Estimated Cost</small><b>Rs. 1,500–2,500</b></div>
+          <div class="spacer"></div>
+          <div class="row"><a class="btn grn">Accept Job</a><a class="btn sec">Decline</a></div>
+        </div></div>
+      </div>
+      <div class="states"><b>Behavior:</b> Declined requests return to assignment pool</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">31</span>Active Job</h3><p>Navigation + job lifecycle controls.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd">Active Job</div>
+          <div class="card sv"><b>🔧 Pipe Leak Repair</b><br><small>Customer: Muhammad Usman<br>📍 DHA Phase 5, Street 12</small></div>
+          <a class="btn pri">🗺 Navigate to Customer →</a>
+          <div class="card"><small><b>Job Status:</b></small><a class="btn grn" style="margin-top:6px">▶ Start Job</a></div>
+          <div class="input" style="min-height:48px">Notes about the job…</div>
+          <a class="btn sec">📷 Upload Photos</a>
+        </div></div>
+      </div>
+      <div class="states"><b>Flow:</b> accepted → navigating → start job → complete</div>
+    </div>
+
+    <div class="shot">
+      <div class="meta"><h3><span class="num">32</span>Complete Job</h3><p>Final cost + payment method + documentation.</p></div>
+      <div class="phone"><div class="notch"><span></span></div>
+        <div class="scr"><div class="body">
+          <div class="scr-hd">Complete Job</div>
+          <div class="card center"><small>Final Cost</small><div class="eta-big" style="font-size:20px">Rs. 2,000</div></div>
+          <small><b>Payment Method:</b></small>
+          <div><span class="chip on">💵 Cash</span><span class="chip">📱 JazzCash</span><span class="chip">⋯ Other</span></div>
+          <div class="input" style="min-height:52px">Replaced pipe joint. Tested for leaks. Customer satisfied.</div>
+          <small><b>Photos:</b> 🖼 🖼 🖼</small>
+          <div class="spacer"></div>
+          <a class="btn grn">Complete &amp; Submit</a>
+        </div></div>
+      </div>
+      <div class="states"><b>Note:</b> Cash-first; JazzCash/EasyPaisa prepare payment future</div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ============================ 7. DISPATCHER DASHBOARD ============================ -->
+<section class="block" id="dispatcher">
+  <h2>7 · Ambulance Dispatcher Dashboard (Web)</h2>
+  <p class="sub">React web dashboard for ambulance organization staff. Live map + request queue + fleet panel. System suggestion (closest available) is pre-highlighted; dispatcher can override — automation with human-in-the-loop.</p>
+
+  <div class="browser">
+    <div class="chrome"><i></i><i></i><i></i><div class="url">https://dispatch.madad-plus.demo/dashboard</div></div>
+    <div class="dash-hd"><span><b>MADAD+ DISPATCH CENTER</b> · City Emergency Services</span><span>🟢 Online &nbsp; [Logout] [Settings]</span></div>
+    <div class="sim-strip">⚠ SYNTHETIC DATA MODE — FYP SIMULATION — NO REAL EMERGENCIES</div>
+    <div class="dash">
+      <div class="left">
+        <b>🚨 EMERGENCY REQUESTS</b>
+        <div class="req new" style="margin-top:8px"><b>#REQ-2026-001</b> · Ambulance Needed<small>📍 DHA Phase 5 · 10:42 AM · 3 min ago</small><div style="margin-top:6px"><span class="mini-btn">Assign</span> <span class="mini-btn">Details</span></div></div>
+        <div class="req new"><b>#REQ-2026-002</b> · Ambulance Needed<small>📍 Gulshan-e-Iqbal · 10:38 AM · 7 min ago</small><div style="margin-top:6px"><span class="mini-btn">Assign</span> <span class="mini-btn">Details</span></div></div>
+        <b>COMPLETED (Today: 12)</b>
+        <div class="req"><small>✓ #REQ-2026-000 &nbsp; ✓ #REQ-2025-089</small><span class="mini-btn">View All</span></div>
+        <b>AMBULANCE FLEET (12)</b>
+        <div class="card" style="margin-top:6px"><small>🟢 Available: 7 &nbsp; 🔴 Busy: 4 &nbsp; ⚫ Offline: 1</small>
+          <div style="margin-top:6px;line-height:1.9"><small>A-12 🟢2.3km &nbsp; A-15 🔴<br>A-18 🟢5.1km &nbsp; A-20 🔴<br>A-22 🟢1.8km &nbsp; A-25 🔴<br>A-30 🟢3.5km &nbsp; A-33 ⚫</small></div>
+          <span class="mini-btn">View All Ambulances</span>
+        </div>
+      </div>
+      <div class="right">
+        <div class="map fleetmap">
+          <span class="pin" style="left:22%;top:26%">🚑<small>A-12 · Available</small></span>
+          <span class="pin" style="left:58%;top:18%">🚑<small>A-15 · Busy</small></span>
+          <span class="pin" style="left:74%;top:52%">🚑<small>A-18 · Available</small></span>
+          <span class="pin" style="left:36%;top:70%">🚑<small>A-22 · Available</small></span>
+          <span class="pin" style="left:52%;top:44%">📍<small>#REQ-001 · DHA</small></span>
+          <span class="pin" style="left:82%;top:80%">📍<small>#REQ-002 · Gulshan</small></span>
+        </div>
+        <div class="row">
+          <a class="btn sec">Mark All Available</a>
+          <a class="btn sec">End Shift</a>
+          <a class="btn sec">View Analytics</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="color:var(--blue);margin:18px 0 8px">Modals</h3>
+  <div class="modal-wrap">
+    <div class="modal">
+      <h4>🚑 Ambulance A-12</h4>
+      <small style="color:var(--gray)">City Emergency Services</small>
+      <p style="margin:8px 0">Status: <span class="status st-ok">🟢 Available</span><br>
+      <b>Driver:</b> Muhammad Ahmed<br>📞 +92 300 1234567<br>
+      <b>Location:</b> DHA Phase 6, Street 5<br><b>Last Updated:</b> 10:45 AM<br>
+      <b>Current Assignment:</b> None<br><b>Today's Jobs:</b> 3 · 45 km</p>
+      <span class="mini-btn">Set Busy</span> <span class="mini-btn">Set Offline</span> <span class="mini-btn">View History</span>
+    </div>
+    <div class="modal">
+      <h4>🚨 Request #REQ-2026-001</h4>
+      <small style="color:var(--gray)">Ambulance Emergency · Pending Assignment</small>
+      <p style="margin:8px 0"><b>User:</b> Muhammad Usman<br>📞 +92 300 1234567<br>
+      <b>Location:</b> DHA Phase 5, Street 12 (Near XYZ Mall, Gate 3)<br>
+      <b>Details:</b> Cardiac, 1 patient<br><b>Waiting:</b> 3 minutes</p>
+      <b>Assign Ambulance:</b>
+      <div style="margin-top:6px;display:flex;flex-direction:column;gap:5px">
+        <a class="btn grn" style="text-align:left">Assign A-22 (1.8km) ← Closest ✓</a>
+        <a class="btn sec" style="text-align:left">Assign A-12 (2.3km)</a>
+        <a class="btn sec" style="text-align:left">Assign A-18 (5.1km)</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 8. ADMIN DASHBOARD ============================ -->
+<section class="block" id="admin">
+  <h2>8 · Admin Dashboard (Web)</h2>
+  <p class="sub">Platform-wide management for Madad+ administrators: users, providers, organizations, categories, analytics, system configuration.</p>
+
+  <div class="browser">
+    <div class="chrome"><i></i><i></i><i></i><div class="url">https://admin.madad-plus.demo/dashboard</div></div>
+    <div class="dash-hd"><span><b>MADAD+ ADMIN PANEL</b></span><span>[Logout] [Settings]</span></div>
+    <div style="padding:16px">
+      <b>SYSTEM OVERVIEW</b>
+      <div class="stats" style="margin-top:10px">
+        <div class="stat"><b>1,247</b><small>👥 USERS (+12 today)</small></div>
+        <div class="stat"><b>89</b><small>🔧 PROVIDERS (+3)</small></div>
+        <div class="stat"><b>3,456</b><small>📋 REQUESTS (+45)</small></div>
+        <div class="stat"><b>34</b><small>🚑 AMBULANCES (28 free)</small></div>
+        <div class="stat"><b>4</b><small>🏢 ORGS (3 active)</small></div>
+        <div class="stat"><b>2</b><small>⚠ ALERTS</small></div>
+      </div>
+      <div class="card" style="margin-top:14px"><b>RECENT ACTIVITY</b>
+        <small style="display:block;margin-top:6px;line-height:1.9">• New user registered: Muhammad (10:45 AM)<br>• Provider approved: Ali Khan — Plumber (10:42 AM)<br>• Emergency completed: #REQ-2026-001 (10:40 AM)<br>• Ambulance A-15 marked busy (10:38 AM)<br>• New category added: Gas Leak Emergency (10:30 AM)</small>
+      </div>
+      <div style="margin-top:12px"><span class="mini-btn">+ Add User</span> <span class="mini-btn">+ Add Provider</span> <span class="mini-btn">+ Add Ambulance</span> <span class="mini-btn">+ Add Category</span></div>
+    </div>
+  </div>
+
+  <div class="browser">
+    <div class="chrome"><i></i><i></i><i></i><div class="url">https://admin.madad-plus.demo/users</div></div>
+    <div class="dash-hd"><span><b>User Management</b></span><span class="mini-btn" style="background:#fff">+ Add User</span></div>
+    <div style="padding:14px">
+      <div class="row" style="margin-bottom:10px"><div class="input" style="flex:1">🔍 Search users…</div><div><span class="chip on">All</span><span class="chip">Active</span><span class="chip">Suspended</span></div></div>
+      <table class="t">
+        <tr><th>Name</th><th>Phone</th><th>Status</th><th>Requests</th><th>Actions</th></tr>
+        <tr><td>Muhammad Usman</td><td>+92 300…</td><td><span class="status st-ok">Active</span></td><td>12</td><td><span class="mini-btn">View</span> <span class="mini-btn">⚠</span></td></tr>
+        <tr><td>Ali Khan</td><td>+92 301…</td><td><span class="status st-ok">Active</span></td><td>5</td><td><span class="mini-btn">View</span> <span class="mini-btn">⚠</span></td></tr>
+        <tr><td>Sara Ahmed</td><td>+92 302…</td><td><span class="status st-busy">Suspended</span></td><td>3</td><td><span class="mini-btn">View</span> <span class="mini-btn">✅</span></td></tr>
+      </table>
+      <small style="color:var(--gray)">Showing 1–25 of 1,247 &nbsp; [&lt; Prev] [Next &gt;]</small>
+    </div>
+  </div>
+
+  <div class="browser">
+    <div class="chrome"><i></i><i></i><i></i><div class="url">https://admin.madad-plus.demo/categories</div></div>
+    <div class="dash-hd"><span><b>Service Categories</b> — scalability demo: new services = new rows, no code</span><span class="mini-btn" style="background:#fff">+ Add Category</span></div>
+    <div style="padding:14px">
+      <table class="t">
+        <tr><th>Name</th><th>Type</th><th>Status</th><th>Providers</th><th>Actions</th></tr>
+        <tr><td>🚑 Ambulance</td><td>Emergency</td><td><span class="status st-ok">Active</span></td><td>34</td><td><span class="mini-btn">Edit</span> <span class="mini-btn">Disable</span></td></tr>
+        <tr><td>🔧 Plumber</td><td>Domestic</td><td><span class="status st-ok">Active</span></td><td>12</td><td><span class="mini-btn">Edit</span> <span class="mini-btn">Disable</span></td></tr>
+        <tr><td>⚡ Electrician</td><td>Domestic</td><td><span class="status st-ok">Active</span></td><td>8</td><td><span class="mini-btn">Edit</span> <span class="mini-btn">Disable</span></td></tr>
+        <tr><td>❄️ AC Technician</td><td>Domestic</td><td><span class="status st-ok">Active</span></td><td>6</td><td><span class="mini-btn">Edit</span> <span class="mini-btn">Disable</span></td></tr>
+        <tr><td>🔥 Fire Emergency</td><td>Emergency</td><td><span class="status st-appr">Beta</span></td><td>0</td><td><span class="mini-btn">Edit</span> <span class="mini-btn">Disable</span></td></tr>
+        <tr><td>💨 Gas Leak Emergency</td><td>Emergency</td><td><span class="status st-appr">Beta</span></td><td>0</td><td><span class="mini-btn">Edit</span> <span class="mini-btn">Disable</span></td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 9. DESIGN SYSTEM ============================ -->
+<section class="block" id="design">
+  <h2>9 · Design System (Foundation)</h2>
+  <p class="sub">Tokens used across all wireframes above — ready to hand to Figma.</p>
+  <h3 style="color:var(--blue)">Colors</h3>
+  <div class="swatches">
+    <div class="sw"><i style="background:#E63946"></i><div><b>Emergency Red</b><small>#E63946 · urgent actions only</small></div></div>
+    <div class="sw"><i style="background:#1D3557"></i><div><b>Trust Blue</b><small>#1D3557 · primary, branding</small></div></div>
+    <div class="sw"><i style="background:#2A9D8F"></i><div><b>Service Green</b><small>#2A9D8F · domestic, success</small></div></div>
+    <div class="sw"><i style="background:#F4A261"></i><div><b>Warning Orange</b><small>#F4A261 · approaching, caution</small></div></div>
+    <div class="sw"><i style="background:#6C757D"></i><div><b>Neutral Gray</b><small>#6C757D · secondary, offline</small></div></div>
+    <div class="sw"><i style="background:#F8F9FA;border-bottom:1px solid var(--line)"></i><div><b>Light Gray</b><small>#F8F9FA · backgrounds</small></div></div>
+  </div>
+  <h3 style="color:var(--blue);margin-top:18px">Status Language</h3>
+  <p>
+    <span class="status st-ok">🟢 Available</span>
+    <span class="status st-busy">🔴 Busy</span>
+    <span class="status st-off">⚫ Offline</span>
+    <span class="status st-route">🔵 En Route</span>
+    <span class="status st-appr">🟠 Approaching</span>
+  </p>
+  <div class="card" style="max-width:720px;font-size:12px">
+    <b>Typography:</b> Inter (Roboto fallback · Noto Nastaliq Urdu for Urdu) — H1 24 · H2 20 · Body 16 · Critical numbers (ETA) 32, weight 700<br>
+    <b>Buttons:</b> Primary 48px / Emergency 56px (taller = urgency) · radius 8px &nbsp; <b>Cards:</b> white, radius 12px, padding 16px<br>
+    <b>Accessibility:</b> contrast ≥ 4.5:1 · touch targets ≥ 48px · never color alone (icon + text) · reduced-motion support
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <b>Madad+ — FYP Demo.</b> All ambulance organizations, vehicles, providers, and requests shown are <b>synthetic</b>. No real emergency response is provided or implied. In a real emergency, call <b>1122</b>.
+  <br>Companion document: <b>madad-plus-blueprint-and-wireframe.md</b> (Parts 1–21).
+</footer>
+
+</body>
+</html>

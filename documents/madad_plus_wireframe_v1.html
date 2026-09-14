@@ -1,0 +1,1216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Madad+ Digital Wireframe</title>
+  <style>
+    :root {
+      --ink: #15253a;
+      --muted: #6d7b8d;
+      --soft: #e9eef5;
+      --line: #d9e1eb;
+      --paper: #f8fafc;
+      --white: #ffffff;
+      --navy: #12243b;
+      --blue: #4967ee;
+      --blue-soft: #e9edff;
+      --coral: #ee6b5c;
+      --coral-soft: #fff0ed;
+      --mint: #2f9b83;
+      --mint-soft: #e5f6f1;
+      --amber: #c98723;
+      --amber-soft: #fff5df;
+      --shadow: 0 20px 45px rgba(29, 50, 79, 0.12);
+      --small-shadow: 0 8px 22px rgba(29, 50, 79, 0.08);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      background: #e6ebf2;
+      color: var(--ink);
+      font-size: 14px;
+    }
+
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+
+    .studio {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      min-height: 72px;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      color: #eef4ff;
+      background: var(--navy);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .brand-lockup {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-mark {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      color: var(--navy);
+      font-weight: 900;
+      border-radius: 12px;
+      background: #b7e8de;
+      box-shadow: inset 0 0 0 4px rgba(18, 36, 59, 0.12);
+    }
+
+    .brand-name { font-size: 19px; font-weight: 800; letter-spacing: -0.03em; }
+    .brand-subtitle { color: #aebdd1; font-size: 11px; margin-top: 2px; }
+
+    .topbar-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .top-pill {
+      padding: 7px 10px;
+      color: #d7e2f2;
+      border: 1px solid rgba(215, 226, 242, 0.2);
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .top-pill.sim { color: #ffd6cf; border-color: rgba(255, 182, 169, 0.45); background: rgba(238, 107, 92, 0.14); }
+
+    .workspace {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 222px minmax(0, 1fr) 286px;
+    }
+
+    .rail, .inspector {
+      background: #f6f8fb;
+      border-color: var(--line);
+    }
+
+    .rail {
+      padding: 18px 14px;
+      border-right: 1px solid var(--line);
+      overflow: auto;
+    }
+
+    .rail-label, .inspector-label {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .mode-switch {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin: 10px 0 22px;
+    }
+
+    .mode-btn, .screen-btn {
+      width: 100%;
+      color: var(--muted);
+      border: 1px solid transparent;
+      background: transparent;
+      text-align: left;
+      transition: 0.16s ease;
+    }
+
+    .mode-btn {
+      padding: 9px 8px;
+      border-radius: 9px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .mode-btn:hover, .screen-btn:hover { color: var(--ink); background: #edf1f7; }
+    .mode-btn.active { color: var(--blue); border-color: #cbd4ff; background: var(--blue-soft); }
+
+    .screen-nav { display: grid; gap: 4px; margin-top: 9px; }
+    .screen-btn {
+      padding: 9px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+    }
+
+    .screen-btn.active { color: var(--ink); font-weight: 800; background: var(--white); box-shadow: var(--small-shadow); }
+    .screen-btn .screen-index { display: inline-block; width: 24px; color: #a1adbd; font-size: 10px; }
+
+    .rail-note {
+      margin-top: 24px;
+      padding: 12px;
+      color: #627185;
+      background: #eef3f8;
+      border: 1px solid #dde5ee;
+      border-radius: 10px;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .canvas {
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      background-color: #e7ecf3;
+      background-image: linear-gradient(rgba(255,255,255,0.25) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.25) 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+
+    .canvas-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      min-height: 58px;
+      padding: 13px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      background: rgba(231, 236, 243, 0.92);
+      border-bottom: 1px solid rgba(211, 220, 231, 0.8);
+      backdrop-filter: blur(10px);
+    }
+
+    .canvas-title { font-size: 13px; font-weight: 800; }
+    .canvas-subtitle { color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .canvas-tag { padding: 7px 10px; color: #546479; border: 1px solid #cfd9e5; border-radius: 999px; background: rgba(255,255,255,0.58); font-size: 11px; }
+
+    .mount {
+      min-height: calc(100vh - 130px);
+      padding: 36px;
+      display: grid;
+      place-items: center;
+    }
+
+    .phone {
+      width: min(392px, 100%);
+      min-height: 760px;
+      overflow: hidden;
+      position: relative;
+      color: var(--ink);
+      background: var(--paper);
+      border: 8px solid #1c2c40;
+      border-radius: 38px;
+      box-shadow: var(--shadow);
+    }
+
+    .phone::before {
+      content: "";
+      position: absolute;
+      z-index: 3;
+      top: 8px;
+      left: 50%;
+      width: 92px;
+      height: 22px;
+      transform: translateX(-50%);
+      border-radius: 0 0 14px 14px;
+      background: #1c2c40;
+    }
+
+    .phone-screen { min-height: 760px; padding-bottom: 76px; position: relative; }
+    .phone-status { height: 30px; padding: 8px 17px 0; display: flex; justify-content: space-between; color: #7c8897; font-size: 10px; font-weight: 800; }
+    .phone-content { padding: 0 20px; }
+
+    .appbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0 17px; }
+    .appbar-title { font-size: 20px; font-weight: 900; letter-spacing: -0.04em; }
+    .appbar-title span { color: var(--blue); }
+    .appbar-actions { display: flex; gap: 7px; }
+    .circle-icon { width: 30px; height: 30px; display: grid; place-items: center; color: #617187; border: 1px solid var(--line); border-radius: 50%; background: var(--white); font-size: 12px; }
+
+    .eyebrow { color: var(--blue); font-size: 10px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; }
+    .heading { margin: 7px 0 4px; color: var(--ink); font-size: 25px; line-height: 1.08; letter-spacing: -0.055em; }
+    .subheading { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .section-title { margin: 23px 0 10px; display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; font-weight: 900; }
+    .section-link { color: var(--blue); font-size: 11px; font-weight: 800; }
+
+    .location-chip { display: flex; align-items: center; gap: 8px; padding: 9px 11px; color: #56657a; border: 1px solid var(--line); border-radius: 11px; background: var(--white); font-size: 11px; }
+    .location-chip strong { display: block; color: var(--ink); font-size: 12px; }
+    .location-chip .pin { width: 22px; height: 22px; display: grid; place-items: center; color: var(--coral); border-radius: 8px; background: var(--coral-soft); font-weight: 900; }
+    .location-chip .chevron { margin-left: auto; color: #9aa7b7; }
+
+    .hero-card { margin-top: 15px; padding: 19px; overflow: hidden; position: relative; color: white; border-radius: 18px; box-shadow: 0 13px 24px rgba(238, 107, 92, 0.2); }
+    .hero-card::after { content: ""; position: absolute; right: -27px; bottom: -37px; width: 142px; height: 142px; border: 18px solid rgba(255,255,255,0.13); border-radius: 50%; }
+    .hero-card.emergency { background: linear-gradient(135deg, #b94e55, #e87563); }
+    .hero-card.domestic { background: linear-gradient(135deg, #286f82, #3f9f9a); box-shadow: 0 13px 24px rgba(47, 155, 131, 0.18); }
+    .hero-card .eyebrow { color: #ffe0db; }
+    .hero-card h3 { margin: 8px 0 6px; max-width: 230px; font-size: 20px; line-height: 1.05; letter-spacing: -0.05em; }
+    .hero-card p { max-width: 245px; margin: 0; color: rgba(255,255,255,0.82); font-size: 11px; line-height: 1.45; }
+    .hero-card .btn { margin-top: 16px; color: #a74647; background: white; }
+
+    .btn { min-height: 38px; padding: 10px 13px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 10px; font-size: 11px; font-weight: 900; letter-spacing: 0.02em; }
+    .btn.primary { color: white; background: var(--blue); box-shadow: 0 8px 15px rgba(73,103,238,0.18); }
+    .btn.secondary { color: var(--ink); background: var(--white); border: 1px solid var(--line); }
+    .btn.soft { color: var(--blue); background: var(--blue-soft); }
+    .btn.danger { color: #bd5048; background: var(--coral-soft); }
+    .btn.full { width: 100%; }
+    .btn.small { min-height: 30px; padding: 7px 9px; font-size: 10px; }
+    .btn:disabled { color: #a3adbb; background: #e9edf2; box-shadow: none; cursor: not-allowed; }
+
+    .active-card { padding: 13px; border: 1px solid #cbd4ff; border-radius: 14px; background: #f1f3ff; }
+    .active-card .row, .simple-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .status-dot { width: 8px; height: 8px; display: inline-block; border-radius: 50%; background: var(--mint); }
+    .status-dot.amber { background: var(--amber); }
+    .status-dot.red { background: var(--coral); }
+    .status-label { color: #536174; font-size: 10px; font-weight: 800; }
+    .active-title { margin: 7px 0 2px; font-size: 13px; font-weight: 900; }
+    .active-meta { color: var(--muted); font-size: 11px; }
+
+    .quick-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .quick-item { padding: 9px 4px; color: #4e5d70; border: 1px solid var(--line); border-radius: 11px; background: white; text-align: center; font-size: 10px; font-weight: 800; }
+    .quick-symbol { width: 28px; height: 28px; margin: 0 auto 6px; display: grid; place-items: center; color: var(--blue); border-radius: 9px; background: var(--blue-soft); font-size: 12px; }
+
+    .phone-nav { position: absolute; left: 0; right: 0; bottom: 0; min-height: 67px; padding: 9px 16px 12px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; background: rgba(255,255,255,0.96); border-top: 1px solid var(--line); }
+    .nav-item { color: #8a98a9; text-align: center; font-size: 9px; font-weight: 800; }
+    .nav-item.active { color: var(--blue); }
+    .nav-icon { display: block; margin-bottom: 4px; font-size: 15px; }
+
+    .notice { margin: 14px 0; padding: 11px 12px; display: flex; gap: 9px; color: #8d5420; border: 1px solid #f0d39a; border-radius: 11px; background: var(--amber-soft); font-size: 10px; line-height: 1.45; }
+    .notice.danger { color: #97463e; border-color: #f2c7c0; background: var(--coral-soft); }
+    .notice.info { color: #435fb8; border-color: #cbd5ff; background: var(--blue-soft); }
+
+    .choice-card { padding: 14px; display: flex; align-items: flex-start; gap: 11px; border: 1px solid var(--line); border-radius: 14px; background: white; }
+    .choice-card.selected { border-color: #aab8ff; background: #f2f4ff; box-shadow: inset 0 0 0 1px #aab8ff; }
+    .choice-icon { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; color: var(--blue); border-radius: 10px; background: var(--blue-soft); font-weight: 900; }
+    .choice-card h4 { margin: 0 0 4px; font-size: 13px; }
+    .choice-card p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
+    .choice-card .arrow { margin-left: auto; color: #9ba8b8; }
+
+    .progress { display: flex; align-items: center; gap: 5px; margin: 12px 0 20px; }
+    .progress-step { height: 5px; flex: 1; border-radius: 5px; background: #dfe5ed; }
+    .progress-step.done, .progress-step.current { background: var(--blue); }
+    .progress-label { color: var(--muted); font-size: 10px; font-weight: 800; }
+
+    .segmented { padding: 4px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; border-radius: 11px; background: #e7edf4; }
+    .segment { padding: 9px 6px; color: #778598; border: 0; border-radius: 8px; background: transparent; font-size: 10px; font-weight: 900; }
+    .segment.active { color: var(--ink); background: white; box-shadow: var(--small-shadow); }
+
+    .field-label { display: block; margin: 17px 0 7px; color: #5f6d80; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; }
+    .fake-input { min-height: 41px; padding: 12px; color: #7b8899; border: 1px solid var(--line); border-radius: 10px; background: white; font-size: 11px; }
+    .fake-input strong { color: var(--ink); }
+    .fake-textarea { min-height: 74px; line-height: 1.45; }
+
+    .map-card { min-height: 204px; overflow: hidden; position: relative; border: 1px solid #cad5e0; border-radius: 15px; background-color: #e8efe9; background-image: linear-gradient(24deg, transparent 48%, rgba(255,255,255,0.85) 49%, rgba(255,255,255,0.85) 52%, transparent 53%), linear-gradient(115deg, transparent 46%, rgba(255,255,255,0.75) 47%, rgba(255,255,255,0.75) 52%, transparent 53%), linear-gradient(170deg, transparent 46%, rgba(191, 211, 198, 0.9) 47%, rgba(191, 211, 198, 0.9) 52%, transparent 53%); }
+    .map-card::before { content: "CLIFTON                 DHA"; position: absolute; left: 17px; top: 18px; color: rgba(65, 100, 83, 0.46); font-size: 9px; font-weight: 900; letter-spacing: 0.11em; }
+    .map-card::after { content: "MAIN ROAD"; position: absolute; right: 15px; bottom: 20px; transform: rotate(-15deg); color: rgba(65, 100, 83, 0.45); font-size: 9px; font-weight: 900; }
+    .map-pin { width: 19px; height: 19px; display: grid; place-items: center; position: absolute; color: white; border: 3px solid white; border-radius: 50% 50% 50% 0; background: var(--coral); box-shadow: 0 3px 8px rgba(34, 50, 70, 0.24); transform: rotate(-45deg); font-size: 8px; }
+    .map-pin span { transform: rotate(45deg); }
+    .map-pin.user { left: 36%; top: 46%; }
+    .map-pin.unit { left: 68%; top: 30%; background: var(--blue); }
+    .map-pin.unit.two { left: 72%; top: 68%; background: var(--mint); }
+    .map-route { position: absolute; left: 39%; top: 43%; width: 31%; height: 5px; transform: rotate(-24deg); border-radius: 9px; background: var(--blue); opacity: 0.8; }
+    .map-legend { position: absolute; left: 10px; right: 10px; bottom: 9px; padding: 7px 8px; display: flex; justify-content: space-between; color: #5f6f63; border: 1px solid rgba(255,255,255,0.75); border-radius: 8px; background: rgba(255,255,255,0.75); font-size: 9px; font-weight: 800; }
+
+    .timeline { margin: 16px 0; display: grid; gap: 12px; }
+    .timeline-item { display: grid; grid-template-columns: 18px 1fr; gap: 9px; position: relative; }
+    .timeline-item:not(:last-child)::after { content: ""; position: absolute; left: 8px; top: 19px; width: 2px; height: 22px; background: #dbe2ea; }
+    .timeline-dot { width: 17px; height: 17px; display: grid; place-items: center; color: white; border-radius: 50%; background: #cbd5df; font-size: 9px; font-weight: 900; }
+    .timeline-item.done .timeline-dot, .timeline-item.current .timeline-dot { background: var(--mint); }
+    .timeline-item.current .timeline-dot { box-shadow: 0 0 0 4px var(--mint-soft); }
+    .timeline-title { font-size: 11px; font-weight: 900; }
+    .timeline-meta { margin-top: 2px; color: var(--muted); font-size: 10px; }
+
+    .status-banner { padding: 13px; display: flex; align-items: center; gap: 11px; border-radius: 13px; background: var(--mint-soft); }
+    .status-badge { width: 34px; height: 34px; display: grid; place-items: center; color: white; border-radius: 11px; background: var(--mint); font-weight: 900; }
+    .status-banner strong { display: block; font-size: 12px; }
+    .status-banner span { display: block; margin-top: 3px; color: #4e796f; font-size: 10px; }
+
+    .screen-actions { margin-top: 18px; display: grid; gap: 8px; }
+    .two-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .sim-caption { margin-top: 9px; color: #7d8999; font-size: 9px; line-height: 1.45; text-align: center; }
+    button.btn.primary[data-screen="customer-assigned"] { position: relative; margin-bottom: 29px !important; }
+    button.btn.primary[data-screen="customer-assigned"]::after { content: "Demo shortcut: opens the customer view to represent two separate people and devices."; position: absolute; top: calc(100% + 7px); left: 0; width: 100%; color: #7d8999; font-size: 9px; font-weight: 500; line-height: 1.4; text-align: center; }
+
+    .modal-backdrop { position: absolute; z-index: 4; inset: 0; padding: 18px; display: flex; align-items: flex-end; background: rgba(21, 37, 58, 0.42); backdrop-filter: blur(2px); }
+    .modal-card { width: 100%; padding: 18px; border: 1px solid rgba(255,255,255,0.7); border-radius: 19px; background: var(--paper); box-shadow: 0 18px 40px rgba(21, 37, 58, 0.28); }
+    .modal-icon { width: 38px; height: 38px; margin-bottom: 11px; display: grid; place-items: center; color: #a94c43; border-radius: 12px; background: var(--coral-soft); font-weight: 900; }
+    .modal-card h3 { margin: 0 0 6px; font-size: 18px; letter-spacing: -0.04em; }
+    .modal-card p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .modal-card .two-actions { margin-top: 16px; }
+
+    .ops-window { width: min(1100px, 100%); min-height: 670px; overflow: hidden; display: grid; grid-template-columns: 174px minmax(0, 1fr); color: var(--ink); border: 1px solid #cfd8e3; border-radius: 17px; background: var(--paper); box-shadow: var(--shadow); }
+    .ops-sidebar { padding: 18px 12px; color: #b9c8da; background: var(--navy); }
+    .ops-brand { padding: 0 8px 22px; color: white; font-size: 16px; font-weight: 900; letter-spacing: -0.04em; }
+    .ops-brand span { color: #a8e2d6; }
+    .ops-menu-label { margin: 16px 8px 7px; color: #71849c; font-size: 9px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; }
+    .ops-menu-item { padding: 9px 8px; color: #b5c5d7; border-radius: 8px; font-size: 10px; font-weight: 700; }
+    .ops-menu-item.active { color: white; background: #263a55; }
+    .ops-main { min-width: 0; background: #f6f8fb; }
+    .ops-toolbar { min-height: 63px; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); background: white; }
+    .ops-title { font-size: 16px; font-weight: 900; letter-spacing: -0.04em; }
+    .ops-meta { margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .ops-content { padding: 20px; }
+    .ops-content h2 { margin: 0; font-size: 18px; letter-spacing: -0.04em; }
+    .ops-content .subheading { margin-top: 4px; }
+    .ops-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(240px, 0.75fr); gap: 14px; margin-top: 18px; }
+    .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 16px; }
+    .metric { padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: white; }
+    .metric-label { color: var(--muted); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+    .metric-value { margin-top: 7px; font-size: 21px; font-weight: 900; letter-spacing: -0.06em; }
+    .metric-note { margin-top: 3px; color: var(--mint); font-size: 9px; font-weight: 800; }
+    .ops-card { padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: white; }
+    .ops-card-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 11px; }
+    .ops-card-title { font-size: 11px; font-weight: 900; }
+    .ops-card-link { color: var(--blue); font-size: 9px; font-weight: 900; }
+    .queue-item { padding: 10px 0; display: grid; grid-template-columns: 9px 1fr auto; gap: 8px; align-items: start; border-bottom: 1px solid #edf1f5; }
+    .queue-item:last-child { border-bottom: 0; }
+    .queue-item strong { display: block; font-size: 10px; }
+    .queue-item span { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+    .queue-status { color: var(--blue); font-size: 9px; font-weight: 900; }
+    .ops-map { min-height: 310px; }
+    .ops-map .map-pin.user { left: 42%; top: 47%; }
+    .ops-map .map-pin.unit { left: 63%; top: 25%; }
+    .ops-map .map-pin.unit.two { left: 30%; top: 69%; }
+    .ops-map .map-pin.unit.three { left: 78%; top: 65%; background: var(--amber); }
+    .ops-map .map-route { left: 44%; top: 44%; width: 24%; }
+    .table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    .table th { padding: 9px 7px; color: var(--muted); text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .table td { padding: 10px 7px; border-top: 1px solid #edf1f5; }
+    .table strong { font-size: 10px; }
+    .table small { display: block; margin-top: 3px; color: var(--muted); }
+    .table-status { padding: 4px 7px; display: inline-block; color: #347967; border-radius: 999px; background: var(--mint-soft); font-size: 9px; font-weight: 900; }
+    .table-status.busy { color: #9b5d20; background: var(--amber-soft); }
+    .table-status.assigned { color: #455eb9; background: var(--blue-soft); }
+    .candidate { padding: 11px; display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 10px; background: white; }
+    .candidate + .candidate { margin-top: 8px; }
+    .candidate.selected { border-color: #aab8ff; background: #f2f4ff; }
+    .candidate h4 { margin: 0; font-size: 11px; }
+    .candidate p { margin: 4px 0 0; color: var(--muted); font-size: 9px; }
+    .candidate .candidate-right { text-align: right; }
+    .candidate .distance { display: block; font-size: 13px; font-weight: 900; }
+    .candidate .candidate-state { color: var(--mint); font-size: 9px; font-weight: 900; }
+    .candidate.busy .candidate-state { color: var(--amber); }
+
+    .inspector { padding: 22px 18px; border-left: 1px solid var(--line); overflow: auto; }
+    .inspector h2 { margin: 8px 0 5px; font-size: 17px; letter-spacing: -0.04em; }
+    .inspector-copy { color: var(--muted); font-size: 11px; line-height: 1.55; }
+    .inspector-section { margin-top: 22px; padding-top: 17px; border-top: 1px solid var(--line); }
+    .inspector-section h3 { margin: 0 0 9px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.09em; }
+    .inspector-list { margin: 0; padding: 0; display: grid; gap: 8px; list-style: none; }
+    .inspector-list li { color: #5d6c7e; font-size: 11px; line-height: 1.4; }
+    .inspector-list li::before { content: "+"; display: inline-block; width: 15px; color: var(--mint); font-weight: 900; }
+    .stack-mini { padding: 11px; color: #607084; border-radius: 11px; background: #edf2f7; font-size: 10px; line-height: 1.55; }
+    .stack-mini strong { color: var(--ink); }
+
+    @media (max-width: 1180px) {
+      .workspace { grid-template-columns: 194px minmax(0, 1fr); }
+      .inspector { grid-column: 1 / -1; border-top: 1px solid var(--line); border-left: 0; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+      .inspector-section { margin-top: 0; padding-top: 0; border-top: 0; }
+      .stack-mini { align-self: start; }
+    }
+
+    @media (max-width: 800px) {
+      .topbar { padding: 13px 15px; }
+      .topbar-meta .top-pill:not(.sim) { display: none; }
+      .workspace { display: block; }
+      .rail { padding: 12px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .mode-switch { display: flex; margin: 8px 0 10px; overflow: auto; }
+      .mode-btn { width: auto; flex: 0 0 auto; }
+      .screen-nav { display: flex; overflow: auto; gap: 5px; margin-top: 5px; }
+      .screen-btn { width: auto; flex: 0 0 auto; white-space: nowrap; }
+      .rail-note { display: none; }
+      .mount { min-height: auto; padding: 25px 12px; }
+      .inspector { display: block; padding: 22px 18px; }
+      .inspector-section { margin-top: 22px; padding-top: 17px; border-top: 1px solid var(--line); }
+      .ops-window { grid-template-columns: 1fr; min-height: 0; }
+      .ops-sidebar { display: none; }
+      .ops-grid { grid-template-columns: 1fr; }
+      .metric-grid { grid-template-columns: repeat(2, 1fr); }
+      .ops-content { padding: 14px; }
+    }
+
+    @media (max-width: 430px) {
+      .phone { border-width: 5px; border-radius: 27px; }
+      .phone::before { top: 5px; }
+      .phone-screen { min-height: 720px; }
+      .quick-grid { gap: 5px; }
+      .hero-card { padding: 16px; }
+      .two-actions { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="studio">
+    <header class="topbar">
+      <div class="brand-lockup">
+        <div class="brand-mark">M+</div>
+        <div>
+          <div class="brand-name">Madad+ Digital Wireframe</div>
+          <div class="brand-subtitle">Initial product design | Karachi assistance network</div>
+        </div>
+      </div>
+      <div class="topbar-meta">
+        <span class="top-pill">Static clickable prototype</span>
+        <span class="top-pill">No API / no database</span>
+        <span class="top-pill sim">FYP simulation mode</span>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="rail">
+        <div class="rail-label">View role</div>
+        <div class="mode-switch" id="modeSwitch"></div>
+        <div class="rail-label">Screens</div>
+        <nav class="screen-nav" id="screenNav"></nav>
+        <div class="rail-note">
+          This artifact is a visual design prototype. Ambulance units, availability, movement, organizations, and request statuses are synthetic.
+        </div>
+      </aside>
+
+      <main class="canvas">
+        <div class="canvas-toolbar">
+          <div>
+            <div class="canvas-title" id="canvasTitle">Customer app / Home</div>
+            <div class="canvas-subtitle" id="canvasSubtitle">One starting point for emergency assistance and domestic services.</div>
+          </div>
+          <div class="canvas-tag">Notebook decisions included</div>
+        </div>
+        <div class="mount" id="screenMount"></div>
+      </main>
+
+      <aside class="inspector">
+        <div>
+          <div class="inspector-label">Design intent</div>
+          <h2 id="inspectorTitle">Home screen</h2>
+          <div class="inspector-copy" id="inspectorCopy"></div>
+        </div>
+        <div class="inspector-section">
+          <h3>Key decisions</h3>
+          <ul class="inspector-list" id="inspectorDecisions"></ul>
+        </div>
+        <div class="inspector-section">
+          <h3>Next state</h3>
+          <div class="stack-mini" id="inspectorNext"></div>
+          <div class="inspector-section" style="margin-top: 16px;">
+            <h3>Recommended stack</h3>
+            <div class="stack-mini"><strong>Flutter</strong> mobile, <strong>React</strong> operations web, <strong>Supabase</strong> Auth + PostgreSQL/PostGIS + Realtime, <strong>Mapbox</strong> maps, and privileged dispatch logic in <strong>Edge Functions</strong>.</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    const modes = {
+      customer: {
+        label: "Customer",
+        screens: [
+          ["customer-home", "Home"],
+          ["customer-emergency", "Emergency help"],
+          ["customer-ambulance", "Ambulance request"],
+          ["customer-person", "Request for someone else"],
+          ["customer-location", "Pickup location"],
+          ["customer-searching", "Searching"],
+          ["customer-no-available", "No ambulance available"],
+          ["customer-assigned", "Assigned"],
+          ["customer-tracking", "Live status"],
+          ["customer-assisted-contact", "Assisted contact"],
+          ["customer-services", "Domestic services"],
+          ["customer-service-form", "Service request"],
+          ["customer-history", "Requests"],
+          ["customer-profile", "Profile"]
+        ]
+      },
+      provider: {
+        label: "Provider",
+        screens: [
+          ["provider-dashboard", "Dashboard"],
+          ["provider-incoming", "Incoming request"],
+          ["provider-job", "Active job"],
+          ["provider-history", "History and profile"]
+        ]
+      },
+      dispatcher: {
+        label: "Dispatcher",
+        screens: [
+          ["dispatcher-overview", "Dispatch center"],
+          ["dispatcher-request", "Request matching"],
+          ["dispatcher-manual", "Manual intake"],
+          ["dispatcher-fleet", "Fleet and organizations"]
+        ]
+      },
+      admin: {
+        label: "Admin",
+        screens: [
+          ["admin-overview", "Overview"],
+          ["admin-catalog", "Service catalog"],
+          ["admin-requests", "Requests and audit"]
+        ]
+      }
+    };
+
+    const basePhone = (content, active = "Home") => `
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="phone-status"><span>9:41</span><span>LTE &nbsp; 87%</span></div>
+          ${content}
+          <div class="phone-nav">
+            <div class="nav-item ${active === "Home" ? "active" : ""}"><span class="nav-icon">[]</span>Home</div>
+            <div class="nav-item ${active === "Requests" ? "active" : ""}"><span class="nav-icon">=</span>Requests</div>
+            <div class="nav-item ${active === "Help" ? "active" : ""}"><span class="nav-icon">?</span>Help</div>
+            <div class="nav-item ${active === "Profile" ? "active" : ""}"><span class="nav-icon">o</span>Profile</div>
+          </div>
+        </div>
+      </div>`;
+
+    const appbar = (title = "Madad+", back = false) => `
+      <div class="appbar">
+        <div class="appbar-title">${back ? "<span>&lt;</span> " : ""}${title}</div>
+        <div class="appbar-actions"><div class="circle-icon">o</div><div class="circle-icon">!</div></div>
+      </div>`;
+
+    const map = (extra = "") => `
+      <div class="map-card ${extra}">
+        <div class="map-pin user"><span>U</span></div>
+        <div class="map-pin unit"><span>A</span></div>
+        <div class="map-pin unit two"><span>A</span></div>
+        <div class="map-route"></div>
+        <div class="map-legend"><span>U  Pickup</span><span>A  Demo unit</span></div>
+      </div>`;
+
+    const screens = {
+      "customer-home": {
+        mode: "customer",
+        title: "Customer app / Home",
+        subtitle: "One starting point for emergency assistance and domestic services.",
+        inspectorTitle: "Home screen",
+        copy: "The first screen presents Madad+ as a broad assistance platform. Emergency help is prominent without making the whole product feel like a hospital application.",
+        decisions: ["Emergency action is above domestic services", "Location is visible and editable", "The prototype label is persistent", "Two-step confirmation prevents accidental dispatch"],
+        next: "Select Get emergency help to enter the urgent/non-urgent ambulance flow, or Browse services for domestic assistance.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar()}
+            <div class="location-chip"><div class="pin">+</div><div><strong>Current location</strong>Clifton Block 5, Karachi</div><div class="chevron">&gt;</div></div>
+            <div class="hero-card emergency">
+              <div class="eyebrow">FYP simulation</div>
+              <h3>Need urgent assistance?</h3>
+              <p>Madad+ can search the synthetic ambulance network for an eligible available unit.</p>
+              <button class="btn" data-screen="customer-emergency">Get emergency help</button>
+            </div>
+            <div class="hero-card domestic">
+              <div class="eyebrow">Home and roadside help</div>
+              <h3>Find a trusted service provider</h3>
+              <p>Plumbing, electrical, AC, carpentry, painting, and more.</p>
+              <button class="btn" data-screen="customer-services">Browse services</button>
+            </div>
+            <div class="section-title"><span>Quick actions</span><span class="section-link">View all</span></div>
+            <div class="quick-grid">
+              <div class="quick-item" data-screen="customer-emergency"><div class="quick-symbol">A</div>Ambulance</div>
+              <div class="quick-item" data-screen="customer-services"><div class="quick-symbol">W</div>Plumber</div>
+              <div class="quick-item" data-screen="customer-services"><div class="quick-symbol">E</div>Electrical</div>
+              <div class="quick-item" data-screen="customer-services"><div class="quick-symbol">AC</div>AC repair</div>
+            </div>
+            <div class="section-title"><span>Active request</span><span class="section-link" data-screen="customer-history">History</span></div>
+            <div class="active-card"><div class="row"><span class="status-label"><span class="status-dot"></span> No active request</span><span class="section-link">-</span></div><div class="active-title">Your live request will appear here</div><div class="active-meta">Track status, location, and assignment from one card.</div></div>
+          </div>`, "Home")
+      },
+
+      "customer-emergency": {
+        mode: "customer",
+        title: "Customer app / Emergency help",
+        subtitle: "Ambulance uses synthetic dispatch; fire and police use direct assisted contact.",
+        inspectorTitle: "Emergency hub",
+        copy: "The notebook's ambulance concept is the first-class dispatch path. Fire and police are intentionally different: Madad+ prepares the user's location and routes the user to a configured real contact instead of matching a synthetic fleet.",
+        decisions: ["Ambulance uses cross-organization dispatch", "Fire and police use assisted direct contact", "Direct-contact services have no availability concept", "The user never chooses an ambulance company"],
+        next: "Choose Ambulance assistance for automatic dispatch, or Assisted contact for a configured fire/police number.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Emergency help", true)}
+            <div class="notice danger"><strong>!</strong><span>For a real emergency, use the appropriate local emergency channel. This FYP prototype does not contact real organizations.</span></div>
+            <div class="eyebrow">What do you need?</div>
+            <h1 class="heading">Choose assistance</h1>
+            <p class="subheading">Madad+ will guide the request. The synthetic fleet decides which eligible unit is selected.</p>
+            <div style="display:grid;gap:10px;margin-top:18px;">
+              <div class="choice-card selected" data-screen="customer-ambulance"><div class="choice-icon">A</div><div><h4>Ambulance assistance</h4><p>Search the demo network and assign the closest eligible available unit.</p></div><div class="arrow">&gt;</div></div>
+              <div class="choice-card" data-screen="customer-assisted-contact"><div class="choice-icon" style="color:var(--coral);background:var(--coral-soft);">F</div><div><h4>Fire brigade</h4><p>Assisted contact: attach location and call the configured local contact.</p></div><div class="arrow">&gt;</div></div>
+              <div class="choice-card" data-screen="customer-assisted-contact"><div class="choice-icon" style="color:var(--amber);background:var(--amber-soft);">P</div><div><h4>Police or other emergency</h4><p>Assisted contact: attach location and call the configured local contact.</p></div><div class="arrow">&gt;</div></div>
+            </div>
+          </div>`, "Home")
+      },
+
+      "customer-assisted-contact": {
+        mode: "customer",
+        title: "Customer app / Assisted contact",
+        subtitle: "Fire and police use configured direct contact, not Madad+ ambulance dispatch.",
+        inspectorTitle: "Assisted contact",
+        copy: "This path is intentionally different from ambulance dispatch. Madad+ does not search organizations, compare availability, reserve a unit, or simulate arrival. It prepares the location and routes the user to the configured local contact.",
+        decisions: ["No cross-organization matching", "No ambulance availability state", "Location is shown before contact", "The production number is configured per city/service"],
+        next: "The real product would request location-sharing consent, open the verified local number, and preserve a guidance event rather than an ambulance assignment.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Assisted contact", true)}
+            <div class="notice danger"><strong>!</strong><span>For a real emergency, use the appropriate local emergency service. This FYP screen does not place calls.</span></div>
+            <div class="eyebrow">Direct contact assistance</div>
+            <h1 class="heading">Choose the service to contact</h1>
+            <p class="subheading">Madad+ will prepare your location. It will not dispatch or reserve a vehicle through this path.</p>
+            <div style="display:grid;gap:9px;margin-top:17px;">
+              <div class="choice-card selected"><div class="choice-icon" style="color:var(--coral);background:var(--coral-soft);">F</div><div><h4>Fire brigade</h4><p>Configured local fire contact | direct call path</p></div><div class="arrow">&gt;</div></div>
+              <div class="choice-card"><div class="choice-icon" style="color:var(--amber);background:var(--amber-soft);">P</div><div><h4>Police assistance</h4><p>Configured local police contact | direct call path</p></div><div class="arrow">&gt;</div></div>
+            </div>
+            <label class="field-label">Location to attach</label>
+            <div class="location-chip"><div class="pin">+</div><div><strong>Clifton Block 5, Karachi</strong>Location sharing requires consent</div><div class="chevron">Edit</div></div>
+            <div class="notice info"><strong>i</strong><span>Production behavior: share the confirmed location with consent, then route to the verified number configured for this city and service. FYP behavior: buttons are illustrative only.</span></div>
+            <div class="screen-actions"><button class="btn primary full">Share location and call configured contact</button><button class="btn secondary full">Cancel</button></div>
+          </div>`, "Home")
+      },
+
+      "customer-ambulance": {
+        mode: "customer",
+        title: "Customer app / Ambulance request",
+        subtitle: "Urgency changes the request context, but ambulance selection always uses the closest eligible available unit.",
+        inspectorTitle: "Ambulance request setup",
+        copy: "Urgent and non-urgent ambulance requests use the same closest-eligible-available selection rule. Urgency can change messaging and operational priority, but it does not introduce a rating preference.",
+        decisions: ["Ambulance selection is always closest eligible available", "Urgency changes context, not provider preference", "Automatic dispatch is the customer path", "Partner-assisted manual intake is handled by dispatchers"],
+        next: "If the request is for someone else, capture that person and whose location is being used before continuing to pickup location.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Ambulance request", true)}
+            <div class="progress"><div class="progress-step current"></div><div class="progress-step"></div><div class="progress-step"></div><span class="progress-label">1 / 3</span></div>
+            <div class="eyebrow">Request type</div>
+            <h1 class="heading">How urgent is this?</h1>
+            <p class="subheading">This helps Madad+ apply the correct selection rule.</p>
+            <div class="segmented" style="margin-top:16px;"><button class="segment active">Urgent</button><button class="segment">Non-urgent</button></div>
+            <div class="notice danger"><strong>!</strong><span>Whether urgent or non-urgent, Madad+ selects the closest eligible available ambulance. No ambulance rating preference is used.</span></div>
+            <label class="field-label">Who needs help?</label>
+            <div class="two-actions"><button class="btn soft">Me</button><button class="btn secondary" data-screen="customer-person">Someone else</button></div>
+            <label class="field-label">What can you tell us? Optional</label>
+            <div class="two-actions"><button class="btn secondary">Accident / injury</button><button class="btn secondary">Medical issue</button></div>
+            <label class="field-label">Access note</label>
+            <div class="fake-input fake-textarea">Gate, floor, landmark, or other useful pickup information</div>
+            <div class="notice info"><strong>i</strong><span>Automatic dispatch is the customer flow. A partner can also call an ambulance organization and have an operator create a request manually.</span></div>
+            <button class="btn primary full" data-screen="customer-location">Continue to location</button>
+          </div>`, "Home")
+      },
+
+      "customer-person": {
+        mode: "customer",
+        title: "Customer app / Request for someone else",
+        subtitle: "Clarify who needs help and whose location should become the pickup point.",
+        inspectorTitle: "Request subject",
+        copy: "A customer may request help for a family member, friend, or another person. The location step must refer to the person who needs assistance, not silently reuse the requester's GPS location.",
+        decisions: ["Person needing help is explicit", "Relationship is lightweight and optional", "Pickup location ownership is clear", "The next map step can still be edited manually"],
+        next: "Continue opens pickup location with the selected person's location context visible.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Who needs help?", true)}
+            <div class="progress"><div class="progress-step current"></div><div class="progress-step"></div><div class="progress-step"></div><span class="progress-label">1 / 3</span></div>
+            <div class="eyebrow">Request for someone else</div>
+            <h1 class="heading">Tell us who the request is for</h1>
+            <p class="subheading">This prevents Madad+ from using the wrong pickup location.</p>
+            <label class="field-label">Relationship</label>
+            <div class="segmented"><button class="segment active">Family</button><button class="segment">Friend / other</button></div>
+            <label class="field-label">Name or identifier, optional</label>
+            <div class="fake-input">Enter a name or short identifier</div>
+            <label class="field-label">Which location should be used?</label>
+            <div class="choice-card selected"><div class="choice-icon">P</div><div><h4>Person needing assistance</h4><p>The next map step will confirm their pickup point.</p></div><div class="arrow">OK</div></div>
+            <div class="choice-card" style="margin-top:9px;"><div class="choice-icon">M</div><div><h4>My current location</h4><p>Use this only if the requester is at the pickup point.</p></div><div class="arrow">-</div></div>
+            <button class="btn primary full" style="margin-top:18px;" data-screen="customer-location">Continue to pickup location</button>
+          </div>`, "Home")
+      },
+
+      "customer-location": {
+        mode: "customer",
+        title: "Customer app / Pickup location",
+        subtitle: "Location confirmation uses GPS, a movable pin, and Karachi-friendly landmarks.",
+        inspectorTitle: "Pickup location",
+        copy: "The design does not rely on a conventional street address alone. A landmark and a movable pin are equally important for a Karachi request.",
+        decisions: ["Current GPS is editable", "Approximate accuracy is visible", "Landmark is a first-class input", "The request cannot be confirmed without a pickup point"],
+        next: "Continue opens a final review screen before the synthetic search begins.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Pickup location", true)}
+            <div class="progress"><div class="progress-step done"></div><div class="progress-step current"></div><div class="progress-step"></div><span class="progress-label">2 / 3</span></div>
+            <div class="active-card" style="margin-bottom:13px;"><div class="row"><span class="status-label">Pickup is for</span><span class="section-link">Change</span></div><div class="active-title">Selected person</div><div class="active-meta">Confirm the selected person's location below, or switch to the requester's current location.</div></div>
+            ${map()}
+            <div class="notice"><strong>!</strong><span>Location accuracy: Approximate. Move the pin if the pickup point is inside a lane, building, or gated area.</span></div>
+            <label class="field-label">Pickup address or landmark</label>
+            <div class="fake-input"><strong>Clifton Block 5</strong><br>Near Main Road, Karachi</div>
+            <div class="two-actions" style="margin-top:10px;"><button class="btn secondary">Use current GPS</button><button class="btn soft">Move pin</button></div>
+            <label class="field-label">Additional access note</label>
+            <div class="fake-input">Enter gate, floor, or landmark detail</div>
+            <button class="btn primary full" style="margin-top:18px;" data-screen="customer-searching">Review and search</button>
+          </div>`, "Home")
+      },
+
+      "customer-searching": {
+        mode: "customer",
+        title: "Customer app / Searching",
+        subtitle: "The system is checking availability across synthetic organizations.",
+        inspectorTitle: "Searching state",
+        copy: "The user sees that Madad+ is checking multiple organizations rather than waiting for one fixed provider. The candidate list is summarized, not presented as a user choice.",
+        decisions: ["Busy units are explicitly excluded", "Organization names remain secondary", "No real response-time promise is shown", "No assignment is shown until a unit is reserved"],
+        next: "The next state is assignment. The assigned screen shows which organization won the cross-organization selection.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Finding assistance", true)}
+            <div class="notice danger"><strong>!</strong><span>FYP simulation: no real ambulance request has been sent.</span></div>
+            ${map()}
+            <div style="text-align:center;margin:18px 0 4px;"><div class="eyebrow">Automatic dispatch</div><h1 class="heading" style="font-size:22px;">Finding the nearest eligible unit...</h1><p class="subheading">Checking 3 synthetic organizations and current availability.</p></div>
+            <div class="active-card" style="margin-top:16px;"><div class="row"><span class="status-label"><span class="status-dot amber"></span> Searching</span><span class="section-link">Demo</span></div><div class="active-title">Available units are being compared</div><div class="active-meta">Busy units will not receive this request.</div></div>
+            <div class="screen-actions"><button class="btn danger full" data-screen="customer-cancel-searching">Cancel request</button></div>
+            <div class="sim-caption"><span class="section-link" data-screen="customer-no-available">Preview no-availability state</span></div>
+          </div>`, "Home")
+      },
+
+      "customer-no-available": {
+        mode: "customer",
+        title: "Customer app / No ambulance available",
+        subtitle: "A completed search failure is distinct from a loading or connection state.",
+        inspectorTitle: "No availability state",
+        copy: "This state is calm, final, and action-oriented. It does not keep the user watching a spinner or imply that a real ambulance is still being dispatched.",
+        decisions: ["Search is explicitly complete", "No simulated ETA is shown", "Real emergency guidance is prominent", "Retry remains available for the demo"],
+        next: "Call local emergency services for a real emergency, retry the synthetic search for demonstration, or return home.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("No unit available", true)}
+            <div class="status-banner" style="margin-top:8px;color:#9b4d45;background:var(--coral-soft);"><div class="status-badge" style="background:var(--coral);">!</div><div><strong>No demo ambulance available</strong><span>The synthetic search has completed.</span></div></div>
+            <div style="text-align:center;margin:22px 0 16px;"><div class="eyebrow" style="color:var(--coral);">Action needed</div><h1 class="heading" style="font-size:23px;">Please call your local emergency number now.</h1><p class="subheading">Madad+ cannot confirm a real emergency response from this prototype.</p></div>
+            <div class="choice-card"><div class="choice-icon" style="color:var(--coral);background:var(--coral-soft);">C</div><div><h4>Configured local emergency contact</h4><p>The production system would open the region's verified emergency number. No call is placed in this FYP demo.</p></div><div class="arrow">&gt;</div></div>
+            <div class="notice danger"><strong>!</strong><span>Do not wait for this prototype to respond to a real emergency. Use the appropriate local emergency service.</span></div>
+            <div class="screen-actions"><button class="btn primary full">Call local emergency number</button><button class="btn secondary full" data-screen="customer-searching">Retry demo search</button><button class="btn secondary full" data-screen="customer-home">Return home</button></div>
+          </div>`, "Home")
+      },
+
+      "customer-assigned": {
+        mode: "customer",
+        title: "Customer app / Ambulance assigned",
+        subtitle: "The assignment explains the selected organization, unit, and simulated availability change.",
+        inspectorTitle: "Assignment result",
+        copy: "The user does not select a company. Madad+ selects the eligible unit, then exposes the organization and unit identity for transparency.",
+        decisions: ["Closest eligible available unit is selected", "Busy AMB-204 is excluded", "Availability count changes after assignment", "Demo driver contact is clearly synthetic"],
+        next: "Open live status to see the assignment timeline and simulated movement.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Ambulance assigned", true)}
+            <div class="notice info"><strong>i</strong><span>Madad+ selected the closest eligible available demo unit across participating organizations.</span></div>
+            ${map()}
+            <div class="status-banner" style="margin-top:13px;"><div class="status-badge">A</div><div><strong>Ambulance assigned</strong><span>Demo Rescue South | AMB-307</span></div></div>
+            <div class="simple-row" style="margin-top:15px;"><div><div class="eyebrow">Distance</div><strong>3.0 km</strong></div><div><div class="eyebrow">Arrival</div><strong>8 min simulated</strong></div></div>
+            <div class="active-card" style="margin-top:15px;"><div class="row"><span class="status-label">Fleet update</span><span class="status-label">Demo</span></div><div class="active-title">Demo Rescue South: 4 available -> 3 available</div><div class="active-meta">The selected unit is now Assigned and cannot receive another request.</div></div>
+            <div class="two-actions" style="margin-top:14px;"><button class="btn secondary">Call demo driver</button><button class="btn secondary">Message demo driver</button></div>
+            <div class="sim-caption">Contact actions are visual FYP controls. No real driver is connected.</div>
+            <div class="screen-actions"><button class="btn primary full" data-screen="customer-tracking">View live status</button><button class="btn secondary full">View request details</button></div>
+          </div>`, "Requests")
+      },
+
+      "customer-tracking": {
+        mode: "customer",
+        title: "Customer app / Live status",
+        subtitle: "A clear timeline separates assigned, en route, approaching, arrived, and completed.",
+        inspectorTitle: "Tracking and status",
+        copy: "The map is supportive, but the timeline is the primary source of truth. In the FYP, movement and timestamps are simulated by the dispatcher scenario controls.",
+        decisions: ["Status is textual and visual", "Simulated location is labelled", "Call/message actions are clearly synthetic", "Cancellation requires confirmation"],
+        next: "Dispatcher controls can advance this same request to Approaching, Arrived, and Completed.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Ambulance status", true)}
+            <div class="notice danger"><strong>!</strong><span>Simulated tracking only. This is not a live ambulance location.</span></div>
+            ${map()}
+            <div class="simple-row" style="margin-top:14px;"><div><div class="eyebrow">Current status</div><strong>En route</strong></div><div style="text-align:right;"><div class="eyebrow">Simulated arrival</div><strong>6 min</strong></div></div>
+            <div class="timeline">
+              <div class="timeline-item done"><div class="timeline-dot">1</div><div><div class="timeline-title">Request received</div><div class="timeline-meta">10:14</div></div></div>
+              <div class="timeline-item done"><div class="timeline-dot">2</div><div><div class="timeline-title">Ambulance assigned</div><div class="timeline-meta">Demo Rescue South | AMB-307</div></div></div>
+              <div class="timeline-item current"><div class="timeline-dot">3</div><div><div class="timeline-title">En route</div><div class="timeline-meta">The demo unit is moving toward the pickup point.</div></div></div>
+              <div class="timeline-item"><div class="timeline-dot">4</div><div><div class="timeline-title">Approaching</div><div class="timeline-meta">Waiting for the next simulated update.</div></div></div>
+              <div class="timeline-item"><div class="timeline-dot">5</div><div><div class="timeline-title">Arrived</div><div class="timeline-meta">Not reached in the simulation yet.</div></div></div>
+            </div>
+            <div class="two-actions"><button class="btn secondary">Call demo driver</button><button class="btn secondary">Message demo driver</button></div>
+            <div class="sim-caption">Contact actions are visual FYP controls. No real driver is connected.</div>
+            <div class="two-actions" style="margin-top:10px;"><button class="btn secondary">Pickup details</button><button class="btn danger" data-screen="customer-cancel-tracking">Cancel request</button></div>
+          </div>`, "Requests")
+      },
+
+      "customer-cancel-searching": {
+        mode: "customer",
+        title: "Customer app / Cancel searching request",
+        subtitle: "Confirmation prevents an accidental cancellation while availability is being checked.",
+        inspectorTitle: "Cancel confirmation",
+        copy: "This is a transient modal-style state. The request is still searching until the user explicitly confirms cancellation.",
+        decisions: ["The search does not stop from one accidental tap", "The user can continue searching", "Confirmation explains the current state", "Cancellation leads to an explicit terminal state"],
+        next: "Keep searching returns to the loading state. Cancel request releases the pending request and opens the cancelled state.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Finding assistance", true)}
+            <div class="notice danger"><strong>!</strong><span>FYP simulation: no real ambulance request has been sent.</span></div>
+            ${map()}
+            <div style="text-align:center;margin:18px 0 4px;"><div class="eyebrow">Automatic dispatch</div><h1 class="heading" style="font-size:22px;">Finding the nearest eligible unit...</h1><p class="subheading">Checking synthetic organizations and current availability.</p></div>
+          </div>
+          <div class="modal-backdrop"><div class="modal-card"><div class="modal-icon">!</div><h3>Cancel this request?</h3><p>No ambulance has been assigned yet. The synthetic search will stop if you cancel.</p><div class="two-actions"><button class="btn secondary" data-screen="customer-searching">Keep searching</button><button class="btn danger" data-screen="customer-cancelled">Cancel request</button></div></div></div>
+        `, "Home")
+      },
+
+      "customer-cancel-tracking": {
+        mode: "customer",
+        title: "Customer app / Cancel assigned request",
+        subtitle: "Confirmation makes it clear that an assigned synthetic unit will be released.",
+        inspectorTitle: "Cancel assigned request",
+        copy: "Cancellation after assignment has a different consequence from cancellation during search. The modal explains that the synthetic unit will return to Available.",
+        decisions: ["The assigned state is acknowledged", "The unit release is explained", "The user can keep tracking", "Cancellation produces a reviewable terminal state"],
+        next: "Keep tracking returns to the active request. Cancel request opens the cancelled result.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Ambulance status", true)}
+            <div class="notice danger"><strong>!</strong><span>Simulated tracking only. This is not a live ambulance location.</span></div>
+            ${map()}
+            <div class="status-banner" style="margin-top:14px;"><div class="status-badge">A</div><div><strong>Ambulance assigned</strong><span>Demo Rescue South | AMB-307</span></div></div>
+          </div>
+          <div class="modal-backdrop"><div class="modal-card"><div class="modal-icon">!</div><h3>Cancel assigned request?</h3><p>The assigned demo ambulance will be released and become Available again in the simulation.</p><div class="two-actions"><button class="btn secondary" data-screen="customer-tracking">Keep tracking</button><button class="btn danger" data-screen="customer-cancelled">Cancel request</button></div></div></div>
+        `, "Requests")
+      },
+
+      "customer-cancelled": {
+        mode: "customer",
+        title: "Customer app / Request cancelled",
+        subtitle: "A clear terminal state confirms the request ended and the synthetic resource was released.",
+        inspectorTitle: "Cancelled request",
+        copy: "The cancellation result should not return the user silently to Home. It confirms what happened to the synthetic assignment and keeps the history path visible.",
+        decisions: ["Cancellation is explicit", "Assigned units are released in the simulation", "No real organization was contacted", "The user can return home or inspect history"],
+        next: "Return home for a new request or open Requests to review the cancelled event.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Request cancelled", true)}
+            <div style="text-align:center;margin:33px 0 18px;"><div class="modal-icon" style="margin:0 auto 14px;color:#526176;background:#e9eef5;">-</div><h1 class="heading" style="font-size:24px;">Request cancelled</h1><p class="subheading">The synthetic request has ended.</p></div>
+            <div class="active-card"><div class="row"><span class="status-label">Simulation update</span><span class="status-label">Complete</span></div><div class="active-title">AMB-307 returned to Available</div><div class="active-meta">No real ambulance organization or driver was contacted.</div></div>
+            <div class="notice info"><strong>i</strong><span>If this is a real emergency, contact the appropriate local emergency service directly.</span></div>
+            <div class="screen-actions"><button class="btn primary full" data-screen="customer-home">Return home</button><button class="btn secondary full" data-screen="customer-history">View requests</button></div>
+          </div>`, "Requests")
+      },
+
+      "customer-services": {
+        mode: "customer",
+        title: "Customer app / Domestic services",
+        subtitle: "Domestic services use a marketplace-style flow, separate from emergency dispatch.",
+        inspectorTitle: "Domestic catalogue",
+        copy: "The catalogue is data-driven. New services such as home nurse, gas leak, or roadside assistance can be added without changing the main navigation model.",
+        decisions: ["Categories are expandable", "Emergency and domestic language are distinct", "No pricing is invented for the FYP", "Provider matching happens after request details"],
+        next: "Choose a category to open a lightweight problem description form.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Domestic services", true)}
+            <div class="fake-input" style="margin-bottom:14px;">Search plumbing, AC, electrical...</div>
+            <div class="eyebrow">Available in demo mode</div>
+            <h1 class="heading">What do you need fixed?</h1>
+            <p class="subheading">Select a category. Madad+ will find an available synthetic provider.</p>
+            <div class="section-title"><span>Popular</span><span class="section-link">All services</span></div>
+            <div class="quick-grid"><div class="quick-item" data-screen="customer-service-form"><div class="quick-symbol">W</div>Plumbing</div><div class="quick-item" data-screen="customer-service-form"><div class="quick-symbol">E</div>Electrical</div><div class="quick-item" data-screen="customer-service-form"><div class="quick-symbol">AC</div>AC repair</div><div class="quick-item" data-screen="customer-service-form"><div class="quick-symbol">C</div>Carpentry</div></div>
+            <div style="display:grid;gap:9px;margin-top:18px;">
+              <div class="choice-card" data-screen="customer-service-form"><div class="choice-icon">P</div><div><h4>Painting</h4><p>Walls, rooms, and touch-ups</p></div><div class="arrow">&gt;</div></div>
+              <div class="choice-card" data-screen="customer-service-form"><div class="choice-icon">M</div><div><h4>Mechanic</h4><p>Roadside and vehicle support</p></div><div class="arrow">&gt;</div></div>
+              <div class="choice-card"><div class="choice-icon">+</div><div><h4>Other service</h4><p>Future configurable category</p></div><div class="arrow">-</div></div>
+            </div>
+          </div>`, "Home")
+      },
+
+      "customer-service-form": {
+        mode: "customer",
+        title: "Customer app / Domestic request form",
+        subtitle: "The domestic request captures the problem before provider matching.",
+        inspectorTitle: "Domestic request",
+        copy: "Domestic requests can eventually support scheduling, photos, quotes, payment, and ratings. Provider preference belongs here, not in the ambulance dispatch flow.",
+        decisions: ["Immediate service is the core path", "Domestic users may prefer closest or higher-rated providers", "Schedule and payment are future features", "Emergency guidance remains available if the situation becomes dangerous"],
+        next: "Continue opens location/review, followed by synthetic provider matching.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Plumbing request", true)}
+            <div class="eyebrow">Domestic service</div>
+            <h1 class="heading">Tell us about the problem</h1>
+            <p class="subheading">This helps Madad+ match the right provider type.</p>
+            <label class="field-label">Problem type</label>
+            <div class="two-actions"><button class="btn soft">Leak</button><button class="btn secondary">Blockage</button></div>
+            <label class="field-label">Description</label>
+            <div class="fake-input fake-textarea">Kitchen sink is leaking near the pipe connection.</div>
+            <label class="field-label">Photo, optional</label>
+            <div class="fake-input">+ Add a photo</div>
+            <label class="field-label">When do you need help?</label>
+            <div class="segmented"><button class="segment active">As soon as possible</button><button class="segment">Schedule later</button></div>
+            <label class="field-label">Provider preference</label>
+            <div class="segmented"><button class="segment active">Closest available</button><button class="segment">Higher rated</button></div>
+            <div class="sim-caption">This preference applies to domestic provider matching only. Ambulance selection always uses the closest eligible available unit.</div>
+            <div class="notice info"><strong>i</strong><span>Pricing, payment, and provider verification are outside the core FYP prototype.</span></div>
+            <button class="btn primary full" data-screen="customer-location">Continue to location</button>
+          </div>`, "Home")
+      },
+
+      "customer-history": {
+        mode: "customer",
+        title: "Customer app / Requests",
+        subtitle: "A single history presents emergency and domestic requests without mixing their status language.",
+        inspectorTitle: "Requests and history",
+        copy: "The request history is useful for trust and continuity. Active requests always appear first and open directly into their timeline.",
+        decisions: ["Active requests are visually prioritized", "Emergency requests carry a simulation label", "Domestic and emergency types remain identifiable", "Empty states explain what will appear here"],
+        next: "Open an active card to return to tracking, or start a new request from Home.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Requests")}
+            <div class="segmented"><button class="segment active">Active</button><button class="segment">Past</button></div>
+            <div class="section-title"><span>Active now</span></div>
+            <div class="active-card" data-screen="customer-tracking"><div class="row"><span class="status-label"><span class="status-dot"></span> En route</span><span class="section-link">Open &gt;</span></div><div class="active-title">Ambulance assistance</div><div class="active-meta">Demo Rescue South | AMB-307 | Simulated</div></div>
+            <div class="section-title"><span>Recent</span></div>
+            <div class="choice-card"><div class="choice-icon" style="color:var(--mint);background:var(--mint-soft);">C</div><div><h4>Plumbing</h4><p>Completed | Yesterday | Demo provider</p></div><div class="arrow">&gt;</div></div>
+            <div class="choice-card" style="margin-top:9px;"><div class="choice-icon">A</div><div><h4>Ambulance assistance</h4><p>Completed | 12 Sep | Simulated</p></div><div class="arrow">&gt;</div></div>
+          </div>`, "Requests")
+      },
+
+      "customer-profile": {
+        mode: "customer",
+        title: "Customer app / Profile",
+        subtitle: "Profile and safety settings stay separate from the urgent request action.",
+        inspectorTitle: "Profile and settings",
+        copy: "The profile is intentionally quiet. It contains account, saved locations, emergency contacts, language, notifications, and privacy rather than competing with the Home screen.",
+        decisions: ["Emergency action is not repeated as a destructive shortcut", "Saved locations reduce location friction", "Language is ready for Urdu later", "Prototype notice remains accessible"],
+        next: "Return to Home to start a request or open Help for safety and prototype information.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Profile")}
+            <div class="choice-card" style="align-items:center;"><div class="choice-icon">DU</div><div><h4>Demo User</h4><p>customer@madad.demo</p></div><div class="arrow">&gt;</div></div>
+            <div class="section-title"><span>Account</span></div>
+            <div style="display:grid;gap:8px;">
+              <div class="choice-card"><div><h4>Personal information</h4><p>Name and contact details</p></div><div class="arrow">&gt;</div></div>
+              <div class="choice-card"><div><h4>Saved locations</h4><p>Home, work, and frequent landmarks</p></div><div class="arrow">&gt;</div></div>
+              <div class="choice-card"><div><h4>Emergency contacts</h4><p>Optional future feature</p></div><div class="arrow">&gt;</div></div>
+            </div>
+            <div class="section-title"><span>Preferences</span></div>
+            <div style="display:grid;gap:8px;"><div class="choice-card"><div><h4>Language</h4><p>English</p></div><div class="arrow">&gt;</div></div><div class="choice-card"><div><h4>Notifications</h4><p>Enabled for request updates</p></div><div class="arrow">&gt;</div></div></div>
+            <div class="notice"><strong>i</strong><span>Madad+ FYP mode uses synthetic organizations, providers, locations, and request status.</span></div>
+          </div>`, "Profile")
+      },
+
+      "provider-dashboard": {
+        mode: "provider",
+        title: "Provider app / Dashboard",
+        subtitle: "Provider mode is a separate role-based experience within the mobile codebase.",
+        inspectorTitle: "Provider dashboard",
+        copy: "A provider should quickly understand whether they are accepting jobs and whether there is an incoming request. The customer home screen is not reused here.",
+        decisions: ["Availability is explicit", "Current area is visible", "Incoming requests have a clear queue", "Provider mode remains separate from customer navigation"],
+        next: "Open the incoming request to inspect the category, distance, location, and accept/reject actions.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Provider workspace")}
+            <div class="active-card"><div class="row"><span class="status-label"><span class="status-dot"></span> Accepting requests</span><span class="section-link">Change</span></div><div class="active-title">Current area: Clifton</div><div class="active-meta">Your location is used only for demo matching.</div></div>
+            <div class="section-title"><span>Today</span></div>
+            <div class="quick-grid"><div class="quick-item"><div class="quick-symbol">2</div>New jobs</div><div class="quick-item"><div class="quick-symbol">1</div>Active</div><div class="quick-item"><div class="quick-symbol">4</div>Done</div><div class="quick-item"><div class="quick-symbol">4.8</div>Rating</div></div>
+            <div class="section-title"><span>New requests</span><span class="section-link">View all</span></div>
+            <div class="choice-card" data-screen="provider-incoming"><div class="choice-icon">W</div><div><h4>Plumbing request</h4><p>2.4 km | Clifton | As soon as possible</p></div><div class="arrow">&gt;</div></div>
+            <div class="choice-card" style="margin-top:9px;"><div class="choice-icon">E</div><div><h4>Electrical request</h4><p>4.1 km | DHA | Waiting for response</p></div><div class="arrow">&gt;</div></div>
+          </div>`, "Home")
+      },
+
+      "provider-incoming": {
+        mode: "provider",
+        title: "Provider app / Incoming request",
+        subtitle: "Providers see enough context to accept or reject without exposing unnecessary customer information.",
+        inspectorTitle: "Incoming provider request",
+        copy: "The provider flow is intentionally lightweight for the FYP. Pricing, payment, chat, and identity verification can be added later without changing the job lifecycle.",
+        decisions: ["Category and problem are prominent", "Approximate distance is shown", "Accept and reject are equally clear", "Customer data is minimized"],
+        next: "Accept opens the active job. Reject returns the request to matching or the dispatcher queue.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("New request", true)}
+            <div class="notice info"><strong>i</strong><span>Demo request. The provider location and availability are synthetic.</span></div>
+            <div class="eyebrow">Plumbing</div><h1 class="heading">Kitchen sink leak</h1><p class="subheading">As soon as possible | Approx. 2.4 km</p>
+            ${map()}
+            <label class="field-label">Customer note</label><div class="fake-input fake-textarea">Please check the pipe connection under the kitchen sink.</div>
+            <div class="simple-row" style="margin-top:15px;"><div><div class="eyebrow">Area</div><strong>Clifton Block 5</strong></div><div style="text-align:right;"><div class="eyebrow">Response</div><strong>00:30</strong></div></div>
+            <div class="screen-actions"><button class="btn primary full" data-screen="provider-job">Accept request</button><button class="btn danger full">Reject request</button></div>
+          </div>`, "Jobs")
+      },
+
+      "provider-job": {
+        mode: "provider",
+        title: "Provider app / Active job",
+        subtitle: "A common status lifecycle makes provider progress visible to the customer and operations team.",
+        inspectorTitle: "Provider job lifecycle",
+        copy: "The status controls are the provider's operational handoff. The same status events appear in the customer timeline and dispatcher dashboard.",
+        decisions: ["Accepted, en route, arrived, started, completed", "Customer location remains accessible", "Completion requires a summary", "Status labels are shared across roles"],
+        next: "Mark the job complete to close the request and create a history record.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Active job", true)}
+            <div class="status-banner"><div class="status-badge">W</div><div><strong>Plumbing | Clifton</strong><span>Customer location confirmed</span></div></div>
+            ${map()}
+            <div class="timeline">
+              <div class="timeline-item done"><div class="timeline-dot">1</div><div><div class="timeline-title">Accepted</div><div class="timeline-meta">10:16</div></div></div>
+              <div class="timeline-item current"><div class="timeline-dot">2</div><div><div class="timeline-title">En route</div><div class="timeline-meta">Update customer when moving.</div></div></div>
+              <div class="timeline-item"><div class="timeline-dot">3</div><div><div class="timeline-title">Arrived</div><div class="timeline-meta">Not marked yet.</div></div></div>
+              <div class="timeline-item"><div class="timeline-dot">4</div><div><div class="timeline-title">Completed</div><div class="timeline-meta">Requires work summary.</div></div></div>
+            </div>
+            <div class="two-actions"><button class="btn secondary">Mark arrived</button><button class="btn primary" data-screen="provider-history">Complete</button></div>
+          </div>`, "Jobs")
+      },
+
+      "provider-history": {
+        mode: "provider",
+        title: "Provider app / History and profile",
+        subtitle: "Completed jobs and provider controls are kept in one low-priority area.",
+        inspectorTitle: "Provider history",
+        copy: "This screen demonstrates the provider's longer-term workspace without expanding the core request flow.",
+        decisions: ["Completed jobs remain auditable", "Availability is always reachable", "Skills and service area are editable later", "No payment workflow is included in the FYP"],
+        next: "Return to Dashboard for new work or switch availability off when the provider is unavailable.",
+        html: () => basePhone(`
+          <div class="phone-content">
+            ${appbar("Provider profile")}
+            <div class="choice-card" style="align-items:center;"><div class="choice-icon">AR</div><div><h4>Ali Repairs</h4><p>Plumbing | Clifton and DHA</p></div><div class="arrow">&gt;</div></div>
+            <div class="section-title"><span>Recent jobs</span><span class="section-link">View all</span></div>
+            <div style="display:grid;gap:8px;"><div class="choice-card"><div class="choice-icon" style="color:var(--mint);background:var(--mint-soft);">C</div><div><h4>Kitchen sink leak</h4><p>Completed | Today | Clifton</p></div><div class="arrow">&gt;</div></div><div class="choice-card"><div class="choice-icon" style="color:var(--mint);background:var(--mint-soft);">E</div><div><h4>Socket repair</h4><p>Completed | Yesterday | DHA</p></div><div class="arrow">&gt;</div></div></div>
+            <div class="section-title"><span>Provider controls</span></div>
+            <div style="display:grid;gap:8px;"><div class="choice-card"><div><h4>Availability</h4><p>Accepting requests</p></div><div class="arrow">&gt;</div></div><div class="choice-card"><div><h4>Skills and service area</h4><p>Plumbing, Clifton, DHA</p></div><div class="arrow">&gt;</div></div></div>
+          </div>`, "Profile")
+      },
+
+      "dispatcher-overview": {
+        mode: "dispatcher",
+        title: "Dispatcher console / Overview",
+        subtitle: "One operational view combines the request queue, map, fleet, and selected request.",
+        inspectorTitle: "Dispatch center",
+        copy: "The dispatcher is the human-readable proof of the cross-organization concept. The map is useful, but the queue and availability explanations are equally important.",
+        decisions: ["Emergency queue is the first operational surface", "All organizations share one map", "Busy units remain visible but excluded", "Simulation controls are separate from customer UI"],
+        next: "Open a request to compare eligible units or choose Manual intake for a partner-created request.",
+        html: () => `
+          <div class="ops-window">
+            <aside class="ops-sidebar"><div class="ops-brand">MADAD<span>+</span></div><div class="ops-menu-label">Operations</div><div class="ops-menu-item active">Overview</div><div class="ops-menu-item">Emergency queue</div><div class="ops-menu-item">Fleet</div><div class="ops-menu-item">Organizations</div><div class="ops-menu-item">Domestic requests</div><div class="ops-menu-label">Tools</div><div class="ops-menu-item" data-screen="dispatcher-manual">Manual intake</div><div class="ops-menu-item">Simulation</div></aside>
+            <section class="ops-main"><div class="ops-toolbar"><div><div class="ops-title">Madad+ Dispatch Center</div><div class="ops-meta">Karachi | Demo operator | last update: 10:14</div></div><span class="top-pill sim">FYP simulation</span></div><div class="ops-content"><h2>Good morning, operator</h2><p class="subheading">Monitor synthetic emergency requests across participating demo organizations.</p><div class="metric-grid"><div class="metric"><div class="metric-label">Open requests</div><div class="metric-value">4</div><div class="metric-note">+2 this session</div></div><div class="metric"><div class="metric-label">Available units</div><div class="metric-value">9</div><div class="metric-note">Across 3 orgs</div></div><div class="metric"><div class="metric-label">Assigned</div><div class="metric-value">3</div><div class="metric-note">1 en route</div></div><div class="metric"><div class="metric-label">Manual intake</div><div class="metric-value">1</div><div class="metric-note">Needs review</div></div></div><div class="ops-grid"><div class="ops-card"><div class="ops-card-header"><div class="ops-card-title">Synthetic fleet map</div><div class="ops-card-link">Filter map</div></div>${map("ops-map")}</div><div class="ops-card"><div class="ops-card-header"><div class="ops-card-title">Emergency queue</div><div class="ops-card-link" data-screen="dispatcher-request">Open queue</div></div><div class="queue-item"><span class="status-dot amber"></span><div><strong>REQ-001 | Ambulance</strong><span>Clifton | automatic dispatch</span></div><span class="queue-status">Searching</span></div><div class="queue-item"><span class="status-dot"></span><div><strong>REQ-002 | Ambulance</strong><span>DHA | assigned to AMB-204</span></div><span class="queue-status">Assigned</span></div><div class="queue-item"><span class="status-dot"></span><div><strong>REQ-003 | Ambulance</strong><span>Korangi | operator-created</span></div><span class="queue-status">Manual</span></div><button class="btn primary full" style="margin-top:12px;" data-screen="dispatcher-request">Review request queue</button></div></div></div></section>
+          </div>`
+      },
+
+      "dispatcher-request": {
+        mode: "dispatcher",
+        title: "Dispatcher console / Request matching",
+        subtitle: "The candidate list makes the closest-available rule visible and auditable.",
+        inspectorTitle: "Cross-organization matching",
+        copy: "This is the most important operational screen for the USP. The dispatcher can see why an ambulance is eligible or excluded, while automatic selection remains the default.",
+        decisions: ["Distance and availability appear together", "Busy units are not selectable", "Organization ownership is visible", "Manual override requires a reason in production"],
+        next: "Confirm the automatic assignment, then the customer receives the assignment and the unit count changes.",
+        html: () => `
+          <div class="ops-window"><aside class="ops-sidebar"><div class="ops-brand">MADAD<span>+</span></div><div class="ops-menu-label">Operations</div><div class="ops-menu-item">Overview</div><div class="ops-menu-item active">Emergency queue</div><div class="ops-menu-item">Fleet</div><div class="ops-menu-item">Organizations</div><div class="ops-menu-label">Tools</div><div class="ops-menu-item" data-screen="dispatcher-manual">Manual intake</div></aside><section class="ops-main"><div class="ops-toolbar"><div><div class="ops-title">Request REQ-001</div><div class="ops-meta">Ambulance assistance | Clifton | submitted 10:14</div></div><span class="top-pill sim">Automatic dispatch</span></div><div class="ops-content"><div class="ops-grid"><div class="ops-card"><div class="ops-card-header"><div class="ops-card-title">Pickup location</div><div class="ops-card-link">Approximate GPS</div></div>${map("ops-map")}</div><div class="ops-card"><div class="ops-card-header"><div class="ops-card-title">Request context</div><div class="ops-card-link">View audit</div></div><div class="simple-row" style="margin:8px 0 14px;"><span class="status-label">Urgency</span><strong>Urgent</strong></div><div class="simple-row" style="margin:8px 0 14px;"><span class="status-label">Source</span><strong>Customer app</strong></div><div class="simple-row" style="margin:8px 0 14px;"><span class="status-label">Situation</span><strong>Accident / injury</strong></div><div class="notice danger" style="margin-bottom:0;"><strong>!</strong><span>FYP data. No real request sent.</span></div></div></div><div class="ops-card" style="margin-top:14px;"><div class="ops-card-header"><div class="ops-card-title">Eligible synthetic ambulances</div><div class="ops-card-link">Sort: closest</div></div><div class="candidate selected"><div><h4>AMB-307 | Demo Rescue South</h4><p>Eligible | Clifton area | Updated 10:14</p></div><div class="candidate-right"><span class="distance">3.0 km</span><span class="candidate-state">SELECTED</span></div></div><div class="candidate busy"><div><h4>AMB-204 | Demo Rescue Central</h4><p>Excluded | Currently assigned to REQ-002</p></div><div class="candidate-right"><span class="distance">2.1 km</span><span class="candidate-state">BUSY</span></div></div><div class="candidate"><div><h4>AMB-101 | Demo Rescue North</h4><p>Eligible | North Karachi area</p></div><div class="candidate-right"><span class="distance">5.4 km</span><span class="candidate-state">AVAILABLE</span></div></div><div class="simple-row" style="margin-top:15px;"><span class="status-label">Selection rule</span><strong>Closest eligible available unit</strong></div><button class="btn primary" style="margin-top:14px;" data-screen="customer-assigned">Confirm assignment preview</button></div></div></section></div>`
+      },
+
+      "dispatcher-manual": {
+        mode: "dispatcher",
+        title: "Dispatcher console / Manual intake",
+        subtitle: "A partner or call operator can create a request after a caller contacts an ambulance organization.",
+        inspectorTitle: "Manual coordination path",
+        copy: "The notebook's manual path should not ask the customer to select an organization. Instead, an authorized partner operator creates or forwards a request into the same dispatch queue.",
+        decisions: ["Manual intake is an operator role", "The same matching engine can be reused", "Source is recorded as partner/call intake", "Availability still decreases after assignment"],
+        next: "Create a request to send it through the same candidate-selection and assignment workflow as automatic requests.",
+        html: () => `
+          <div class="ops-window"><aside class="ops-sidebar"><div class="ops-brand">MADAD<span>+</span></div><div class="ops-menu-label">Operations</div><div class="ops-menu-item">Overview</div><div class="ops-menu-item">Emergency queue</div><div class="ops-menu-item">Fleet</div><div class="ops-menu-item active">Manual intake</div><div class="ops-menu-label">Tools</div><div class="ops-menu-item">Audit history</div></aside><section class="ops-main"><div class="ops-toolbar"><div><div class="ops-title">Partner-assisted request intake</div><div class="ops-meta">Use after a caller contacts a participating organization</div></div><span class="top-pill sim">Demo only</span></div><div class="ops-content"><div class="notice info"><strong>i</strong><span>Manual means an authorized operator creates the digital request. It does not mean the customer chooses the ambulance organization.</span></div><div class="ops-grid"><div class="ops-card"><div class="ops-card-header"><div class="ops-card-title">Caller and request</div><div class="ops-card-link">Required</div></div><label class="field-label">Partner organization</label><div class="fake-input"><strong>Demo Rescue Central</strong></div><label class="field-label">Caller reference</label><div class="fake-input">Phone caller / case reference</div><label class="field-label">Urgency</label><div class="segmented"><button class="segment active">Urgent</button><button class="segment">Non-urgent</button></div><label class="field-label">Situation</label><div class="fake-input">Accident or injury</div></div><div class="ops-card"><div class="ops-card-header"><div class="ops-card-title">Pickup location</div><div class="ops-card-link">Manual pin</div></div>${map("ops-map")}
+          <label class="field-label">Landmark</label><div class="fake-input">Near Main Road, Clifton Block 5</div><button class="btn primary full" style="margin-top:14px;">Create demo request</button></div></div></div></section></div>`
+      },
+
+      "dispatcher-fleet": {
+        mode: "dispatcher",
+        title: "Dispatcher console / Fleet",
+        subtitle: "Fleet status shows multiple organizations, unit ownership, and availability changes.",
+        inspectorTitle: "Synthetic fleet view",
+        copy: "The fleet view is where evaluators can see the system-wide benefit: multiple organizations contribute resources to a shared availability picture.",
+        decisions: ["Organization ownership is explicit", "Busy units remain visible", "Available count can be compared before and after assignment", "Synthetic movement can be controlled from this area"],
+        next: "Select a unit to inspect its status, organization, simulated position, and assignment history.",
+        html: () => `
+          <div class="ops-window"><aside class="ops-sidebar"><div class="ops-brand">MADAD<span>+</span></div><div class="ops-menu-label">Operations</div><div class="ops-menu-item">Overview</div><div class="ops-menu-item">Emergency queue</div><div class="ops-menu-item active">Fleet</div><div class="ops-menu-item">Organizations</div><div class="ops-menu-label">Tools</div><div class="ops-menu-item">Simulation</div></aside><section class="ops-main"><div class="ops-toolbar"><div><div class="ops-title">Fleet and organizations</div><div class="ops-meta">Synthetic Karachi network | 18 demo units | 3 demo organizations</div></div><span class="top-pill sim">FYP data</span></div><div class="ops-content"><div class="metric-grid"><div class="metric"><div class="metric-label">Available</div><div class="metric-value">9</div><div class="metric-note">Eligible now</div></div><div class="metric"><div class="metric-label">Assigned</div><div class="metric-value">3</div><div class="metric-note">Cannot be selected</div></div><div class="metric"><div class="metric-label">Busy</div><div class="metric-value">4</div><div class="metric-note">External work</div></div><div class="metric"><div class="metric-label">Offline</div><div class="metric-value">2</div><div class="metric-note">Stale data</div></div></div><div class="ops-card" style="margin-top:16px;"><div class="ops-card-header"><div class="ops-card-title">Unit availability</div><div class="ops-card-link">Filter organization</div></div><table class="table"><thead><tr><th>Organization</th><th>Unit</th><th>Area</th><th>Status</th><th>Distance sample</th></tr></thead><tbody><tr><td><strong>Demo Rescue North</strong><small>North network</small></td><td>AMB-101</td><td>North Karachi</td><td><span class="table-status">Available</span></td><td>5.4 km</td></tr><tr><td><strong>Demo Rescue Central</strong><small>Central network</small></td><td>AMB-204</td><td>DHA</td><td><span class="table-status busy">Busy</span></td><td>2.1 km</td></tr><tr><td><strong>Demo Rescue South</strong><small>South network</small></td><td>AMB-307</td><td>Clifton</td><td><span class="table-status assigned">Assigned</span></td><td>3.0 km</td></tr><tr><td><strong>Demo Rescue North</strong><small>North network</small></td><td>AMB-112</td><td>Clifton</td><td><span class="table-status">Available</span></td><td>7.5 km</td></tr></tbody></table></div></div></section></div>`
+      },
+
+      "admin-overview": {
+        mode: "admin",
+        title: "Admin console / Overview",
+        subtitle: "Administration manages the synthetic network without becoming part of the customer flow.",
+        inspectorTitle: "Admin overview",
+        copy: "The admin dashboard provides controlled setup for users, providers, organizations, fleet data, services, requests, and audit history.",
+        decisions: ["Admin and dispatcher permissions are distinct", "Demo data is clearly labelled", "Configuration is centralized", "Analytics begins with request and availability events"],
+        next: "Open the service catalogue to add or disable a service without redesigning the customer home screen.",
+        html: () => `
+          <div class="ops-window"><aside class="ops-sidebar"><div class="ops-brand">MADAD<span>+</span></div><div class="ops-menu-label">Administration</div><div class="ops-menu-item active">Overview</div><div class="ops-menu-item">Users</div><div class="ops-menu-item">Providers</div><div class="ops-menu-item">Organizations</div><div class="ops-menu-item">Ambulances</div><div class="ops-menu-item" data-screen="admin-catalog">Service catalog</div><div class="ops-menu-label">Governance</div><div class="ops-menu-item" data-screen="admin-requests">Requests and audit</div><div class="ops-menu-item">Settings</div></aside><section class="ops-main"><div class="ops-toolbar"><div><div class="ops-title">Admin overview</div><div class="ops-meta">Madad+ configuration | Synthetic data workspace</div></div><span class="top-pill sim">Demo environment</span></div><div class="ops-content"><h2>System snapshot</h2><p class="subheading">Manage the foundation that supports the customer and operations experiences.</p><div class="metric-grid"><div class="metric"><div class="metric-label">Users</div><div class="metric-value">120</div><div class="metric-note">All roles</div></div><div class="metric"><div class="metric-label">Providers</div><div class="metric-value">24</div><div class="metric-note">Synthetic profiles</div></div><div class="metric"><div class="metric-label">Organizations</div><div class="metric-value">3</div><div class="metric-note">Demo network</div></div><div class="metric"><div class="metric-label">Services</div><div class="metric-value">8</div><div class="metric-note">2 emergency types</div></div></div><div class="ops-grid"><div class="ops-card"><div class="ops-card-header"><div class="ops-card-title">Request activity</div><div class="ops-card-link">View analytics</div></div><div class="map-card" style="min-height:206px;background-color:#eef1f8;background-image:linear-gradient(90deg,transparent 9%,#d9e2f7 10%,#d9e2f7 11%,transparent 12%),linear-gradient(0deg,transparent 29%,#d9e2f7 30%,#d9e2f7 31%,transparent 32%);"><div style="position:absolute;left:16px;bottom:18px;color:#677893;font-size:10px;font-weight:900;">Requests by type | demo session</div><div style="position:absolute;left:32px;bottom:47px;width:35px;height:89px;border-radius:6px 6px 0 0;background:#ee6b5c;"></div><div style="position:absolute;left:77px;bottom:47px;width:35px;height:57px;border-radius:6px 6px 0 0;background:#4967ee;"></div><div style="position:absolute;left:122px;bottom:47px;width:35px;height:116px;border-radius:6px 6px 0 0;background:#2f9b83;"></div><div style="position:absolute;left:167px;bottom:47px;width:35px;height:73px;border-radius:6px 6px 0 0;background:#c98723;"></div></div></div><div class="ops-card"><div class="ops-card-header"><div class="ops-card-title">Administration shortcuts</div><div class="ops-card-link">Open</div></div><div class="queue-item"><span class="status-dot"></span><div><strong>Service catalogue</strong><span>Enable categories and workflows</span></div><span class="queue-status" data-screen="admin-catalog">Open</span></div><div class="queue-item"><span class="status-dot amber"></span><div><strong>Demo fleet</strong><span>18 units across 3 organizations</span></div><span class="queue-status">Open</span></div><div class="queue-item"><span class="status-dot"></span><div><strong>Audit history</strong><span>Assignment and simulator actions</span></div><span class="queue-status" data-screen="admin-requests">Open</span></div></div></div></div></section></div>`
+      },
+
+      "admin-catalog": {
+        mode: "admin",
+        title: "Admin console / Service catalog",
+        subtitle: "Services are treated as configurable definitions rather than hardcoded home-screen buttons.",
+        inspectorTitle: "Service catalogue",
+        copy: "This is the scalability hinge. A future gas leak, home nurse, medical transport, or roadside service can be introduced as a service definition with its own workflow and safety copy.",
+        decisions: ["Service type is data-driven", "Workflow and matching strategy are visible", "Fire brigade can be enabled later", "Customer navigation does not need a rewrite"],
+        next: "Open a service definition to configure its category, request form, matching behavior, and availability.",
+        html: () => `
+          <div class="ops-window"><aside class="ops-sidebar"><div class="ops-brand">MADAD<span>+</span></div><div class="ops-menu-label">Administration</div><div class="ops-menu-item">Overview</div><div class="ops-menu-item">Users</div><div class="ops-menu-item">Providers</div><div class="ops-menu-item">Organizations</div><div class="ops-menu-item active">Service catalog</div><div class="ops-menu-label">Governance</div><div class="ops-menu-item">Requests and audit</div></aside><section class="ops-main"><div class="ops-toolbar"><div><div class="ops-title">Service catalog</div><div class="ops-meta">Define what users can request and how it is fulfilled</div></div><button class="btn primary small">Add service</button></div><div class="ops-content"><div class="notice info"><strong>i</strong><span>New services should be added here as definitions. Avoid embedding individual categories throughout the mobile application.</span></div><div class="ops-card"><div class="ops-card-header"><div class="ops-card-title">Configured services</div><div class="ops-card-link">Filter by status</div></div><table class="table"><thead><tr><th>Service</th><th>Type</th><th>Workflow</th><th>Status</th><th>Action</th></tr></thead><tbody><tr><td><strong>Ambulance assistance</strong><small>Urgent and non-urgent modes</small></td><td>Emergency</td><td>Cross-org dispatch</td><td><span class="table-status">Enabled</span></td><td>View</td></tr><tr><td><strong>Plumbing</strong><small>Home repair</small></td><td>Domestic</td><td>Provider matching</td><td><span class="table-status">Enabled</span></td><td>View</td></tr><tr><td><strong>Electrical</strong><small>Home repair</small></td><td>Domestic</td><td>Provider matching</td><td><span class="table-status">Enabled</span></td><td>View</td></tr><tr><td><strong>Fire brigade</strong><small>Planned next module</small></td><td>Emergency</td><td>Not connected</td><td><span class="table-status busy">Future</span></td><td>Configure</td></tr><tr><td><strong>Roadside assistance</strong><small>Future service</small></td><td>Domestic</td><td>Not configured</td><td><span class="table-status busy">Future</span></td><td>Configure</td></tr></tbody></table></div><div class="ops-grid"><div class="ops-card"><div class="ops-card-title">Service definition includes</div><div class="queue-item"><span class="status-dot"></span><div><strong>Request form</strong><span>What information should the customer provide?</span></div></div><div class="queue-item"><span class="status-dot"></span><div><strong>Matching strategy</strong><span>Dispatch, provider match, or future partner flow</span></div></div></div><div class="ops-card"><div class="ops-card-title">Emergency policy</div><div class="notice danger" style="margin:10px 0 0;"><strong>!</strong><span>Emergency services require special safety copy and must not make unsupported availability claims.</span></div></div></div></div></section></div>`
+      },
+
+      "admin-requests": {
+        mode: "admin",
+        title: "Admin console / Requests and audit",
+        subtitle: "Requests and status events create a reviewable history of the demonstration.",
+        inspectorTitle: "Requests and audit",
+        copy: "A reliable FYP demonstration needs to show what happened: who created the request, which unit was selected, when availability changed, and which simulator action advanced the state.",
+        decisions: ["Request history is immutable in concept", "Assignment actions are auditable", "Admin can distinguish automatic and manual intake", "The same history supports future analytics"],
+        next: "Use this view during evaluation to explain the selection result and status timeline.",
+        html: () => `
+          <div class="ops-window"><aside class="ops-sidebar"><div class="ops-brand">MADAD<span>+</span></div><div class="ops-menu-label">Administration</div><div class="ops-menu-item">Overview</div><div class="ops-menu-item">Users</div><div class="ops-menu-item">Providers</div><div class="ops-menu-item">Organizations</div><div class="ops-menu-item">Service catalog</div><div class="ops-menu-label">Governance</div><div class="ops-menu-item active">Requests and audit</div></aside><section class="ops-main"><div class="ops-toolbar"><div><div class="ops-title">Requests and audit history</div><div class="ops-meta">Demo session | all major request and assignment events</div></div><span class="top-pill sim">Synthetic data</span></div><div class="ops-content"><div class="ops-card"><div class="ops-card-header"><div class="ops-card-title">Requests</div><div class="ops-card-link">Export later</div></div><table class="table"><thead><tr><th>Request</th><th>Source</th><th>Assignment</th><th>Status</th><th>Created</th></tr></thead><tbody><tr><td><strong>REQ-001</strong><small>Ambulance | Clifton</small></td><td>Automatic</td><td>AMB-307</td><td><span class="table-status assigned">En route</span></td><td>10:14</td></tr><tr><td><strong>REQ-002</strong><small>Ambulance | DHA</small></td><td>Manual intake</td><td>AMB-204</td><td><span class="table-status">Assigned</span></td><td>10:12</td></tr><tr><td><strong>REQ-003</strong><small>Plumbing | Clifton</small></td><td>Customer app</td><td>Ali Repairs</td><td><span class="table-status">Completed</span></td><td>09:50</td></tr></tbody></table></div><div class="ops-card" style="margin-top:14px;"><div class="ops-card-header"><div class="ops-card-title">Recent audit events</div><div class="ops-card-link">Filter</div></div><div class="queue-item"><span class="status-dot"></span><div><strong>AMB-307 assigned to REQ-001</strong><span>Automatic dispatch | 10:14 | Demo operator</span></div></div><div class="queue-item"><span class="status-dot amber"></span><div><strong>AMB-204 excluded</strong><span>Reason: busy with REQ-002 | 10:14</span></div></div><div class="queue-item"><span class="status-dot"></span><div><strong>REQ-001 advanced to En route</strong><span>Simulation control | 10:16 | Demo operator</span></div></div></div></div></section></div>`
+      }
+    };
+
+    let currentMode = "customer";
+    let currentScreen = "customer-home";
+
+    function renderModeNav() {
+      const modeSwitch = document.getElementById("modeSwitch");
+      modeSwitch.innerHTML = Object.entries(modes).map(([key, value]) => `<button class="mode-btn ${key === currentMode ? "active" : ""}" data-mode="${key}">${value.label}</button>`).join("");
+      const screenNav = document.getElementById("screenNav");
+      screenNav.innerHTML = modes[currentMode].screens.map(([id, label], index) => `<button class="screen-btn ${id === currentScreen ? "active" : ""}" data-screen="${id}"><span class="screen-index">${String(index + 1).padStart(2, "0")}</span>${label}</button>`).join("");
+    }
+
+    function renderScreen() {
+      const screen = screens[currentScreen];
+      if (!screen) return;
+      document.getElementById("screenMount").innerHTML = screen.html();
+      document.getElementById("canvasTitle").textContent = screen.title;
+      document.getElementById("canvasSubtitle").textContent = screen.subtitle;
+      document.getElementById("inspectorTitle").textContent = screen.inspectorTitle;
+      document.getElementById("inspectorCopy").textContent = screen.copy;
+      document.getElementById("inspectorDecisions").innerHTML = screen.decisions.map(item => `<li>${item}</li>`).join("");
+      document.getElementById("inspectorNext").textContent = screen.next;
+      renderModeNav();
+    }
+
+    function openScreen(id) {
+      if (!screens[id]) return;
+      currentScreen = id;
+      currentMode = screens[id].mode;
+      renderScreen();
+    }
+
+    document.addEventListener("click", event => {
+      const modeButton = event.target.closest("[data-mode]");
+      if (modeButton) {
+        currentMode = modeButton.dataset.mode;
+        currentScreen = modes[currentMode].screens[0][0];
+        renderScreen();
+        return;
+      }
+      const screenButton = event.target.closest("[data-screen]");
+      if (screenButton) openScreen(screenButton.dataset.screen);
+    });
+
+    renderScreen();
+  </script>
+</body>
+</html>

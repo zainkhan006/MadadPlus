@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Madad+ MVP Wireframe V2</title>
+<style>
+  :root{
+    --blue:#17365D;
+    --blueTint:#E8EFF8;
+    --red:#B4232C;
+    --redTint:#FDE8EA;
+    --green:#176B5E;
+    --greenTint:#E5F3EF;
+    --orange:#8A4B00;
+    --orangeTint:#FFF0DC;
+    --ink:#17212F;
+    --muted:#52606D;
+    --line:#C8D1DC;
+    --surface:#FFFFFF;
+    --page:#EDF1F6;
+    --soft:#F7F9FC;
+    --focus:#005FCC;
+    --radiusSm:8px;
+    --radiusMd:12px;
+    --radiusLg:16px;
+    --shadow1:0 2px 8px rgb(23 54 93 / 8%);
+    --shadow2:0 10px 24px rgb(23 54 93 / 14%);
+    --space1:4px;
+    --space2:8px;
+    --space3:12px;
+    --space4:16px;
+    --space5:24px;
+    --space6:32px;
+  }
+
+  [data-theme="dark"]{
+    --ink:#F7FAFC;
+    --muted:#B5C0CD;
+    --line:#455467;
+    --surface:#1D2A3B;
+    --page:#111A26;
+    --soft:#182434;
+    --blueTint:#243A5A;
+    --redTint:#4A242B;
+    --greenTint:#1D443E;
+    --orangeTint:#4A351C;
+  }
+
+  *{box-sizing:border-box}
+  html{background:var(--page)}
+  body{margin:0;background:var(--page);color:var(--ink);font:16px/1.5 Inter,Roboto,"Segoe UI",system-ui,sans-serif}
+  button,input,textarea{font:inherit}
+  button{cursor:pointer}
+  button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+  .prototypeHeader{padding:var(--space3) var(--space4);background:var(--blue);color:#fff;text-align:center}
+  .prototypeHeader strong{font-size:14px}
+  .prototypeHeader span{display:block;font-size:12px;opacity:.82}
+  .stage{min-height:100vh;padding:var(--space5);display:grid;place-items:center}
+  .phone{width:min(100%,390px);min-height:780px;background:var(--surface);border:10px solid #18263A;border-radius:36px;box-shadow:var(--shadow2);overflow:hidden;position:relative}
+  .phoneTop{height:28px;background:#18263A;display:grid;place-items:start center}
+  .notch{width:104px;height:18px;background:#18263A;border-radius:0 0 12px 12px}
+  .app{min-height:732px;background:var(--soft);display:flex;flex-direction:column}
+  .screen{display:flex;flex-direction:column;flex:1;min-height:704px}
+  .screenBody{padding:var(--space4);display:flex;flex-direction:column;gap:var(--space3);flex:1}
+  .screenBody.center{justify-content:center;text-align:center}
+  .emergencyScreen{background:linear-gradient(180deg,var(--redTint),var(--soft) 260px)}
+  .emergencyBanner{height:32px;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;letter-spacing:.08em}
+  .screenHeader{min-height:48px;display:flex;align-items:center;gap:var(--space2);color:var(--blue);font-size:16px;font-weight:800}
+  .screenHeader.centerTitle{justify-content:center}
+  .screenHeader .push{margin-left:auto}
+  .iconButton{min-width:48px;min-height:48px;border:0;border-radius:var(--radiusSm);background:transparent;color:inherit;font-size:24px;display:grid;place-items:center}
+  .iconButton:hover{background:rgb(23 54 93 / 10%)}
+  h1,h2,h3,p{margin:0}
+  h1{font-size:28px;line-height:1.2;letter-spacing:-.02em}
+  h2{font-size:22px;line-height:1.25}
+  h3{font-size:18px;line-height:1.3}
+  .eyebrow{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .muted{color:var(--muted)}
+  .small{font-size:14px}
+  .micro{font-size:12px}
+  .card{border:1px solid var(--line);border-radius:var(--radiusMd);background:var(--surface);padding:var(--space4);box-shadow:var(--shadow1)}
+  .card.emergency{background:var(--redTint);border:2px solid var(--red)}
+  .card.service{background:var(--greenTint);border:2px solid var(--green)}
+  .card.clickable{cursor:pointer;text-align:left;width:100%}
+  .card.clickable:hover{box-shadow:var(--shadow2);transform:translateY(-1px)}
+  .choiceCard{min-height:76px;display:flex;gap:var(--space3);align-items:center}
+  .choiceCard .choiceIcon{font-size:30px;min-width:36px;text-align:center}
+  .choiceCard strong{display:block;font-size:16px}
+  .choiceCard small{display:block;color:var(--muted)}
+  .gridServices{display:grid;grid-template-columns:1fr 1fr;gap:var(--space2)}
+  .gridServices .choiceCard{min-height:112px;align-items:flex-start;flex-direction:column;gap:var(--space1)}
+  .gridServices .choiceIcon{font-size:28px}
+  .emergencyChoice{min-height:88px;border-width:3px}
+  .emergencyChoice strong{font-size:18px}
+  .button{min-height:48px;border:1px solid transparent;border-radius:var(--radiusSm);padding:0 var(--space4);font-size:16px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;gap:var(--space2);text-decoration:none;transition:transform .15s ease,box-shadow .15s ease}
+  .button:hover{transform:translateY(-1px);box-shadow:var(--shadow1)}
+  .button.primary{background:var(--blue);color:#fff}
+  .button.secondary{background:var(--surface);border-color:var(--blue);color:var(--blue)}
+  .button.emergency{min-height:56px;background:var(--red);color:#fff;font-size:17px}
+  .button.service{background:var(--green);color:#fff}
+  .button.warning{background:var(--orange);color:#fff}
+  .linkButton{border:0;background:none;padding:0;color:var(--blue);font:inherit;font-weight:800;text-decoration:underline}
+  .buttonRow{display:flex;gap:var(--space2)}
+  .buttonRow .button{flex:1}
+  .emergencyScreen .button:not(.button.emergency){min-height:52px}
+  .input{width:100%;min-height:48px;border:1px solid var(--line);border-radius:var(--radiusSm);padding:var(--space3);background:var(--surface);color:var(--ink)}
+  textarea.input{min-height:96px;resize:vertical}
+  .chips{display:flex;gap:var(--space2);flex-wrap:wrap}
+  .chip{min-height:48px;padding:0 var(--space3);border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink);font-weight:700;font-size:14px}
+  .chip.active{background:var(--blue);border-color:var(--blue);color:#fff}
+  .emergencyScreen .chip{min-height:48px}
+  .status{display:inline-flex;align-items:center;gap:var(--space1);min-height:28px;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:800}
+  .status.ok{background:var(--green);color:#fff}
+  .status.route{background:var(--blue);color:#fff}
+  .status.alert{background:var(--orange);color:#fff}
+  .notice{border-radius:var(--radiusSm);padding:var(--space3);font-size:14px;font-weight:700}
+  .notice.demo{background:#FFE5E7;border:1px solid var(--red);color:#681D24}
+  [data-theme="dark"] .notice.demo{color:#FFE5E7}
+  .notice.warning{background:var(--orangeTint);border:1px solid var(--orange);color:var(--orange)}
+  .locationPrimary{min-height:126px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:var(--space2)}
+  .locationPrimary span{font-size:36px}
+  .divider{border:0;border-top:1px solid var(--line);width:100%;margin:0}
+  .map{height:190px;border:2px solid var(--line);border-radius:var(--radiusMd);position:relative;overflow:hidden;background:
+    linear-gradient(90deg,transparent 49%,rgb(23 54 93 / 12%) 50%,transparent 51%) 0 0 / 48px 48px,
+    linear-gradient(transparent 49%,rgb(23 54 93 / 12%) 50%,transparent 51%) 0 0 / 48px 48px,
+    #E8EEF5}
+  .map .userPin,.map .vehiclePin{position:absolute;display:grid;place-items:center;border-radius:999px;font-size:20px}
+  .userPin{width:38px;height:38px;background:var(--blue);color:#fff;left:58%;top:60%;border:3px solid #fff}
+  .vehiclePin{width:44px;height:44px;background:var(--red);color:#fff;left:25%;top:25%;border:3px solid #fff;box-shadow:0 0 0 7px rgb(180 35 44 / 24%)}
+  .emergencyEta{font-size:52px;font-weight:900;line-height:1;color:var(--red);letter-spacing:-.06em}
+  .serviceEta{font-size:32px;font-weight:900;line-height:1;color:var(--green)}
+  .bottomNav{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--line);background:var(--surface)}
+  .bottomNav button{min-height:60px;border:0;background:transparent;color:var(--muted);font-size:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+  .bottomNav button span{font-size:19px}
+  .bottomNav button.active{color:var(--blue);font-weight:800}
+  .emergencyBottomNav button.active{color:var(--red)}
+  .row{display:flex;align-items:center;gap:var(--space2)}
+  .grow{flex:1}
+  .avatar{width:52px;height:52px;border-radius:999px;display:grid;place-items:center;background:var(--green);color:#fff;font-size:24px}
+  .list{display:flex;flex-direction:column;gap:var(--space2)}
+  .listButton{min-height:56px;width:100%;padding:0 var(--space3);background:var(--surface);border:1px solid var(--line);border-radius:var(--radiusSm);display:flex;align-items:center;text-align:left;color:var(--ink);font-weight:700}
+  .listButton span:last-child{margin-left:auto;color:var(--muted)}
+  .segment{display:grid;grid-template-columns:1fr 1fr;padding:4px;border:1px solid var(--line);border-radius:var(--radiusSm);background:var(--surface)}
+  .segment button{min-height:40px;border:0;background:transparent;border-radius:6px;color:var(--muted);font-weight:800}
+  .segment button.active{background:var(--blue);color:#fff}
+  .stars{display:flex;justify-content:center;gap:4px}
+  .stars button{width:48px;height:48px;border:0;background:transparent;color:#B45309;font-size:32px;line-height:1}
+  .fullAlert{background:var(--red);color:#fff;border-radius:var(--radiusMd);padding:var(--space5);box-shadow:var(--shadow2)}
+  .fullAlert .arrival{font-size:34px;font-weight:900;line-height:1.1;margin:var(--space2) 0}
+  .fullAlert p{font-weight:700}
+  .spinner{width:52px;height:52px;border:6px solid #F7C1C5;border-top-color:var(--red);border-radius:50%;margin:0 auto;animation:spin 1s linear infinite}
+  .skeleton{height:68px;border-radius:var(--radiusMd);background:linear-gradient(90deg,#E1E7EF 25%,#F2F5F9 40%,#E1E7EF 60%);background-size:300% 100%;animation:shimmer 1.2s infinite}
+  .desktop{width:min(100%,980px);background:var(--surface);border:1px solid var(--line);border-radius:var(--radiusLg);overflow:hidden;box-shadow:var(--shadow2)}
+  .desktopHeader{padding:var(--space3) var(--space4);background:var(--blue);color:#fff;display:flex;align-items:center;gap:var(--space2);font-weight:800}
+  .desktopBody{padding:var(--space4);display:grid;gap:var(--space4)}
+  .desktopGrid{display:grid;grid-template-columns:280px 1fr;gap:var(--space4)}
+  .queueItem{padding:var(--space3);border:1px solid var(--line);border-left:5px solid var(--red);border-radius:var(--radiusSm);background:var(--surface)}
+  .queueItem + .queueItem{margin-top:var(--space2)}
+  .fleetMap{min-height:280px}
+  .emptyState{padding:var(--space5);border:1px dashed var(--line);border-radius:var(--radiusMd);text-align:center;color:var(--muted)}
+  .overlay{position:fixed;inset:0;z-index:10;background:rgb(0 0 0 / 44%);display:grid;place-items:center;padding:var(--space4)}
+  .modal{width:min(100%,360px);background:var(--surface);border-radius:var(--radiusLg);padding:var(--space5);box-shadow:var(--shadow2);display:flex;flex-direction:column;gap:var(--space3)}
+  .hidden{display:none!important}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes shimmer{to{background-position:-300% 0}}
+  @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+  @media(max-width:700px){.stage{padding:0}.phone{width:100%;min-height:100vh;border:0;border-radius:0}.phoneTop{display:none}.app{min-height:100vh}.screen{min-height:100vh}.prototypeHeader{display:none}.desktop{min-height:100vh;border:0;border-radius:0}.desktopGrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="prototypeHeader"><strong>Madad+ MVP Wireframe V2</strong><span>Interactive prototype · synthetic demonstration data only</span></div>
+<main class="stage" id="stage" aria-live="polite"></main>
+<div class="overlay hidden" id="overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle"></div>
+
+<script>
+  const stage = document.getElementById("stage");
+  const overlay = document.getElementById("overlay");
+  const appState = { screen: "splash", previous: "splash", emergencyType: "Ambulance", role: "customer", theme: localStorage.getItem("madadTheme") || "light" };
+
+  function setTheme(theme){
+    appState.theme = theme;
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("madadTheme", theme);
+  }
+
+  function phone(content, options = {}){
+    const emergencyClass = options.emergency ? " emergencyScreen" : "";
+    const banner = options.emergency ? '<div class="emergencyBanner">EMERGENCY MODE</div>' : "";
+    const nav = options.nav === false ? "" : bottomNav(options.active || "home", options.emergency);
+    return `<div class="phone"><div class="phoneTop"><div class="notch"></div></div><div class="app">${banner}<section class="screen${emergencyClass}">${content}</section>${nav}</div></div>`;
+  }
+
+  function header(title, backTarget, options = {}){
+    const back = backTarget ? `<button class="iconButton" data-go="${backTarget}" aria-label="${options.cancel ? "Cancel request" : "Go back"}">←</button>` : "";
+    const cancelText = options.cancel ? `<span class="small">${options.cancel}</span>` : "";
+    return `<header class="screenHeader">${back}${cancelText}<span>${title}</span><span class="push"></span>${options.theme ? '<button class="iconButton" data-action="theme" aria-label="Toggle colour theme">◐</button>' : ""}</header>`;
+  }
+
+  function bottomNav(active, emergency){
+    return `<nav class="bottomNav${emergency ? " emergencyBottomNav" : ""}" aria-label="Main navigation">
+      <button class="${active === "home" ? "active" : ""}" data-go="home"><span>⌂</span>Home</button>
+      <button class="${active === "emergency" ? "active" : ""}" data-go="emergencyType"><span>✚</span>Emergency</button>
+      <button class="${active === "services" ? "active" : ""}" data-go="services"><span>⌕</span>Services</button>
+      <button class="${active === "requests" ? "active" : ""}" data-go="requests"><span>☷</span>Requests</button>
+      <button class="${active === "profile" ? "active" : ""}" data-go="profile"><span>◉</span>Profile</button>
+    </nav>`;
+  }
+
+  function modal(title, text, actions){
+    overlay.innerHTML = `<div class="modal"><h2 id="modalTitle">${title}</h2><p class="muted">${text}</p><div class="buttonRow">${actions}</div></div>`;
+    overlay.classList.remove("hidden");
+  }
+
+  function closeModal(){
+    overlay.classList.add("hidden");
+    overlay.innerHTML = "";
+  }
+
+  function render(){
+    clearInterval(appState.detailTimer);
+    clearTimeout(appState.splashTimer);
+    document.documentElement.dataset.theme = appState.theme;
+    const screens = {
+      splash: splashScreen(),
+      onboarding: onboardingScreen(),
+      serviceOnboarding: serviceOnboardingScreen(),
+      login: loginScreen(),
+      otp: otpScreen(),
+      home: homeScreen(),
+      emergencyType: emergencyTypeScreen(),
+      emergencyLocation: emergencyLocationScreen(),
+      emergencyDetails: emergencyDetailsScreen(),
+      emergencyConfirm: emergencyConfirmScreen(),
+      emergencySearch: emergencySearchScreen(),
+      emergencyAssigned: emergencyAssignedScreen(),
+      emergencyEnRoute: emergencyEnRouteScreen(),
+      emergencyApproaching: emergencyApproachingScreen(),
+      emergencyArrived: emergencyArrivedScreen(),
+      emergencyComplete: emergencyCompleteScreen(),
+      emergencyBusy: emergencyBusyScreen(),
+      queueStatus: queueStatusScreen(),
+      requestDetails: requestDetailsScreen(),
+      services: servicesScreen(),
+      serviceDetails: serviceDetailsScreen(),
+      serviceDescription: serviceDescriptionScreen(),
+      serviceLocation: serviceLocationScreen(),
+      serviceTime: serviceTimeScreen(),
+      serviceConfirm: serviceConfirmScreen(),
+      serviceSearching: serviceSearchingScreen(),
+      serviceAssigned: serviceAssignedScreen(),
+      serviceEnRoute: serviceEnRouteScreen(),
+      serviceProgress: serviceProgressScreen(),
+      serviceCost: serviceCostScreen(),
+      serviceComplete: serviceCompleteScreen(),
+      requests: requestsScreen(),
+      profile: profileScreen(),
+      providerHome: providerHomeScreen(),
+      providerDetails: providerDetailsScreen(),
+      providerAccepted: providerAcceptedScreen(),
+      providerJob: providerJobScreen(),
+      providerComplete: providerCompleteScreen(),
+      dispatcher: dispatcherScreen(),
+      dispatcherAssign: dispatcherAssignScreen(),
+      dispatcherManual: dispatcherManualScreen(),
+      admin: adminScreen(),
+      adminAdd: adminAddScreen(),
+      loadingServices: loadingServicesScreen(),
+      servicesError: servicesErrorScreen()
+    };
+    stage.innerHTML = screens[appState.screen] || screens.home;
+    if(appState.screen === "splash"){
+      appState.splashTimer = setTimeout(() => {
+        appState.screen = "onboarding";
+        render();
+      }, 1800);
+    }
+    if(appState.screen === "emergencyDetails"){startEmergencyDetailsTimer()}
+    if(appState.screen === "emergencyApproaching"){navigator.vibrate?.(300)}
+  }
+
+  function startEmergencyDetailsTimer(){
+    let seconds = 5;
+    const timer = document.getElementById("skipTimer");
+    appState.detailTimer = setInterval(() => {
+      seconds -= 1;
+      if(timer){timer.textContent = seconds}
+      if(seconds === 0){
+        clearInterval(appState.detailTimer);
+        appState.screen = "emergencyConfirm";
+        render();
+      }
+    }, 1000);
+  }
+
+  function splashScreen(){
+    return phone(`<div class="screenBody center">
+      <div class="spacer"></div>
+      <div style="width:96px;height:96px;margin:0 auto;background:var(--blue);border-radius:var(--radiusLg);display:grid;place-items:center;color:#fff;font-size:44px;font-weight:900">M+</div>
+      <h1>Madad+</h1>
+      <p class="muted">Helping you find the right help, fast.</p>
+      <div class="spinner" style="width:32px;height:32px;border-width:4px;margin-top:var(--space4)"></div>
+      <div class="spacer"></div>
+      <p class="micro muted">Loading your home screen…</p>
+      <button class="linkButton" data-go="onboarding">Skip loading</button>
+    </div>`, { nav: false });
+  }
+
+  function onboardingScreen(){
+    return phone(`<div class="screenBody center">
+      <div class="spacer"></div><div style="font-size:56px">✚</div><h1>Emergency help, without the search.</h1>
+      <p class="muted">Request urgent assistance in a few clear steps.</p>
+      <div class="card emergency"><strong>Emergency services</strong><p class="small">Ambulance, fire brigade, or another urgent problem.</p></div>
+      <div class="spacer"></div>
+      <div class="buttonRow"><button class="button secondary" data-go="login">Login</button><button class="button primary" data-go="serviceOnboarding">Next</button></div>
+    </div>`, { nav: false });
+  }
+
+  function serviceOnboardingScreen(){
+    return phone(`<div class="screenBody center">
+      <div class="spacer"></div><div style="font-size:56px">⌕</div><h1>Find someone you can trust.</h1>
+      <p class="muted">Compare local providers and book help when it suits you.</p>
+      <div class="card service"><strong>Domestic services</strong><p class="small">Plumber, electrician, AC technician, mechanic, and more.</p></div>
+      <div class="spacer"></div>
+      <div class="buttonRow"><button class="button secondary" data-go="login">Login</button><button class="button primary" data-go="login">Get started</button></div>
+    </div>`, { nav: false });
+  }
+
+  function loginScreen(){
+    return phone(`<div class="screenBody"><div class="spacer"></div>${header("Welcome back", "onboarding")}
+      <h1>Sign in</h1><p class="muted">Use your phone number to continue.</p>
+      <label class="eyebrow" for="phoneNumber">Phone number</label><input class="input" id="phoneNumber" value="+92 300 1234567">
+      <button class="button primary" data-go="otp">Send OTP</button><p class="center muted small">or</p>
+      <input class="input" aria-label="Email address" placeholder="Email address">
+      <button class="button secondary" data-go="otp">Continue with email</button>
+      <p class="center small muted">New here? <button class="linkButton" data-go="otp">Create account</button></p><div class="spacer"></div>
+    </div>`, { nav: false });
+  }
+
+  function otpScreen(){
+    return phone(`<div class="screenBody"><div class="spacer"></div>${header("Verify your number", "login")}
+      <h1>Enter your code</h1><p class="muted">We sent a 6-digit code to +92 300 1234567.</p>
+      <div class="row" style="justify-content:center">${Array(6).fill('<input class="input" aria-label="OTP digit" maxlength="1" style="width:44px;padding:8px;text-align:center">').join("")}</div>
+      <button class="button primary" data-go="home">Verify & continue</button><button class="button secondary">Resend code in 00:59</button><div class="spacer"></div>
+    </div>`, { nav: false });
+  }
+
+  function homeScreen(){
+    return phone(`<div class="screenBody">${header("Karachi, DHA Phase 5", null, { theme: true })}
+      <h1>How can we help?</h1>
+      <button class="card clickable choiceCard emergency" data-go="emergencyType"><span class="choiceIcon">✚</span><span><strong>Emergency help</strong><small>Ambulance, fire, police, or another urgent problem</small></span></button>
+      <button class="card clickable choiceCard service" data-go="services"><span class="choiceIcon">⌕</span><span><strong>Find a service provider</strong><small>Plumber, electrician, AC technician, mechanic, and more</small></span></button>
+      <p class="eyebrow">Your active request</p>
+      <button class="card clickable" data-go="emergencyEnRoute"><div class="row"><strong>Ambulance A-12</strong><span class="push"></span><span class="status route">En route</span></div><p class="small muted">ETA 4 min · Track request</p></button>
+      <p class="eyebrow">Quick actions</p><div class="buttonRow"><button class="button secondary" data-go="requests">Request history</button><button class="button secondary" data-go="profile">Profile</button></div>
+    </div>`, { active: "home" });
+  }
+
+  function emergencyTypeScreen(){
+    return phone(`<div class="screenBody">${header("Emergency help", "home", { cancel: "Exit emergency mode" })}
+      <h1>What do you need?</h1><p class="muted">Choose the kind of help. We will ask for your location next.</p>
+      <button class="card clickable choiceCard emergency emergencyChoice" data-emergency-type="Ambulance" data-go="emergencyLocation"><span class="choiceIcon">🚑</span><span><strong>Ambulance</strong><small>Medical emergency, accident, or injury</small></span></button>
+      <button class="card clickable choiceCard emergency emergencyChoice" data-emergency-type="Fire brigade" data-go="emergencyLocation"><span class="choiceIcon">🔥</span><span><strong>Fire brigade</strong><small>Fire, smoke, gas leak, or rescue</small></span></button>
+      <button class="card clickable choiceCard emergency emergencyChoice" data-emergency-type="Other emergency" data-go="emergencyLocation"><span class="choiceIcon">⚠</span><span><strong>Other emergency</strong><small>Urgent help that does not fit above</small></span></button>
+      <div class="notice demo">Simulation mode only. For a real emergency, call 1122.</div>
+    </div>`, { active: "emergency", emergency: true });
+  }
+
+  function emergencyLocationScreen(){
+    return phone(`<div class="screenBody">${header("Location", "emergencyType", { cancel: "Emergency" })}
+      <h1>Where is the emergency?</h1>
+      <button class="card clickable locationPrimary emergency" data-go="emergencyDetails"><span>📍</span><strong>USE MY CURRENT LOCATION</strong><small>DHA Phase 5, Street 12</small></button>
+      <div class="center muted small">or choose another location</div>
+      <button class="listButton">🗺 Pick on map <span>›</span></button><button class="listButton">⌂ Saved address <span>›</span></button>
+      <label class="eyebrow" for="emergencyLandmark">Landmark</label><input class="input" id="emergencyLandmark" value="Near XYZ Mall, Gate 3">
+      <button class="button emergency" data-go="emergencyDetails">Continue</button>
+      <div class="notice demo">Simulation mode only. For a real emergency, call 1122.</div>
+    </div>`, { active: "emergency", emergency: true });
+  }
+
+  function emergencyDetailsScreen(){
+    return phone(`<div class="screenBody">${header("Details", "emergencyLocation", { cancel: "Emergency" })}
+      <div class="row"><h1 class="grow">Tell us only if you can</h1><span class="status alert">Optional</span></div>
+      <p class="muted">This step will skip automatically in <strong id="skipTimer">5</strong> seconds.</p>
+      <p class="eyebrow">What happened?</p><div class="chips"><button class="chip active">Cardiac</button><button class="chip">Accident</button><button class="chip">Injury</button><button class="chip">Medical</button></div>
+      <p class="eyebrow">People needing help</p><div class="chips"><button class="chip active">1</button><button class="chip">2</button><button class="chip">3</button><button class="chip">4+</button></div>
+      <textarea class="input" aria-label="Additional emergency details" placeholder="Extra information, if you have time"></textarea>
+      <div class="spacer"></div><button class="button emergency" data-go="emergencyConfirm">CONTINUE NOW</button><button class="button secondary" data-go="emergencyConfirm">Skip details</button>
+    </div>`, { active: "emergency", emergency: true });
+  }
+
+  function emergencyConfirmScreen(){
+    return phone(`<div class="screenBody">${header("Confirm request", "emergencyDetails", { cancel: "Emergency" })}
+      <h1>Request ${appState.emergencyType}</h1><div class="card emergency"><strong>📍 DHA Phase 5, Street 12</strong><p class="small muted">Near XYZ Mall, Gate 3</p></div>
+      <div class="card center"><p class="eyebrow">Estimated response</p><div class="emergencyEta">8–12</div><strong>minutes</strong></div>
+      <div class="notice demo">DEMO MODE: This request will not contact a real organization.</div><div class="spacer"></div>
+      <div class="buttonRow"><button class="button secondary" data-action="cancel">Cancel</button><button class="button emergency" data-go="emergencySearch">REQUEST NOW</button></div>
+    </div>`, { active: "emergency", emergency: true });
+  }
+
+  function emergencySearchScreen(){
+    return phone(`<div class="screenBody center">${header("Finding help", null, { cancel: "Emergency" })}<div class="spacer"></div>
+      <div class="spinner"></div><h1>FINDING HELP NOW</h1><p class="muted">Looking for the nearest available ${appState.emergencyType.toLowerCase()}. This usually takes 5–10 seconds.</p>
+      <div class="notice demo">Simulation mode only. For a real emergency, call 1122.</div><div class="spacer"></div>
+      <button class="button emergency" data-go="emergencyAssigned">Continue demo</button><button class="button secondary" data-go="emergencyBusy">No unit available</button><button class="button secondary" data-action="cancel">Cancel request</button>
+    </div>`, { active: "emergency", emergency: true });
+  }
+
+  function emergencyAssignedScreen(){
+    return phone(`<div class="screenBody">${header("Help assigned", null, { cancel: "Emergency" })}
+      <span class="status ok">Ambulance found</span><h1>Ambulance A-12 is coming</h1><div class="card emergency"><strong>City Emergency Services</strong><p class="small muted">2.3 km away · Basic life support</p></div>
+      <div class="card center"><p class="eyebrow">Estimated arrival</p><div class="emergencyEta">8</div><strong>minutes</strong></div><div class="map"><span class="vehiclePin" aria-label="Ambulance">🚑</span><span class="userPin" aria-label="Your location">●</span></div>
+      <button class="button emergency" data-go="emergencyEnRoute">CALL DRIVER</button><button class="button secondary">Share live status</button>
+      <div class="notice demo">Simulation mode only. For a real emergency, call 1122.</div>
+    </div>`, { active: "emergency", emergency: true });
+  }
+
+  function emergencyEnRouteScreen(){
+    return phone(`<div class="screenBody">${header("Ambulance en route", null, { cancel: "Emergency" })}
+      <span class="status route">En route</span><p class="eyebrow">Ambulance A-12 · City Emergency Services</p><div class="card center"><p class="eyebrow">Arrival in</p><div class="emergencyEta">4</div><strong>minutes</strong></div>
+      <div class="map"><span class="vehiclePin" style="left:42%;top:38%" aria-label="Ambulance">🚑</span><span class="userPin" aria-label="Your location">●</span></div>
+      <button class="button emergency">CALL DRIVER</button><button class="button secondary" data-go="emergencyApproaching">Continue demo</button>
+      <div class="notice demo">Simulation mode only. For a real emergency, call 1122.</div>
+    </div>`, { active: "emergency", emergency: true });
+  }
+
+  function emergencyApproachingScreen(){
+    return phone(`<div class="screenBody center">${header("Ambulance approaching", null, { cancel: "Emergency" })}<div class="spacer"></div>
+      <div class="fullAlert"><p>AMBULANCE APPROACHING</p><div class="arrival">ARRIVING NOW</div><p>200 metres away · be ready at your entrance</p></div>
+      <div class="map"><span class="vehiclePin" style="left:49%;top:48%" aria-label="Ambulance">🚑</span><span class="userPin" aria-label="Your location">●</span></div><p class="muted"><strong>Driver:</strong> Muhammad Ahmed · +92 300 1234567</p>
+      <div class="spacer"></div><button class="button emergency">CALL DRIVER</button><button class="button secondary" data-go="emergencyArrived">Continue demo</button>
+    </div>`, { active: "emergency", emergency: true });
+  }
+
+  function emergencyArrivedScreen(){
+    return phone(`<div class="screenBody center">${header("Ambulance arrived", null, { cancel: "Emergency" })}<div class="spacer"></div>
+      <div style="font-size:56px">🚑</div><h1>Ambulance has arrived</h1><p class="muted">A-12 · City Emergency Services</p><div class="card"><strong>Arrival confirmed</strong><p class="small muted">10:45 AM · DHA Phase 5, Street 12</p></div><div class="spacer"></div>
+      <button class="button primary" data-go="emergencyComplete">CONFIRM ARRIVAL</button>
+    </div>`, { active: "emergency", emergency: true });
+  }
+
+  function emergencyCompleteScreen(){
+    return phone(`<div class="screenBody center">${header("Request complete", null, { cancel: "Emergency" })}<div class="spacer"></div>
+      <div style="font-size:52px">✓</div><h1>Request complete</h1><p class="muted">We hope everything is okay.</p><div class="card"><strong>Ambulance A-12</strong><p class="small muted">City Emergency Services</p></div>
+      <div class="spacer"></div><button class="button primary" data-go="home">Back to home</button><button class="button secondary" data-go="requestDetails">View request details</button><button class="button secondary" data-go="requestDetails">Rate later</button>
+    </div>`, { active: "emergency", emergency: true });
+  }
+
+  function emergencyBusyScreen(){
+    return phone(`<div class="screenBody center">${header("No unit available", null, { cancel: "Emergency" })}<div class="spacer"></div>
+      <div style="font-size:50px">⚠</div><h1>All ambulances are busy</h1><p class="muted">Every simulated ambulance is assigned to another request right now.</p><div class="notice warning">For a real emergency, do not wait. Call 1122 directly.</div>
+      <div class="spacer"></div><button class="button emergency">CALL 1122</button><button class="button primary" data-go="queueStatus">Join queue</button><button class="button secondary" data-action="cancel">Cancel request</button>
+    </div>`, { active: "emergency", emergency: true });
+  }
+
+  function queueStatusScreen(){
+    return phone(`<div class="screenBody">${header("Queue status", "emergencyBusy", { cancel: "Emergency" })}
+      <span class="status alert">Waiting for availability</span><h1>You're in the queue</h1><div class="card center"><p class="eyebrow">Your position</p><div class="emergencyEta">3</div><strong>of 5 requests</strong><p class="small muted">Estimated wait: about 8 minutes</p></div>
+      <p class="muted">We'll assign the nearest available ambulance when one returns to the network.</p><div class="spacer"></div><button class="button emergency">CALL 1122</button><button class="button secondary" data-action="cancelQueue">Leave queue</button>
+    </div>`, { active: "emergency", emergency: true });
+  }
+
+  function requestDetailsScreen(){
+    return phone(`<div class="screenBody">${header("Request details", "requests")}<h1>Ambulance request</h1>
+      <div class="card"><strong>Completed</strong><p class="small muted">Ambulance A-12 · City Emergency Services</p></div>
+      <div class="list"><div class="card"><strong>10:42 AM</strong><p class="small muted">Request created</p></div><div class="card"><strong>10:43 AM</strong><p class="small muted">Ambulance assigned</p></div><div class="card"><strong>10:45 AM</strong><p class="small muted">Ambulance arrived</p></div></div>
+      <button class="button secondary" data-go="emergencyComplete">Rate this request</button>
+    </div>`, { active: "requests" });
+  }
+
+  function servicesScreen(){
+    return phone(`<div class="screenBody">${header("Services", "home")}<h1>What do you need fixed?</h1><p class="muted">Take your time. Compare the right person for the job.</p>
+      <div class="gridServices">${["🔧 Plumber","⚡ Electrician","🪚 Carpenter","❄ AC technician","🔩 Mechanic","🖌 Painter"].map((service, index) => `<button class="card clickable choiceCard service" data-go="serviceDetails"><span class="choiceIcon">${service.split(" ")[0]}</span><span><strong>${service.substring(service.indexOf(" ") + 1)}</strong><small>${index === 3 ? "Repair or servicing" : "View options"}</small></span></button>`).join("")}</div>
+      <button class="button secondary" data-go="loadingServices">Show loading state</button><button class="button secondary" data-go="servicesError">Show error state</button>
+    </div>`, { active: "services" });
+  }
+
+  function serviceDetailsScreen(){
+    return phone(`<div class="screenBody">${header("Plumber", "services")}<div class="card service center"><div style="font-size:42px">🔧</div><h1>Plumber</h1><p class="muted">Leaks, pipes, taps, and water motors.</p></div>
+      <div class="card"><strong>From Rs. 1,500</strong><p class="small muted">Usually arrives within 45–60 minutes</p></div><p class="eyebrow">Choose an issue</p><div class="chips"><button class="chip active">Pipe leak</button><button class="chip">Tap install</button><button class="chip">Water motor</button><button class="chip">Other</button></div>
+      <div class="spacer"></div><button class="button service" data-go="serviceDescription">Book plumber</button>
+    </div>`, { active: "services" });
+  }
+
+  function serviceDescriptionScreen(){
+    return phone(`<div class="screenBody">${header("Service details", "serviceDetails")}<h1>Describe the problem</h1><p class="eyebrow">Select specific issue</p><div class="chips"><button class="chip active">Water leak</button><button class="chip">Low pressure</button><button class="chip">Blocked pipe</button></div>
+      <textarea class="input" aria-label="Describe your service problem">Kitchen sink leaking from pipe joint.</textarea><button class="button secondary">Add photo</button><div class="spacer"></div><button class="button primary" data-go="serviceLocation">Continue</button>
+    </div>`, { active: "services" });
+  }
+
+  function serviceLocationScreen(){
+    return phone(`<div class="screenBody">${header("Location", "serviceDescription")}<h1>Where should we send the provider?</h1>
+      <button class="listButton">⌂ Home · DHA Phase 5 <span>✓</span></button><button class="listButton">🏢 Office · Shahrah-e-Faisal <span>›</span></button><button class="listButton">🗺 Pick on map <span>›</span></button>
+      <label class="eyebrow" for="serviceLandmark">Landmark</label><input class="input" id="serviceLandmark" value="Near XYZ Mall, Gate 3"><div class="spacer"></div><button class="button primary" data-go="serviceTime">Continue</button>
+    </div>`, { active: "services" });
+  }
+
+  function serviceTimeScreen(){
+    return phone(`<div class="screenBody">${header("Schedule", "serviceLocation")}<h1>When do you need help?</h1>
+      <button class="card clickable choiceCard service"><span class="choiceIcon">⚡</span><span><strong>As soon as possible</strong><small>Within about one hour</small></span></button><button class="card clickable choiceCard"><span class="choiceIcon">◷</span><span><strong>Schedule for later</strong><small>Choose date and time</small></span></button>
+      <div class="spacer"></div><button class="button primary" data-go="serviceConfirm">Continue</button>
+    </div>`, { active: "services" });
+  }
+
+  function serviceConfirmScreen(){
+    return phone(`<div class="screenBody">${header("Confirm service", "serviceTime")}<h1>Confirm your request</h1>
+      <div class="card"><strong>Plumber · Pipe leak</strong><p class="small muted">DHA Phase 5, Street 12<br>As soon as possible</p></div><div class="card center"><p class="eyebrow">Estimated cost</p><div class="serviceEta">Rs. 1,500–2,500</div><p class="small muted">Final cost is confirmed after the job.</p></div><div class="spacer"></div>
+      <div class="buttonRow"><button class="button secondary" data-action="cancel">Cancel</button><button class="button primary" data-go="serviceSearching">Confirm</button></div>
+    </div>`, { active: "services" });
+  }
+
+  function serviceSearchingScreen(){
+    return phone(`<div class="screenBody center">${header("Finding a provider", "serviceConfirm")}<div class="spacer"></div><div class="spinner" style="border-top-color:var(--green);border-color:#BCE2DA;border-top-color:var(--green)"></div>
+      <h1>Finding a plumber</h1><p class="muted">Matching you with an available provider nearby.</p><div class="spacer"></div><button class="button primary" data-go="serviceAssigned">Continue demo</button><button class="button secondary" data-action="cancel">Cancel request</button>
+    </div>`, { active: "services" });
+  }
+
+  function serviceAssignedScreen(){
+    return phone(`<div class="screenBody">${header("Provider assigned", null, { cancel: "Services" })}<span class="status ok">Provider found</span><div class="card"><div class="row"><div class="avatar">👨‍🔧</div><div><h2>Ali Khan</h2><p class="small muted">★ 4.8 · 127 reviews · Plumber</p></div></div><hr class="divider" style="margin:12px 0"><p class="small muted">3.2 km away · ETA <strong>25 min</strong></p></div>
+      <button class="button primary" data-go="serviceEnRoute">Track on map</button><div class="buttonRow"><button class="button secondary">Call</button><button class="button secondary">Chat</button></div><button class="button secondary">View profile</button>
+    </div>`, { active: "services" });
+  }
+
+  function serviceEnRouteScreen(){
+    return phone(`<div class="screenBody">${header("Provider en route", null, { cancel: "Services" })}<div class="card"><strong>Ali Khan · Plumber</strong><p class="small muted">ETA <strong>18 min</strong> · Pipe leak repair</p></div><div class="map"><span class="vehiclePin" style="left:36%;top:32%;background:var(--green)" aria-label="Provider">🚐</span><span class="userPin">●</span></div><div class="buttonRow"><button class="button primary">Call</button><button class="button secondary">Chat</button></div><button class="button service" data-go="serviceProgress">Provider arrived</button>
+    </div>`, { active: "services" });
+  }
+
+  function serviceProgressScreen(){
+    return phone(`<div class="screenBody center">${header("Service in progress", null, { cancel: "Services" })}<div class="spacer"></div><div style="font-size:52px">🔧</div><h1>Ali has started work</h1><p class="muted">Pipe leak repair · Started at 11:15 AM</p><div class="card"><strong>Need help?</strong><p class="small muted">Contact support if something is wrong.</p></div><div class="spacer"></div><button class="button service" data-go="serviceCost">Mark job as complete</button><button class="button secondary">Contact support</button>
+    </div>`, { active: "services" });
+  }
+
+  function serviceCostScreen(){
+    return phone(`<div class="screenBody">${header("Confirm final cost", "serviceProgress")}<h1>Review before payment</h1><p class="muted">The provider submitted the following final amount.</p><div class="card center"><p class="eyebrow">Final cost</p><div class="serviceEta">Rs. 2,000</div><p class="small muted">Paid directly to provider · Cash</p></div><div class="card"><strong>Work completed</strong><p class="small muted">Replaced pipe joint and tested for leaks.</p></div><div class="spacer"></div><button class="button service" data-go="serviceComplete">Confirm completion and cost</button><button class="button secondary">Report an issue</button>
+    </div>`, { active: "services" });
+  }
+
+  function serviceCompleteScreen(){
+    return phone(`<div class="screenBody center">${header("Service complete", null, { cancel: "Services" })}<div class="spacer"></div><div style="font-size:52px">✓</div><h1>How was Ali?</h1><p class="muted">Your rating helps other customers choose.</p><div class="stars">${Array(5).fill('<button aria-label="Rate five stars">★</button>').join("")}</div><textarea class="input" aria-label="Optional service review" placeholder="Add a review (optional)"></textarea><div class="spacer"></div><button class="button primary" data-go="home">Submit rating</button><button class="button secondary" data-go="home">Skip</button>
+    </div>`, { active: "services" });
+  }
+
+  function requestsScreen(){
+    return phone(`<div class="screenBody">${header("My requests", "home")}<div class="segment"><button class="active">Active</button><button>History</button></div><p class="eyebrow">Active request</p><button class="card clickable" data-go="emergencyEnRoute"><strong>Ambulance A-12</strong><p class="small muted">City Emergency Services · ETA 4 min</p><span class="status route">En route</span></button><p class="eyebrow">History</p><button class="listButton" data-go="requestDetails">🚑 Ambulance · Completed <span>›</span></button><button class="listButton" data-go="serviceComplete">🔧 Plumber · Completed <span>›</span></button>
+    </div>`, { active: "requests" });
+  }
+
+  function profileScreen(){
+    return phone(`<div class="screenBody">${header("Profile", "home", { theme: true })}<div class="center"><div class="avatar" style="margin:auto;background:var(--blue)">👤</div><h2>Muhammad Usman</h2><p class="small muted">+92 300 1234567</p></div>
+      <div class="list"><button class="listButton">Saved addresses <span>›</span></button><button class="listButton">Notification settings <span>›</span></button><button class="listButton">Language · English <span>›</span></button><button class="listButton" data-action="role">Switch to provider mode <span>›</span></button><button class="listButton" data-go="dispatcher">Dispatcher demo <span>›</span></button><button class="listButton" data-go="admin">Admin demo <span>›</span></button></div><p class="center micro muted">Version 1.0 · FYP simulation</p>
+    </div>`, { active: "profile" });
+  }
+
+  function providerHomeScreen(){
+    return phone(`<div class="screenBody">${header("Provider dashboard", "profile")}<div class="row"><div class="avatar">👨‍🔧</div><div><h2>Ali Khan</h2><p class="small muted">Plumber · 4.8 rating</p></div></div><button class="card clickable service center" data-action="availability"><span class="status ok">Available</span><p class="small muted">Tap to go offline</p></button>
+      <p class="eyebrow">Incoming request</p><button class="card clickable" data-go="providerDetails"><strong>Pipe leak repair</strong><p class="small muted">DHA Phase 5 · Rs. 1,500–2,500</p></button><p class="eyebrow">Today's jobs</p><div class="emptyState">No upcoming jobs.</div>
+    </div>`, { active: "profile" });
+  }
+
+  function providerDetailsScreen(){
+    return phone(`<div class="screenBody">${header("Request details", "providerHome")}<div class="card service"><strong>Pipe leak repair</strong></div><div class="card"><strong>Customer</strong><p class="small muted">Muhammad Usman · +92 300 1234567</p></div><div class="card"><strong>Location</strong><p class="small muted">DHA Phase 5, Street 12 · Near XYZ Mall</p></div><div class="card"><strong>Estimated cost</strong><p class="small muted">Rs. 1,500–2,500</p></div><div class="spacer"></div><div class="buttonRow"><button class="button service" data-go="providerAccepted">Accept job</button><button class="button secondary" data-go="providerHome">Decline</button></div>
+    </div>`, { active: "profile" });
+  }
+
+  function providerAcceptedScreen(){
+    return phone(`<div class="screenBody center">${header("Job accepted", null)}<div class="spacer"></div><div style="font-size:52px">✓</div><h1>Customer notified</h1><p class="muted">Your estimated arrival time is 18 minutes. Start navigating when you're ready.</p><div class="spacer"></div><button class="button primary" data-go="providerJob">Navigate to customer</button><button class="button secondary">Call customer</button>
+    </div>`, { active: "profile" });
+  }
+
+  function providerJobScreen(){
+    return phone(`<div class="screenBody">${header("Active job", null)}<div class="card service"><strong>Pipe leak repair</strong><p class="small muted">Muhammad Usman · DHA Phase 5, Street 12</p></div><button class="button primary">Navigate to customer</button><div class="card"><strong>Job status</strong><p class="small muted">Tap when work begins.</p><button class="button service" style="margin-top:12px;width:100%">Start job</button></div><textarea class="input" aria-label="Provider notes" placeholder="Notes about the job"></textarea><button class="button secondary">Upload photos</button><div class="spacer"></div><button class="button service" data-go="providerComplete">Complete job</button>
+    </div>`, { active: "profile" });
+  }
+
+  function providerCompleteScreen(){
+    return phone(`<div class="screenBody">${header("Complete job", "providerJob")}<h1>Submit the final cost</h1><label class="eyebrow" for="cost">Final cost</label><input class="input" id="cost" value="Rs. 2,000"><p class="eyebrow">Payment method</p><div class="chips"><button class="chip active">Cash</button><button class="chip">JazzCash</button><button class="chip">Other</button></div><textarea class="input" aria-label="Work completed notes">Replaced pipe joint. Tested for leaks.</textarea><div class="spacer"></div><button class="button service" data-go="providerHome">Complete & submit</button>
+    </div>`, { active: "profile" });
+  }
+
+  function dispatcherScreen(){
+    return `<section class="desktop"><header class="desktopHeader"><button class="iconButton" data-go="profile" aria-label="Back to profile">←</button><span class="grow">MADAD+ DISPATCH CENTER</span><span class="micro">City Emergency Services · Online</span></header><div class="notice demo" style="border-radius:0;border-width:0 0 1px">SYNTHETIC DATA MODE — FYP SIMULATION — NO REAL EMERGENCIES</div><main class="desktopBody"><div class="buttonRow"><button class="button primary" data-go="dispatcherManual">Submit phone request</button><button class="button secondary" data-action="dispatcherEmpty">Show empty queue</button></div><div class="desktopGrid"><aside><h2>Emergency requests</h2><div id="dispatchQueue"><div class="queueItem"><strong>#REQ-2026-001 · Ambulance</strong><p class="small muted">DHA Phase 5 · waiting 3 min</p><div class="buttonRow"><button class="button primary" data-go="dispatcherAssign">Assign</button><button class="button secondary">Details</button></div></div><div class="queueItem"><strong>#REQ-2026-002 · Ambulance</strong><p class="small muted">Gulshan-e-Iqbal · waiting 7 min</p><button class="button secondary">Details</button></div></div></aside><section><div class="map fleetMap"><span class="vehiclePin" style="left:24%;top:28%">🚑</span><span class="vehiclePin" style="left:72%;top:48%">🚑</span><span class="userPin" style="left:48%;top:60%">●</span></div><div class="card"><strong>Fleet status</strong><p class="small muted">Available: 7 · Busy: 4 · Offline: 1</p><button class="button secondary">View all ambulances</button></div></section></div></main></section>`;
+  }
+
+  function dispatcherAssignScreen(){
+    return `<section class="desktop"><header class="desktopHeader"><button class="iconButton" data-go="dispatcher" aria-label="Back to dispatcher">←</button><span>Assign ambulance</span></header><main class="desktopBody" style="max-width:640px;margin:auto"><h1>Request #REQ-2026-001</h1><div class="card"><strong>Cardiac emergency</strong><p class="muted">DHA Phase 5, Street 12 · waiting 3 min</p></div><h2>Nearest available unit</h2><button class="card clickable service choiceCard" data-action="dispatchConfirm"><span class="choiceIcon">🚑</span><span><strong>Assign A-22 · 1.8 km</strong><small>Closest available unit · City Emergency Services</small></span></button><button class="card clickable choiceCard"><span class="choiceIcon">🚑</span><span><strong>Assign A-12 · 2.3 km</strong><small>Available unit</small></span></button></main></section>`;
+  }
+
+  function dispatcherManualScreen(){
+    return `<section class="desktop"><header class="desktopHeader"><button class="iconButton" data-go="dispatcher" aria-label="Back to dispatcher">←</button><span>Submit request from phone call</span></header><main class="desktopBody" style="max-width:640px;margin:auto"><p class="notice warning">Use this form only after a caller contacts the organization by phone.</p><label class="eyebrow" for="callerPhone">Caller phone</label><input class="input" id="callerPhone" value="+92 300 1234567"><label class="eyebrow" for="callerLocation">Address or location</label><input class="input" id="callerLocation" value="DHA Phase 5, Street 12"><label class="eyebrow" for="callerUrgency">Urgency</label><input class="input" id="callerUrgency" value="Urgent"><button class="button primary" data-action="manualConfirm">Create and assign request</button></main></section>`;
+  }
+
+  function adminScreen(){
+    return `<section class="desktop"><header class="desktopHeader"><button class="iconButton" data-go="profile" aria-label="Back to profile">←</button><span class="grow">MADAD+ ADMIN</span><button class="button secondary" data-go="adminAdd">+ Add entity</button></header><main class="desktopBody"><h1>System overview</h1><div class="desktopGrid"><div class="card"><strong>1,247</strong><p class="small muted">Users</p></div><div class="card"><strong>89</strong><p class="small muted">Domestic providers</p></div></div><div class="card"><strong>Recent activity</strong><p class="small muted">Emergency #REQ-2026-001 completed · Provider Ali Khan approved · Ambulance A-15 marked busy</p></div><div class="emptyState">Use “Add entity” to create a user, provider, ambulance, or category.</div></main></section>`;
+  }
+
+  function adminAddScreen(){
+    return `<section class="desktop"><header class="desktopHeader"><button class="iconButton" data-go="admin" aria-label="Back to admin">←</button><span>Add entity</span></header><main class="desktopBody" style="max-width:640px;margin:auto"><h1>Add a provider</h1><p class="muted">Representative form for users, providers, ambulances, and categories.</p><label class="eyebrow" for="entityName">Name</label><input class="input" id="entityName" placeholder="Provider name"><label class="eyebrow" for="entityCategory">Category</label><input class="input" id="entityCategory" placeholder="Plumber"><button class="button primary" data-action="adminConfirm">Save provider</button></main></section>`;
+  }
+
+  function loadingServicesScreen(){
+    return phone(`<div class="screenBody">${header("Services", "services")}<h1>Loading services</h1><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><button class="button secondary" data-go="services">Back</button></div>`, { active: "services" });
+  }
+
+  function servicesErrorScreen(){
+    return phone(`<div class="screenBody center">${header("Services", "services")}<div class="spacer"></div><div style="font-size:48px">!</div><h1>We couldn't load services</h1><p class="muted">Check your connection and try again.</p><div class="spacer"></div><button class="button primary" data-go="services">Retry</button><button class="button secondary" data-go="home">Back to home</button></div>`, { active: "services" });
+  }
+
+  document.addEventListener("click", (event) => {
+    const goTarget = event.target.closest("[data-go]")?.dataset.go;
+    const action = event.target.closest("[data-action]")?.dataset.action;
+    const emergencyType = event.target.closest("[data-emergency-type]")?.dataset.emergencyType;
+    if(emergencyType){appState.emergencyType = emergencyType}
+    if(goTarget){appState.previous = appState.screen;appState.screen = goTarget;closeModal();render();return}
+    if(action === "theme"){setTheme(appState.theme === "light" ? "dark" : "light");render()}
+    if(action === "cancel"){modal("Cancel request?", "This will end the current request. You can start another one from Home.", '<button class="button secondary" data-action="closeModal">Keep request</button><button class="button emergency" data-go="home">Yes, cancel</button>')}
+    if(action === "cancelQueue"){modal("Leave the queue?", "You will no longer be assigned an ambulance through this simulation.", '<button class="button secondary" data-action="closeModal">Stay in queue</button><button class="button emergency" data-go="home">Leave queue</button>')}
+    if(action === "closeModal"){closeModal()}
+    if(action === "role"){modal("Switch to provider mode?", "Provider mode uses a different workspace and job navigation.", '<button class="button secondary" data-action="closeModal">Stay as customer</button><button class="button primary" data-go="providerHome">Switch mode</button>')}
+    if(action === "availability"){modal("Set availability", "You are currently available for new service requests.", '<button class="button secondary" data-action="closeModal">Keep available</button><button class="button primary" data-action="closeModal">Go offline</button>')}
+    if(action === "dispatcherEmpty"){document.getElementById("dispatchQueue").innerHTML = '<div class="emptyState">No unassigned requests. New requests will appear here.</div>'}
+    if(action === "dispatchConfirm"){modal("Assignment confirmed", "Ambulance A-22 is assigned. The request will leave the queue and the user receives the ETA.", '<button class="button primary" data-go="dispatcher">Return to queue</button>')}
+    if(action === "manualConfirm"){modal("Manual request created", "The caller's request entered the same assignment flow as an in-app request.", '<button class="button primary" data-go="dispatcherAssign">Assign an ambulance</button>')}
+    if(action === "adminConfirm"){modal("Provider saved", "The provider was added to the simulated system.", '<button class="button primary" data-go="admin">Return to admin</button>')}
+  });
+
+  render();
+</script>
+</body>
+</html>
