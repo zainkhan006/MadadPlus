@@ -1,0 +1,7 @@
+SUPABASE_URL=https://zgnlwpnccjwcdbnlnzyy.supabase.co
+
+# Runtime database connection through Supabase transaction-mode pooler
+DATABASE_URL=postgresql://postgres.zgnlwpnccjwcdbnlnzyy:CrossEntropyLossOptimization@29015@aws-0-ap-northeast-2.pooler.supabase.com:6543/postgres?pgbouncer=true
+
+# Database connection for migrations through Supabase session-mode pooler
+DIRECT_URL=postgresql://postgres.zgnlwpnccjwcdbnlnzyy:CrossEntropyLossOptimization@29015@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres
