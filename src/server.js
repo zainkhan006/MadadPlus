@@ -232,6 +232,83 @@ app.patch("/api/v1/emergency-requests/:requestId/complete", async (req, res) => 
   }
 });
 
+async function transitionRequest(requestId, nextStatus, currentStatus) {
+  return db.transaction(async (trx) => {
+    const request = await trx("emergency_requests as er")
+      .join("ambulances as a", "a.id", "er.assigned_ambulance_id")
+      .select(
+        "er.id",
+        "er.status",
+        "a.id as ambulance_id",
+        "a.label as ambulance_label"
+      )
+      .where("er.id", requestId)
+      .forUpdate()
+      .first();
+
+    if (!request) {
+      return { statusCode: 404, body: { error: "Request not found" } };
+    }
+
+    if (request.status !== currentStatus) {
+      return {
+        statusCode: 409,
+        body: {
+          error: `Request must be ${currentStatus} before it can become ${nextStatus}`
+        }
+      };
+    }
+
+    await trx("emergency_requests")
+      .where("id", requestId)
+      .update({ status: nextStatus, updated_at: trx.fn.now() });
+
+    return {
+      statusCode: 200,
+      body: {
+        requestId: request.id,
+        status: nextStatus,
+        assignedAmbulance: request.ambulance_id
+          ? {
+              id: request.ambulance_id,
+              label: request.ambulance_label,
+              distanceKm: null
+            }
+          : null,
+        consideredNearest: null
+      }
+    };
+  });
+}
+
+async function handleRequestTransition(req, res, nextStatus, currentStatus, eventName) {
+  try {
+    const result = await transitionRequest(
+      req.params.requestId,
+      nextStatus,
+      currentStatus
+    );
+
+    if (result.statusCode === 200) {
+      io.to(`request:${result.body.requestId}`).emit(eventName, result.body);
+      io.to("dispatch").emit("queue.updated", result.body);
+    }
+
+    res.status(result.statusCode).json(result.body);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: `Unable to mark request ${nextStatus}` });
+  }
+}
+
+app.patch("/api/v1/emergency-requests/:requestId/en-route", (req, res) => {
+  handleRequestTransition(req, res, "EN_ROUTE", "ASSIGNED", "request.enRoute");
+});
+
+app.patch("/api/v1/emergency-requests/:requestId/arrived", (req, res) => {
+  handleRequestTransition(req, res, "ARRIVED", "EN_ROUTE", "request.arrived");
+});
+
 const port = process.env.PORT || 3000;
 
 server.listen(port, () => {
