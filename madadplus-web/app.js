@@ -14,31 +14,24 @@ const STATUS_COLOR = {
   OFFLINE: "#5b6472"
 };
 
-// Dark map style to match the console theme
-const MAP_STYLE = [
-  { elementType: "geometry", stylers: [{ color: "#171d26" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#171d26" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#8b96a5" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#232a35" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#171d26" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0d1116" }] },
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-  { featureType: "transit", stylers: [{ visibility: "off" }] },
-  { featureType: "administrative", elementType: "geometry", stylers: [{ color: "#2a323f" }] }
-];
-
 // DHA Phase 5, Karachi — matches the demo's seed coordinates
 const DEFAULT_CENTER = { lat: 24.8000, lng: 67.0500 };
 
-// ---- Google Maps callback (called by the Maps script tag once loaded) ----
+// ---- Map init (Leaflet + OpenStreetMap, no API key needed) ----
 function initMap() {
-  map = new google.maps.Map(document.getElementById("map"), {
-    center: DEFAULT_CENTER,
-    zoom: 14,
-    disableDefaultUI: true,
-    zoomControl: true,
-    styles: MAP_STYLE
-  });
+  map = L.map("map", { zoomControl: true }).setView(
+    [DEFAULT_CENTER.lat, DEFAULT_CENTER.lng],
+    14
+  );
+
+  // CARTO's dark tiles — built on OpenStreetMap data, matches the console theme.
+  // Free tier, key required as of CARTO's basemap policy change.
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=cb1_3n09_1_3b730b51e743a58fc8224205", {
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: "abcd",
+    maxZoom: 19
+  }).addTo(map);
 
   // If ambulance data already arrived before the map finished loading, draw it now.
   if (ambulancesLoaded) {
@@ -47,32 +40,28 @@ function initMap() {
 }
 
 // ---- Marker rendering ----
-function markerIcon(status) {
+function markerStyle(status) {
   return {
-    path: google.maps.SymbolPath.CIRCLE,
+    radius: 8,
     fillColor: STATUS_COLOR[status] || STATUS_COLOR.OFFLINE,
-    fillOpacity: 1,
-    strokeColor: "#10141b",
-    strokeWeight: 2,
-    scale: 8
+    color: "#10141b",
+    weight: 2,
+    fillOpacity: 1
   };
 }
 
 function upsertMarker(ambulance) {
   if (!map) return; // map not ready yet — renderAllMarkers() will catch it up later
 
-  const position = { lat: Number(ambulance.lat), lng: Number(ambulance.lng) };
+  const latlng = [Number(ambulance.lat), Number(ambulance.lng)];
 
   if (markers[ambulance.id]) {
-    markers[ambulance.id].setPosition(position);
-    markers[ambulance.id].setIcon(markerIcon(ambulance.status));
+    markers[ambulance.id].setLatLng(latlng);
+    markers[ambulance.id].setStyle(markerStyle(ambulance.status));
   } else {
-    markers[ambulance.id] = new google.maps.Marker({
-      map,
-      position,
-      icon: markerIcon(ambulance.status),
-      title: `${ambulance.label} — ${ambulance.status}`
-    });
+    markers[ambulance.id] = L.circleMarker(latlng, markerStyle(ambulance.status))
+      .bindTooltip(`${ambulance.label} — ${ambulance.status}`)
+      .addTo(map);
   }
 }
 
@@ -189,4 +178,5 @@ socket.on("ambulance.updated", (payload) => {
 });
 
 // ---- Boot ----
+initMap();
 loadAmbulances();
