@@ -1,7 +1,7 @@
 // ---- Config ----
 // Point this at Ibad's backend. Use localhost while developing, swap to the
 // Render URL once it's deployed (see madad-plus-demo-sprint-plan.md).
-const BACKEND_URL = "http://localhost:3000";
+const BACKEND_URL = "https://madadplus.onrender.com";
 
 // ---- State ----
 let map = null;
