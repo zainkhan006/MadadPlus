@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -59,8 +60,10 @@ class EmergencyRequestResult {
 class EmergencyService {
   static const baseUrl = String.fromEnvironment(
     'MADAD_BACKEND_URL',
-    defaultValue: 'http://192.168.10.4:3000',
+    defaultValue: 'https://madadplus.onrender.com',
   );
+
+  static const requestTimeout = Duration(seconds: 45);  
 
   Future<EmergencyRequestResult> createEmergencyRequest({
     required double lat,
@@ -73,7 +76,7 @@ class EmergencyService {
         'Content-Type': 'application/json',
       },
       body: jsonEncode({'lat': lat, 'lng': lng, 'type': 'ambulance'}),
-    );
+    ).timeout(requestTimeout);
 
     if (response.statusCode != 201) {
       throw Exception('The emergency request could not be sent.');
@@ -91,7 +94,7 @@ class EmergencyService {
         'Authorization': 'Bearer demo-token',
         'Content-Type': 'application/json',
       },
-    );
+    ).timeout(requestTimeout);
 
     if (response.statusCode != 200) {
       throw Exception('The emergency request could not be completed.');

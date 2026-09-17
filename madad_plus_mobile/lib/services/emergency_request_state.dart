@@ -103,10 +103,15 @@ class EmergencyRequestState extends ChangeNotifier {
         _connectToRequest(result!.requestId);
         _startArrivalSimulation();
       }
-    } catch (_) {
-      currentScreen = EmergencyScreen.emergencyConfirm;
-      errorMessage =
-          'We could not send the emergency request. Please try again.';
+    } on TimeoutException {
+        currentScreen = EmergencyScreen.emergencyConfirm;
+        errorMessage =
+            'The server was asleep and is waking up now, so tap request again.';
+      } catch (_) {
+        currentScreen = EmergencyScreen.emergencyConfirm;
+        errorMessage =
+            'We could not send the emergency request. Please try again.'; 
+
     } finally {
       isRequesting = false;
       notifyListeners();
