@@ -30,25 +30,48 @@
 
     <section class="map-pane">
       <div id="map"></div>
+      <div class="map-pane__hint">Click anywhere on the map to simulate a new call</div>
       <div class="map-pane__legend">
-        <span class="legend-item"><i class="legend-dot legend-dot--available"></i>Available</span>
+        <span class="legend-item"><i class="legend-dot legend-dot--free"></i>Free</span>
         <span class="legend-item"><i class="legend-dot legend-dot--busy"></i>Busy</span>
-        <span class="legend-item"><i class="legend-dot legend-dot--offline"></i>Offline</span>
+        <span class="legend-item"><i class="legend-dot legend-dot--unavailable"></i>Unavailable</span>
       </div>
     </section>
 
-    <aside class="queue-pane">
-      <div class="queue-pane__header">
-        <h1>Requests</h1>
-        <span class="queue-count" id="queueCount">0</span>
+    <aside class="board-pane">
+
+      <div class="tabs" id="tabs">
+        <button class="tab tab--free is-active" data-tab="FREE">
+          Free <span class="tab__count" id="countFree">0</span>
+        </button>
+        <button class="tab tab--busy" data-tab="BUSY">
+          Busy <span class="tab__count" id="countBusy">0</span>
+        </button>
+        <button class="tab tab--unavailable" data-tab="UNAVAILABLE">
+          Unavailable <span class="tab__count" id="countUnavailable">0</span>
+        </button>
       </div>
-      <ul class="queue-list" id="queueList">
-        <li class="queue-empty" id="queueEmpty">No active requests yet. New emergencies will appear here the moment they come in.</li>
-      </ul>
+
+      <div class="board" id="board">
+        <ul class="board-list" id="listFree"></ul>
+        <ul class="board-list is-hidden" id="listBusy"></ul>
+        <ul class="board-list is-hidden" id="listUnavailable"></ul>
+      </div>
+
     </aside>
 
   </main>
 
+</div>
+
+<!-- Reassign modal -->
+<div class="modal" id="reassignModal">
+  <div class="modal__card">
+    <h2>Reassign booking</h2>
+    <p class="modal__sub" id="reassignSub"></p>
+    <ul class="modal__list" id="reassignList"></ul>
+    <button class="modal__close" id="reassignClose">Cancel</button>
+  </div>
 </div>
 
 <!-- Leaflet JS (OpenStreetMap) — must load before app.js, which uses the L global -->
