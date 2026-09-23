@@ -202,7 +202,7 @@ void main() {
     expect(find.text('Notification settings'), findsOneWidget);
     expect(find.text('Language · English'), findsOneWidget);
     expect(find.text('Driver portal'), findsOneWidget);
-    expect(find.text('Switch to provider mode'), findsNothing);
+    expect(find.text('Switch to provider mode'), findsOneWidget);
     expect(find.text('Dispatcher demo'), findsNothing);
     expect(find.text('Admin demo'), findsNothing);
 
@@ -217,6 +217,198 @@ void main() {
     expect(find.text('BUSY'), findsOneWidget);
     expect(find.text('Profile'), findsNothing);
   });
+
+  testWidgets('a user books a plumber and accepts the repair total', (
+    WidgetTester tester,
+  ) async {
+    await reachHome(tester);
+    await tapText(tester, 'Services');
+
+    expect(find.text('What do you need fixed?'), findsOneWidget);
+    expect(find.text('AC technician'), findsNothing);
+    expect(find.text('Mechanic'), findsNothing);
+    expect(find.text('Painter'), findsNothing);
+
+    await tapText(tester, 'Plumber');
+    await tapText(tester, 'Book plumber');
+    await tapText(tester, 'Continue');
+    await tapText(tester, 'Continue');
+    await tapText(tester, 'Continue');
+
+    expect(find.text('Confirm your request'), findsOneWidget);
+    expect(find.text('Plumber · Pipe leak'), findsOneWidget);
+    expect(find.textContaining('Rs.'), findsNothing);
+
+    await tapText(tester, 'Confirm');
+    expect(find.text('Finding a plumber'), findsOneWidget);
+
+    await tapText(tester, 'Provider accepts');
+
+    expect(find.text('John Stewart'), findsOneWidget);
+    expect(find.text('3.2 km away · ETA 25 min'), findsOneWidget);
+    expect(find.text('Inspection fee: x'), findsOneWidget);
+    expect(
+      find.text('Other providers no longer see this request.'),
+      findsOneWidget,
+    );
+
+    await tapText(tester, 'Track on map');
+    expect(find.text('Provider en route'), findsOneWidget);
+
+    await tapText(tester, 'Provider arrived');
+    expect(find.text('John has started work'), findsOneWidget);
+
+    await tapText(tester, 'Mark job as complete');
+    expect(find.text('Waiting for the repair total.'), findsOneWidget);
+    expect(find.text('Accept'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), '2000');
+    await tester.pump();
+    await tapText(tester, 'Accept');
+
+    expect(find.text('How was John?'), findsOneWidget);
+
+    final requestState = tester
+        .element(find.text('How was John?'))
+        .read<EmergencyRequestState>();
+    expect(requestState.amountOwed, 'Amount owed: x + 2000');
+    expect(requestState.requestId, isNull);
+    expect(requestState.isRequesting, isFalse);
+
+    await tapText(tester, 'Submit rating');
+    expect(find.text('How can we help?'), findsOneWidget);
+
+    await tapText(tester, 'Requests');
+    await tapText(tester, 'Plumber · Completed');
+    expect(find.text('Amount owed: x + 2000'), findsOneWidget);
+  });
+
+  testWidgets('a busy provider holds one pending job and a cancelled one stays blocked', (
+    WidgetTester tester,
+  ) async {
+    await reachSignIn(tester);
+    await tapText(tester, 'Sign in as provider');
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pump();
+
+    expect(find.text('Existing account'), findsOneWidget);
+
+    await tapText(tester, 'Sign in as provider');
+    await tapText(tester, 'VERIFY');
+
+    expect(find.text('Provider dashboard'), findsOneWidget);
+    expect(find.text('Available'), findsOneWidget);
+    expect(find.text('No upcoming jobs.'), findsOneWidget);
+    expect(find.text('Home'), findsNothing);
+
+    await tapText(tester, 'Pipe leak repair');
+    expect(find.text('Customer: Hal Jordan'), findsOneWidget);
+
+    await tapText(tester, 'Accept job');
+    expect(find.text('Customer notified'), findsOneWidget);
+    expect(
+      find.text('Other providers no longer see this request.'),
+      findsOneWidget,
+    );
+
+    await tapText(tester, 'Navigate to customer');
+    expect(find.text('Active job'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pump();
+    expect(find.text('On a job'), findsOneWidget);
+
+    await tapText(tester, 'Tap install');
+    await tapText(tester, 'Accept job');
+    expect(find.text('Active job'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pump();
+    await tapText(tester, 'Pending · Tap install · Gulshan-e-Iqbal');
+
+    expect(find.text('This provider is busy'), findsOneWidget);
+    expect(find.text('Accept job'), findsNothing);
+
+    await tapText(tester, 'Cancel');
+
+    expect(find.text('This provider is busy'), findsNothing);
+    expect(find.text('You cannot take this request again.'), findsOneWidget);
+    expect(find.text('Accept job'), findsNothing);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pump();
+    await tapText(tester, 'Water motor');
+    await tapText(tester, 'Accept job');
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pump();
+
+    expect(
+      find.text('Pending · Water motor · Shahrah-e-Faisal'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('refusing the repair total leaves only the inspection fee', (
+    WidgetTester tester,
+  ) async {
+    await reachHome(tester);
+    await tapText(tester, 'Profile');
+    await tapText(tester, 'Switch to provider mode');
+    await tapText(tester, 'Pipe leak repair');
+    await tapText(tester, 'Accept job');
+    await tapText(tester, 'Navigate to customer');
+
+    expect(find.text('Complete job'), findsNothing);
+
+    await tapText(tester, 'Start job');
+    await tapText(tester, 'Complete job');
+    await tester.enterText(find.byType(TextField), '1500');
+    await tester.pump();
+    await tapText(tester, 'Refuse');
+
+    expect(find.text('Amount owed: x'), findsOneWidget);
+    expect(find.text('Cash'), findsNothing);
+    expect(find.text('JazzCash'), findsNothing);
+    expect(find.text('Other'), findsNothing);
+
+    await tapText(tester, 'Back to services');
+    expect(find.text('What do you need fixed?'), findsOneWidget);
+
+    await tapText(tester, 'Profile');
+    await tapText(tester, 'Switch to provider mode');
+    expect(find.text('Amount owed: x'), findsOneWidget);
+    expect(find.text('No upcoming jobs.'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pump();
+    expect(find.text('How can we help?'), findsOneWidget);
+  });
+
+  testWidgets('a new provider registers with a trade and lands on the dashboard', (
+    WidgetTester tester,
+  ) async {
+    await reachSignIn(tester);
+    await tapText(tester, 'Create account');
+    await tapText(tester, 'Register as Provider');
+
+    expect(find.text('Carpenter'), findsOneWidget);
+    expect(find.text('Plumber'), findsOneWidget);
+    expect(find.text('Electrician'), findsOneWidget);
+    expect(find.text('Ambulance number'), findsNothing);
+
+    await tapText(tester, 'Continue');
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pump();
+    expect(find.text('Register as Provider'), findsOneWidget);
+
+    await tapText(tester, 'Continue');
+    await tapText(tester, 'VERIFY');
+    expect(find.text('Provider dashboard'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pump();
+    expect(find.text('Existing account'), findsOneWidget);
+  });
 }
 
 Future<void> reachSignIn(WidgetTester tester) async {
@@ -224,5 +416,19 @@ Future<void> reachSignIn(WidgetTester tester) async {
   await tester.tap(find.text('GET STARTED'));
   await tester.pump();
   await tester.tap(find.text('CONTINUE'));
+  await tester.pump();
+}
+
+Future<void> reachHome(WidgetTester tester) async {
+  await reachSignIn(tester);
+  await tapText(tester, 'CONTINUE');
+  await tapText(tester, 'VERIFY');
+}
+
+Future<void> tapText(WidgetTester tester, String text) async {
+  final finder = find.text(text);
+  await tester.ensureVisible(finder);
+  await tester.pump();
+  await tester.tap(finder);
   await tester.pump();
 }

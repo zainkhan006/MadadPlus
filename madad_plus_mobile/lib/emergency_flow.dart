@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'services/emergency_request_state.dart';
@@ -27,17 +28,33 @@ class EmergencyFlow extends StatelessWidget {
       case EmergencyScreen.driverJob:
         return const _DriverJobScreen();
       case EmergencyScreen.services:
-        return const _UserTabScreen(
-          title: 'Services',
-          tab: _UserTab.services,
-        );
+        return const _ServicesScreen();
       case EmergencyScreen.requests:
-        return const _UserTabScreen(
-          title: 'Requests',
-          tab: _UserTab.requests,
-        );
+        return const _RequestsScreen();
       case EmergencyScreen.profile:
         return const _ProfileScreen();
+      case EmergencyScreen.tradeDetail:
+        return const _TradeDetailScreen();
+      case EmergencyScreen.serviceDescription:
+        return const _ServiceDescriptionScreen();
+      case EmergencyScreen.serviceLocation:
+        return const _ServiceLocationScreen();
+      case EmergencyScreen.serviceSchedule:
+        return const _ServiceScheduleScreen();
+      case EmergencyScreen.serviceConfirm:
+        return const _ServiceConfirmScreen();
+      case EmergencyScreen.domesticJob:
+        return const _DomesticJobScreen();
+      case EmergencyScreen.costReview:
+        return const _CostReviewScreen();
+      case EmergencyScreen.providerDashboard:
+        return const _ProviderDashboardScreen();
+      case EmergencyScreen.providerRequest:
+        return const _ProviderRequestScreen();
+      case EmergencyScreen.providerAccepted:
+        return const _ProviderAcceptedScreen();
+      case EmergencyScreen.providerJob:
+        return const _ProviderJobScreen();
       case EmergencyScreen.home:
         return const _HomeScreen();
       case EmergencyScreen.emergencyType:
@@ -200,6 +217,12 @@ class _LoginScreen extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
+              context.read<EmergencyRequestState>().continueProviderSignIn();
+            },
+            child: const Text('Sign in as provider'),
+          ),
+          TextButton(
+            onPressed: () {
               context.read<EmergencyRequestState>().goTo(
                 EmergencyScreen.roleChoice,
               );
@@ -284,6 +307,15 @@ class _RoleChoiceScreen extends StatelessWidget {
               );
             },
           ),
+          const SizedBox(height: AppSpacing.space3),
+          _ActionButton(
+            label: 'Register as Provider',
+            onPressed: () {
+              context.read<EmergencyRequestState>().chooseAccount(
+                AccountPath.provider,
+              );
+            },
+          ),
         ],
       ),
     );
@@ -295,12 +327,17 @@ class _RegisterScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final driver =
-        context.watch<EmergencyRequestState>().accountPath ==
-        AccountPath.driver;
+    final state = context.watch<EmergencyRequestState>();
+    final driver = state.accountPath == AccountPath.driver;
+    final provider = state.accountPath == AccountPath.provider;
+    final title = switch(state.accountPath) {
+      AccountPath.driver => 'Register as Driver',
+      AccountPath.provider => 'Register as Provider',
+      AccountPath.signIn || AccountPath.user => 'Register as User',
+    };
 
     return _FlowFrame(
-      title: driver ? 'Register as Driver' : 'Register as User',
+      title: title,
       onBack: () {
         context.read<EmergencyRequestState>().goTo(EmergencyScreen.roleChoice);
       },
@@ -334,6 +371,26 @@ class _RegisterScreen extends StatelessWidget {
                 labelText: 'Ambulance number',
                 border: OutlineInputBorder(),
               ),
+            ),
+          ],
+          if(provider) ...[
+            const SizedBox(height: AppSpacing.space4),
+            Text('TRADE', style: Theme.of(context).textTheme.labelSmall),
+            const SizedBox(height: AppSpacing.space2),
+            Wrap(
+              spacing: AppSpacing.space2,
+              runSpacing: AppSpacing.space2,
+              children: ['Carpenter', 'Plumber', 'Electrician']
+                  .map(
+                    (trade) => _SelectionChip(
+                      label: trade,
+                      selected: state.registerTrade == trade,
+                      onPressed: () {
+                        state.selectRegisterTrade(trade);
+                      },
+                    ),
+                  )
+                  .toList(),
             ),
           ],
           const SizedBox(height: AppSpacing.space5),
@@ -1304,6 +1361,15 @@ class _ProfileScreen extends StatelessWidget {
               );
             },
           ),
+          const SizedBox(height: AppSpacing.space2),
+          _ProfileRow(
+            label: 'Switch to provider mode',
+            onPressed: () {
+              context.read<EmergencyRequestState>().startProviderMode(
+                fromProfile: true,
+              );
+            },
+          ),
         ],
       ),
     );
@@ -1311,10 +1377,11 @@ class _ProfileScreen extends StatelessWidget {
 }
 
 class _ProfileRow extends StatelessWidget {
-  const _ProfileRow({required this.label, this.onPressed});
+  const _ProfileRow({required this.label, this.onPressed, this.trailing = '›'});
 
   final String label;
   final VoidCallback? onPressed;
+  final String trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -1340,7 +1407,7 @@ class _ProfileRow extends StatelessWidget {
                 ),
               ),
               Text(
-                '›',
+                trailing,
                 style: Theme.of(context).textTheme.labelLarge
                     ?.copyWith(color: AppColors.muted),
               ),
@@ -1352,18 +1419,1381 @@ class _ProfileRow extends StatelessWidget {
   }
 }
 
-class _UserTabScreen extends StatelessWidget {
-  const _UserTabScreen({required this.title, required this.tab});
+String _scheduleLabel(BuildContext context, DateTime? scheduledAt) {
+  if(scheduledAt == null) {
+    return 'As soon as possible';
+  }
 
-  final String title;
-  final _UserTab tab;
+  final localizations = MaterialLocalizations.of(context);
+  final time = localizations.formatTimeOfDay(
+    TimeOfDay.fromDateTime(scheduledAt),
+  );
+  return '${localizations.formatMediumDate(scheduledAt)} · $time';
+}
+
+class _ServicesScreen extends StatelessWidget {
+  const _ServicesScreen();
 
   @override
   Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+
     return _FlowFrame(
-      title: title,
-      tab: tab,
-      child: const SizedBox.shrink(),
+      title: 'Services',
+      tab: _UserTab.services,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'What do you need fixed?',
+            style: Theme.of(context).textTheme.headlineLarge,
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          Text(
+            'Take your time. Compare the right person for the job.',
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.muted),
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          _ChoiceCard(
+            icon: Icons.plumbing,
+            title: 'Plumber',
+            subtitle: 'View options',
+            color: AppColors.green,
+            onTap: () {
+              state.openTrade('Plumber');
+            },
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _ChoiceCard(
+            icon: Icons.electrical_services,
+            title: 'Electrician',
+            subtitle: 'View options',
+            color: AppColors.green,
+            onTap: () {
+              state.openTrade('Electrician');
+            },
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _ChoiceCard(
+            icon: Icons.carpenter,
+            title: 'Carpenter',
+            subtitle: 'View options',
+            color: AppColors.green,
+            onTap: () {
+              state.openTrade('Carpenter');
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TradeDetailScreen extends StatelessWidget {
+  const _TradeDetailScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final plumber = state.domesticTrade == 'Plumber';
+    final issues = plumber
+        ? ['Pipe leak', 'Tap install', 'Water motor', 'Other']
+        : ['Other'];
+
+    return _FlowFrame(
+      title: state.domesticTrade,
+      tab: _UserTab.services,
+      onBack: () {
+        state.goTo(EmergencyScreen.services);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            state.domesticTrade,
+            style: Theme.of(context).textTheme.headlineLarge,
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          Text(
+            plumber
+                ? 'Leaks, pipes, taps, and water motors.'
+                : 'Describe the job on the next screen.',
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.muted),
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          Text('CHOOSE AN ISSUE', style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: AppSpacing.space2),
+          Wrap(
+            spacing: AppSpacing.space2,
+            runSpacing: AppSpacing.space2,
+            children: issues
+                .map(
+                  (issue) => _SelectionChip(
+                    label: issue,
+                    selected: state.domesticIssue == issue,
+                    onPressed: () {
+                      state.selectDomesticIssue(issue);
+                    },
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: AppSpacing.space5),
+          _ActionButton(
+            label: 'Book ${state.domesticTrade.toLowerCase()}',
+            color: AppColors.green,
+            onPressed: () {
+              state.goTo(EmergencyScreen.serviceDescription);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ServiceDescriptionScreen extends StatelessWidget {
+  const _ServiceDescriptionScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final plumber = state.domesticTrade == 'Plumber';
+
+    return _FlowFrame(
+      title: 'Service details',
+      tab: _UserTab.services,
+      onBack: () {
+        state.goTo(EmergencyScreen.tradeDetail);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Describe the problem',
+            style: Theme.of(context).textTheme.headlineLarge,
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          if(plumber) ...[
+            Text(
+              'SELECT SPECIFIC ISSUE',
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+            const SizedBox(height: AppSpacing.space2),
+            Wrap(
+              spacing: AppSpacing.space2,
+              runSpacing: AppSpacing.space2,
+              children: ['Water leak', 'Low pressure', 'Blocked pipe']
+                  .map(
+                    (issue) => _SelectionChip(
+                      label: issue,
+                      selected: state.domesticSpecificIssue == issue,
+                      onPressed: () {
+                        state.selectSpecificIssue(issue);
+                      },
+                    ),
+                  )
+                  .toList(),
+            ),
+            const SizedBox(height: AppSpacing.space4),
+          ],
+          TextField(
+            minLines: 3,
+            maxLines: 4,
+            decoration: InputDecoration(
+              labelText: 'Describe your service problem',
+              hintText: plumber ? 'Kitchen sink leaking from pipe joint.' : null,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _SecondaryButton(
+            label: 'Add photo',
+            onPressed: state.attachDomesticPhoto,
+          ),
+          if(state.domesticPhotoAttached) ...[
+            const SizedBox(height: AppSpacing.space2),
+            Text('Photo attached.', style: Theme.of(context).textTheme.bodyLarge),
+          ],
+          const SizedBox(height: AppSpacing.space5),
+          _ActionButton(
+            label: 'Continue',
+            onPressed: () {
+              state.goTo(EmergencyScreen.serviceLocation);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ServiceLocationScreen extends StatelessWidget {
+  const _ServiceLocationScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+
+    return _FlowFrame(
+      title: 'Location',
+      tab: _UserTab.services,
+      onBack: () {
+        state.goTo(EmergencyScreen.serviceDescription);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Where should we send the provider?',
+            style: Theme.of(context).textTheme.headlineLarge,
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          for(final place in [
+            'Home · DHA Phase 5',
+            'Office · Shahrah-e-Faisal',
+            'Pick on map',
+          ]) ...[
+            _ProfileRow(
+              label: place,
+              trailing: state.domesticPlace == place ? '✓' : '›',
+              onPressed: () {
+                state.selectDomesticPlace(place);
+              },
+            ),
+            const SizedBox(height: AppSpacing.space2),
+          ],
+          const SizedBox(height: AppSpacing.space3),
+          TextFormField(
+            initialValue: 'Near XYZ Mall, Gate 3',
+            decoration: const InputDecoration(
+              labelText: 'Landmark',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space5),
+          _ActionButton(
+            label: 'Continue',
+            onPressed: () {
+              state.goTo(EmergencyScreen.serviceSchedule);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ServiceScheduleScreen extends StatelessWidget {
+  const _ServiceScheduleScreen();
+
+  Future<void> pickLater(
+    BuildContext context,
+    EmergencyRequestState state,
+  ) async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 30)),
+    );
+    if(date == null || !context.mounted) {
+      return;
+    }
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(now),
+    );
+    if(time == null) {
+      return;
+    }
+
+    state.scheduleDomestic(
+      DateTime(date.year, date.month, date.day, time.hour, time.minute),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final later = state.domesticScheduledAt != null;
+
+    return _FlowFrame(
+      title: 'Schedule',
+      tab: _UserTab.services,
+      onBack: () {
+        state.goTo(EmergencyScreen.serviceLocation);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'When do you need help?',
+            style: Theme.of(context).textTheme.headlineLarge,
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          _ChoiceCard(
+            icon: Icons.bolt,
+            title: 'As soon as possible',
+            subtitle: 'Within about one hour',
+            color: later ? AppColors.muted : AppColors.green,
+            onTap: () {
+              state.scheduleDomestic(null);
+            },
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _ChoiceCard(
+            icon: Icons.schedule,
+            title: 'Schedule for later',
+            subtitle: later
+                ? _scheduleLabel(context, state.domesticScheduledAt)
+                : 'Choose date and time',
+            color: later ? AppColors.green : AppColors.muted,
+            onTap: () {
+              pickLater(context, state);
+            },
+          ),
+          const SizedBox(height: AppSpacing.space5),
+          _ActionButton(
+            label: 'Continue',
+            onPressed: () {
+              state.goTo(EmergencyScreen.serviceConfirm);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ServiceConfirmScreen extends StatelessWidget {
+  const _ServiceConfirmScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+
+    return _FlowFrame(
+      title: 'Confirm service',
+      tab: _UserTab.services,
+      onBack: () {
+        state.goTo(EmergencyScreen.serviceSchedule);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Confirm your request',
+            style: Theme.of(context).textTheme.headlineLarge,
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          _InfoCard(
+            title: '${state.domesticTrade} · ${state.domesticIssue}',
+            subtitle:
+                '${state.domesticPlace} · ${_scheduleLabel(context, state.domesticScheduledAt)}',
+            icon: Icons.handyman_rounded,
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          Text(
+            'Inspection fee is x within 5 km, plus y for each kilometre after that. Repair cost is set after the visit.',
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+          const SizedBox(height: AppSpacing.space5),
+          Row(
+            children: [
+              Expanded(
+                child: _SecondaryButton(
+                  label: 'Cancel',
+                  onPressed: state.cancelDomestic,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.space3),
+              Expanded(
+                child: _ActionButton(
+                  label: 'Confirm',
+                  onPressed: state.confirmDomestic,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DomesticJobScreen extends StatefulWidget {
+  const _DomesticJobScreen();
+
+  @override
+  State<_DomesticJobScreen> createState() => _DomesticJobScreenState();
+}
+
+class _DomesticJobScreenState extends State<_DomesticJobScreen> {
+  bool showingProfile = false;
+  int stars = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+
+    if(showingProfile) {
+      return providerProfile(context);
+    }
+
+    return switch(state.domesticJob) {
+      DomesticJob.idle || DomesticJob.searching => searching(context, state),
+      DomesticJob.assigned => assigned(context, state),
+      DomesticJob.enRoute => enRoute(context, state),
+      DomesticJob.inProgress ||
+      DomesticJob.costReview => inProgress(context, state),
+      DomesticJob.refused => refused(context, state),
+      DomesticJob.complete => rating(context, state),
+    };
+  }
+
+  Widget notice(BuildContext context, EmergencyRequestState state) {
+    if(state.domesticNotice == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.space3),
+      child: Text(
+        state.domesticNotice!,
+        style: Theme.of(context).textTheme.bodyLarge,
+      ),
+    );
+  }
+
+  Widget callAndChat(EmergencyRequestState state) {
+    return Row(
+      children: [
+        Expanded(
+          child: _SecondaryButton(
+            label: 'Call',
+            onPressed: () {
+              state.showDomesticNotice('No call was placed.');
+            },
+          ),
+        ),
+        const SizedBox(width: AppSpacing.space3),
+        Expanded(
+          child: _SecondaryButton(
+            label: 'Chat',
+            onPressed: () {
+              state.showDomesticNotice('No message was sent.');
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget searching(BuildContext context, EmergencyRequestState state) {
+    return _FlowFrame(
+      title: 'Finding a provider',
+      tab: _UserTab.services,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: AppSpacing.space6),
+          const Center(
+            child: SizedBox(
+              width: 52,
+              height: 52,
+              child: CircularProgressIndicator(
+                color: AppColors.green,
+                strokeWidth: 6,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space5),
+          Text(
+            'Finding a ${state.domesticTrade.toLowerCase()}',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineLarge,
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          Text(
+            'Matching you with an available provider nearby.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.muted),
+          ),
+          const SizedBox(height: AppSpacing.space6),
+          _ActionButton(
+            label: 'Provider accepts',
+            onPressed: state.providerAccepts,
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _SecondaryButton(
+            label: 'Cancel request',
+            onPressed: state.cancelDomestic,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget assigned(BuildContext context, EmergencyRequestState state) {
+    return _FlowFrame(
+      title: 'Provider assigned',
+      tab: _UserTab.services,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _StatusPill(label: 'Provider found', color: AppColors.green),
+          const SizedBox(height: AppSpacing.space3),
+          const _InfoCard(
+            title: 'John Stewart',
+            subtitle: '★ 4.8 · 127 reviews · Plumber',
+            icon: Icons.person_rounded,
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          Text(
+            '3.2 km away · ETA 25 min',
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          Text(
+            'Other providers no longer see this request.',
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          Text(
+            'Inspection fee: x',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          notice(context, state),
+          const SizedBox(height: AppSpacing.space5),
+          _ActionButton(
+            label: 'Track on map',
+            onPressed: state.trackProvider,
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          callAndChat(state),
+          const SizedBox(height: AppSpacing.space3),
+          _SecondaryButton(
+            label: 'View profile',
+            onPressed: () {
+              setState(() {
+                showingProfile = true;
+              });
+            },
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _SecondaryButton(
+            label: 'Cancel',
+            onPressed: state.cancelAssignedProvider,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget providerProfile(BuildContext context) {
+    return _FlowFrame(
+      title: 'Provider profile',
+      tab: _UserTab.services,
+      onBack: () {
+        setState(() {
+          showingProfile = false;
+        });
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Align(
+            child: CircleAvatar(
+              radius: 26,
+              backgroundColor: AppColors.green,
+              child: Icon(
+                Icons.person,
+                color: AppColors.surface,
+                size: 24,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          Text(
+            'John Stewart',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          Text(
+            'Plumber',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.muted),
+          ),
+          Text(
+            '★ 4.8 · 127 reviews',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget enRoute(BuildContext context, EmergencyRequestState state) {
+    return _FlowFrame(
+      title: 'Provider en route',
+      tab: _UserTab.services,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _InfoCard(
+            title: 'John Stewart · Plumber',
+            subtitle: 'ETA 18 min · ${state.domesticIssue}',
+            icon: Icons.person_rounded,
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          const _MapBlock(),
+          notice(context, state),
+          const SizedBox(height: AppSpacing.space3),
+          callAndChat(state),
+          const SizedBox(height: AppSpacing.space3),
+          _ActionButton(
+            label: 'Provider arrived',
+            color: AppColors.green,
+            onPressed: state.providerArrived,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget inProgress(BuildContext context, EmergencyRequestState state) {
+    return _FlowFrame(
+      title: 'Service in progress',
+      tab: _UserTab.services,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: AppSpacing.space5),
+          const Icon(
+            Icons.handyman_rounded,
+            color: AppColors.green,
+            size: 52,
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          Text(
+            'John has started work',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineLarge,
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          Text(
+            '${state.domesticIssue} · Started at 11:15 AM',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.muted),
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          const _InfoCard(
+            title: 'Need help?',
+            subtitle: 'Contact support if something is wrong.',
+            icon: Icons.support_agent_rounded,
+          ),
+          notice(context, state),
+          const SizedBox(height: AppSpacing.space5),
+          _ActionButton(
+            label: 'Mark job as complete',
+            color: AppColors.green,
+            onPressed: () {
+              state.openCostReview(fromProvider: false);
+            },
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _SecondaryButton(
+            label: 'Contact support',
+            onPressed: () {
+              state.showDomesticNotice('Support was not contacted.');
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget refused(BuildContext context, EmergencyRequestState state) {
+    return _FlowFrame(
+      title: 'Confirm final cost',
+      tab: _UserTab.services,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Inspection fee only',
+            style: Theme.of(context).textTheme.headlineLarge,
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          Text(
+            state.amountOwed!,
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: AppSpacing.space5),
+          _ActionButton(
+            label: 'Back to services',
+            onPressed: () {
+              state.finishDomestic(EmergencyScreen.services);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget rating(BuildContext context, EmergencyRequestState state) {
+    return _FlowFrame(
+      title: 'Service complete',
+      tab: _UserTab.services,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: AppSpacing.space5),
+          const Icon(
+            Icons.check_circle_rounded,
+            color: AppColors.green,
+            size: 52,
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          Text(
+            'How was John?',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineLarge,
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          Text(
+            'Your rating helps other customers choose.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.muted),
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for(var star = 1; star <= 5; star++)
+                IconButton(
+                  tooltip: 'Rate $star stars',
+                  icon: Icon(
+                    star <= stars ? Icons.star_rounded : Icons.star_border_rounded,
+                    color: AppColors.orange,
+                    size: 36,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      stars = star;
+                    });
+                  },
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          const TextField(
+            minLines: 3,
+            maxLines: 4,
+            decoration: InputDecoration(
+              labelText: 'Optional service review',
+              hintText: 'Add a review (optional)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space5),
+          _ActionButton(
+            label: 'Submit rating',
+            onPressed: () {
+              state.finishDomestic(EmergencyScreen.home);
+            },
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _SecondaryButton(
+            label: 'Skip',
+            onPressed: () {
+              state.finishDomestic(EmergencyScreen.home);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CostReviewScreen extends StatefulWidget {
+  const _CostReviewScreen();
+
+  @override
+  State<_CostReviewScreen> createState() => _CostReviewScreenState();
+}
+
+class _CostReviewScreenState extends State<_CostReviewScreen> {
+  final repairTotal = TextEditingController();
+
+  @override
+  void dispose() {
+    repairTotal.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final typedTotal = repairTotal.text.trim();
+
+    return _FlowFrame(
+      title: 'Confirm final cost',
+      tab: state.costFromProvider ? null : _UserTab.services,
+      onBack: state.backFromCostReview,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Review before payment',
+            style: Theme.of(context).textTheme.headlineLarge,
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          TextField(
+            controller: repairTotal,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (_) {
+              setState(() {});
+            },
+            decoration: const InputDecoration(
+              labelText: 'Repair total',
+              helperText: 'This amount does not include the inspection fee.',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          Text(
+            'Inspection fee: x',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          if(typedTotal.isEmpty) ...[
+            const SizedBox(height: AppSpacing.space2),
+            Text(
+              'Waiting for the repair total.',
+              style: Theme.of(context).textTheme.bodyLarge
+                  ?.copyWith(color: AppColors.muted),
+            ),
+          ],
+          if(state.domesticNotice != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            Text(
+              state.domesticNotice!,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+          const SizedBox(height: AppSpacing.space5),
+          if(typedTotal.isNotEmpty) ...[
+            _ActionButton(
+              label: 'Accept',
+              color: AppColors.green,
+              onPressed: () {
+                state.acceptRepairTotal(typedTotal);
+              },
+            ),
+            const SizedBox(height: AppSpacing.space3),
+            _SecondaryButton(
+              label: 'Refuse',
+              onPressed: state.refuseRepairTotal,
+            ),
+            const SizedBox(height: AppSpacing.space3),
+          ],
+          _SecondaryButton(
+            label: 'Report an issue',
+            onPressed: () {
+              state.showDomesticNotice('The issue was saved on this phone.');
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RequestsScreen extends StatefulWidget {
+  const _RequestsScreen();
+
+  @override
+  State<_RequestsScreen> createState() => _RequestsScreenState();
+}
+
+class _RequestsScreenState extends State<_RequestsScreen> {
+  int? openedEntry;
+
+  @override
+  Widget build(BuildContext context) {
+    final history = context.watch<EmergencyRequestState>().domesticHistory;
+
+    return _FlowFrame(
+      title: 'Requests',
+      tab: _UserTab.requests,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if(history.isNotEmpty) ...[
+            Text('HISTORY', style: Theme.of(context).textTheme.labelSmall),
+            const SizedBox(height: AppSpacing.space2),
+          ],
+          for(var index = 0; index < history.length; index++) ...[
+            _ProfileRow(
+              label: history[index].label,
+              onPressed: () {
+                setState(() {
+                  openedEntry = index;
+                });
+              },
+            ),
+            const SizedBox(height: AppSpacing.space2),
+          ],
+          if(openedEntry != null) ...[
+            const SizedBox(height: AppSpacing.space2),
+            Text(
+              history[openedEntry!].owed,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ProviderDashboardScreen extends StatelessWidget {
+  const _ProviderDashboardScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final offline = state.providerDuty == ProviderDuty.offline;
+    final onJob = state.providerDuty == ProviderDuty.onJob;
+    final (dutyLabel, dutyColor) = switch(state.providerDuty) {
+      ProviderDuty.available => ('Available', AppColors.green),
+      ProviderDuty.offline => ('Offline', AppColors.muted),
+      ProviderDuty.onJob => ('On a job', AppColors.blue),
+    };
+
+    return _FlowFrame(
+      title: 'Provider dashboard',
+      onBack: state.leaveProviderMode,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const CircleAvatar(
+                radius: 26,
+                backgroundColor: AppColors.green,
+                child: Icon(Icons.person, color: AppColors.surface, size: 24),
+              ),
+              const SizedBox(width: AppSpacing.space3),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'John Stewart',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  Text(
+                    'Plumber · 4.8 rating',
+                    style: Theme.of(context).textTheme.bodyLarge
+                        ?.copyWith(color: AppColors.muted),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          _StatusPill(label: dutyLabel, color: dutyColor),
+          if(!onJob) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _SecondaryButton(
+              label: offline ? 'Tap to go online' : 'Tap to go offline',
+              onPressed: () {
+                state.setProviderOnline(offline);
+              },
+            ),
+          ],
+          if(state.amountOwed != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            Text(
+              state.amountOwed!,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+          const SizedBox(height: AppSpacing.space5),
+          Text(
+            'INCOMING REQUEST',
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          if(offline)
+            Text(
+              'You are offline.',
+              style: Theme.of(context).textTheme.bodyLarge
+                  ?.copyWith(color: AppColors.muted),
+            )
+          else
+            for(final request in state.incomingRequests) ...[
+              _ChoiceCard(
+                icon: Icons.plumbing,
+                title: EmergencyRequestState.demoRequests[request].title,
+                subtitle:
+                    '${EmergencyRequestState.demoRequests[request].area} · Inspection fee: x',
+                color: AppColors.green,
+                onTap: () {
+                  state.openRequest(request);
+                },
+              ),
+              const SizedBox(height: AppSpacing.space3),
+            ],
+          const SizedBox(height: AppSpacing.space4),
+          Text("TODAY'S JOBS", style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: AppSpacing.space2),
+          if(onJob) ...[
+            _ProfileRow(
+              label:
+                  'Active job · ${EmergencyRequestState.demoRequests[state.activeRequest!].title}',
+              onPressed: () {
+                state.goTo(EmergencyScreen.providerJob);
+              },
+            ),
+            const SizedBox(height: AppSpacing.space2),
+          ],
+          if(state.pendingRequest != null)
+            _ProfileRow(
+              label:
+                  'Pending · ${EmergencyRequestState.demoRequests[state.pendingRequest!].title} · ${EmergencyRequestState.demoRequests[state.pendingRequest!].area}',
+              onPressed: () {
+                state.openRequest(state.pendingRequest!);
+              },
+            ),
+          if(state.pendingRequest == null && !onJob)
+            Text(
+              'No upcoming jobs.',
+              style: Theme.of(context).textTheme.bodyLarge
+                  ?.copyWith(color: AppColors.muted),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProviderRequestScreen extends StatelessWidget {
+  const _ProviderRequestScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final id = state.openedRequest;
+    final request = EmergencyRequestState.demoRequests[id];
+    final onJob = state.providerDuty == ProviderDuty.onJob;
+    final blocked = state.blockedRequests.contains(id);
+    final pending = state.pendingRequest == id;
+    final incoming = state.incomingRequests.contains(id);
+    final pendingFull = onJob && state.pendingRequest != null && !pending;
+    final canAccept =
+        !blocked && ((incoming && !pendingFull) || (pending && !onJob));
+    final String? reason;
+    if(blocked) {
+      reason = 'You cannot take this request again.';
+    }
+    else if(pending && onJob) {
+      reason = 'Finish the active job before taking this one.';
+    }
+    else if(incoming && pendingFull) {
+      reason = 'Pending already holds a job.';
+    }
+    else {
+      reason = null;
+    }
+
+    return _FlowFrame(
+      title: 'Request details',
+      onBack: () {
+        state.goTo(EmergencyScreen.providerDashboard);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _InfoCard(
+            title: request.title,
+            subtitle: 'Customer: Hal Jordan',
+            icon: Icons.plumbing,
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _InfoCard(
+            title: 'Location',
+            subtitle: request.location,
+            icon: Icons.location_on_rounded,
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          Text(
+            'Inspection fee: x',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          if(pending) ...[
+            const SizedBox(height: AppSpacing.space4),
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.space3),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                border: Border.all(color: AppColors.line),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    "CUSTOMER'S SCREEN",
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                  const SizedBox(height: AppSpacing.space2),
+                  Text(
+                    'This provider is busy',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: AppSpacing.space3),
+                  _SecondaryButton(
+                    label: 'Cancel',
+                    onPressed: state.cancelPendingRequest,
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if(reason != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            Text(reason, style: Theme.of(context).textTheme.bodyLarge),
+          ],
+          const SizedBox(height: AppSpacing.space5),
+          if(canAccept) ...[
+            _ActionButton(
+              label: 'Accept job',
+              color: AppColors.green,
+              onPressed: state.acceptRequest,
+            ),
+            const SizedBox(height: AppSpacing.space3),
+          ],
+          if(incoming)
+            _SecondaryButton(
+              label: 'Decline',
+              onPressed: state.declineRequest,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProviderAcceptedScreen extends StatelessWidget {
+  const _ProviderAcceptedScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+
+    return _FlowFrame(
+      title: 'Job accepted',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: AppSpacing.space5),
+          const Icon(
+            Icons.check_circle_rounded,
+            color: AppColors.green,
+            size: 52,
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          Text(
+            'Customer notified',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineLarge,
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          Text(
+            "Your estimated arrival time is 18 minutes. Start navigating when you're ready.",
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.muted),
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          Text(
+            'Other providers no longer see this request.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+          if(state.domesticNotice != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            Text(
+              state.domesticNotice!,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+          const SizedBox(height: AppSpacing.space5),
+          _ActionButton(
+            label: 'Navigate to customer',
+            onPressed: () {
+              state.goTo(EmergencyScreen.providerJob);
+            },
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _SecondaryButton(
+            label: 'Call customer',
+            onPressed: () {
+              state.showDomesticNotice('No call was placed.');
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProviderJobScreen extends StatefulWidget {
+  const _ProviderJobScreen();
+
+  @override
+  State<_ProviderJobScreen> createState() => _ProviderJobScreenState();
+}
+
+class _ProviderJobScreenState extends State<_ProviderJobScreen> {
+  bool showingMap = false;
+  bool photoAttached = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final request = EmergencyRequestState.demoRequests[state.activeRequest!];
+    final started = state.domesticJob == DomesticJob.inProgress;
+
+    return _FlowFrame(
+      title: 'Active job',
+      onBack: () {
+        state.goTo(EmergencyScreen.providerDashboard);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _InfoCard(
+            title: request.title,
+            subtitle: 'Hal Jordan · ${request.address}',
+            icon: Icons.plumbing,
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _ActionButton(
+            label: 'Navigate to customer',
+            onPressed: () {
+              setState(() {
+                showingMap = true;
+              });
+            },
+          ),
+          if(showingMap) ...[
+            const SizedBox(height: AppSpacing.space3),
+            const _MapBlock(),
+          ],
+          if(!started) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _ActionButton(
+              label: 'Start job',
+              color: AppColors.green,
+              onPressed: state.startProviderWork,
+            ),
+          ],
+          const SizedBox(height: AppSpacing.space3),
+          const TextField(
+            minLines: 2,
+            maxLines: 3,
+            decoration: InputDecoration(
+              labelText: 'Provider notes',
+              hintText: 'Notes about the job',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _SecondaryButton(
+            label: 'Upload photos',
+            onPressed: () {
+              setState(() {
+                photoAttached = true;
+              });
+            },
+          ),
+          if(photoAttached) ...[
+            const SizedBox(height: AppSpacing.space2),
+            Text('Photo attached.', style: Theme.of(context).textTheme.bodyLarge),
+          ],
+          if(started) ...[
+            const SizedBox(height: AppSpacing.space5),
+            _ActionButton(
+              label: 'Complete job',
+              color: AppColors.green,
+              onPressed: () {
+                state.openCostReview(fromProvider: true);
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MapBlock extends StatelessWidget {
+  const _MapBlock();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 190,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: AppColors.page,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.line, width: 2),
+      ),
+      child: const Icon(
+        Icons.location_on_rounded,
+        color: AppColors.blue,
+        size: 42,
+      ),
+    );
+  }
+}
+
+class _SecondaryButton extends StatelessWidget {
+  const _SecondaryButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 48,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.blue,
+          side: const BorderSide(color: AppColors.line),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+          ),
+        ),
+        child: Text(label),
+      ),
     );
   }
 }
