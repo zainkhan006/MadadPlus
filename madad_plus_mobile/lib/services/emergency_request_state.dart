@@ -23,7 +23,15 @@ enum EmergencyScreen {
   emergencyApproaching,
   emergencyArrived,
   emergencyComplete,
+  roleChoice,
+  register,
+  driverJob,
+  services,
+  requests,
+  profile,
 }
+
+enum AccountPath { signIn, driver, user }
 
 class EmergencyRequestState extends ChangeNotifier {
   static const double demoLatitude = 24.8140;
@@ -37,6 +45,7 @@ class EmergencyRequestState extends ChangeNotifier {
       EmergencySocketService();
 
   EmergencyScreen currentScreen = EmergencyScreen.splash;
+  AccountPath accountPath = AccountPath.signIn;
   String selectedDetail = 'Cardiac';
   int peopleNeedingHelp = 1;
   String? requestId;
@@ -63,6 +72,43 @@ class EmergencyRequestState extends ChangeNotifier {
     currentScreen = screen;
     errorMessage = null;
     notifyListeners();
+  }
+
+  void continueSignIn() {
+    accountPath = AccountPath.signIn;
+    goTo(EmergencyScreen.otp);
+  }
+
+  void continueDriverSignIn() {
+    accountPath = AccountPath.driver;
+    goTo(EmergencyScreen.otp);
+  }
+
+  void chooseAccount(AccountPath path) {
+    accountPath = path;
+    goTo(EmergencyScreen.register);
+  }
+
+  void continueRegistration() {
+    goTo(EmergencyScreen.otp);
+  }
+
+  void verifyCode() {
+    if(accountPath == AccountPath.driver) {
+      goTo(EmergencyScreen.driverJob);
+      return;
+    }
+
+    goTo(EmergencyScreen.home);
+  }
+
+  void backFromOtp() {
+    if(accountPath == AccountPath.signIn) {
+      goTo(EmergencyScreen.login);
+      return;
+    }
+
+    goTo(EmergencyScreen.register);
   }
 
   void selectDetail(String detail) {

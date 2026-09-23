@@ -20,6 +20,24 @@ class EmergencyFlow extends StatelessWidget {
         return const _LoginScreen();
       case EmergencyScreen.otp:
         return const _OtpScreen();
+      case EmergencyScreen.roleChoice:
+        return const _RoleChoiceScreen();
+      case EmergencyScreen.register:
+        return const _RegisterScreen();
+      case EmergencyScreen.driverJob:
+        return const _DriverJobScreen();
+      case EmergencyScreen.services:
+        return const _UserTabScreen(
+          title: 'Services',
+          tab: _UserTab.services,
+        );
+      case EmergencyScreen.requests:
+        return const _UserTabScreen(
+          title: 'Requests',
+          tab: _UserTab.requests,
+        );
+      case EmergencyScreen.profile:
+        return const _ProfileScreen();
       case EmergencyScreen.home:
         return const _HomeScreen();
       case EmergencyScreen.emergencyType:
@@ -148,7 +166,7 @@ class _LoginScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Your phone number',
+            'Existing account',
             style: Theme.of(context).textTheme.headlineMedium,
           ),
           const SizedBox(height: AppSpacing.space2),
@@ -170,8 +188,23 @@ class _LoginScreen extends StatelessWidget {
           _ActionButton(
             label: 'CONTINUE',
             onPressed: () {
-              context.read<EmergencyRequestState>().goTo(EmergencyScreen.otp);
+              context.read<EmergencyRequestState>().continueSignIn();
             },
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          TextButton(
+            onPressed: () {
+              context.read<EmergencyRequestState>().continueDriverSignIn();
+            },
+            child: const Text('Sign in as driver'),
+          ),
+          TextButton(
+            onPressed: () {
+              context.read<EmergencyRequestState>().goTo(
+                EmergencyScreen.roleChoice,
+              );
+            },
+            child: const Text('Create account'),
           ),
         ],
       ),
@@ -187,7 +220,7 @@ class _OtpScreen extends StatelessWidget {
     return _FlowFrame(
       title: 'Verify phone',
       onBack: () {
-        context.read<EmergencyRequestState>().goTo(EmergencyScreen.login);
+        context.read<EmergencyRequestState>().backFromOtp();
       },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -211,9 +244,380 @@ class _OtpScreen extends StatelessWidget {
           _ActionButton(
             label: 'VERIFY',
             onPressed: () {
-              context.read<EmergencyRequestState>().goTo(EmergencyScreen.home);
+              context.read<EmergencyRequestState>().verifyCode();
             },
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoleChoiceScreen extends StatelessWidget {
+  const _RoleChoiceScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return _FlowFrame(
+      title: 'How are you joining?',
+      onBack: () {
+        context.read<EmergencyRequestState>().goTo(EmergencyScreen.login);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: AppSpacing.space6),
+          _ActionButton(
+            label: 'Register as Driver',
+            onPressed: () {
+              context.read<EmergencyRequestState>().chooseAccount(
+                AccountPath.driver,
+              );
+            },
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _ActionButton(
+            label: 'Register as User',
+            onPressed: () {
+              context.read<EmergencyRequestState>().chooseAccount(
+                AccountPath.user,
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RegisterScreen extends StatelessWidget {
+  const _RegisterScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final driver =
+        context.watch<EmergencyRequestState>().accountPath ==
+        AccountPath.driver;
+
+    return _FlowFrame(
+      title: driver ? 'Register as Driver' : 'Register as User',
+      onBack: () {
+        context.read<EmergencyRequestState>().goTo(EmergencyScreen.roleChoice);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'This wireframe accepts what you type.',
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.muted),
+          ),
+          const SizedBox(height: AppSpacing.space5),
+          const TextField(
+            decoration: InputDecoration(
+              labelText: 'Name',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          const TextField(
+            keyboardType: TextInputType.phone,
+            decoration: InputDecoration(
+              labelText: 'Phone number',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          if(driver) ...[
+            const SizedBox(height: AppSpacing.space3),
+            const TextField(
+              decoration: InputDecoration(
+                labelText: 'Ambulance number',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.space5),
+          _ActionButton(
+            label: 'Continue',
+            onPressed: () {
+              context.read<EmergencyRequestState>().continueRegistration();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+enum _DriverJob {
+  pickupBusy,
+  pickupUnavailable,
+  hospitalBusy,
+  hospitalUnavailable,
+  dropoff,
+  free,
+  idleUnavailable,
+}
+
+class _DriverJobScreen extends StatefulWidget {
+  const _DriverJobScreen();
+
+  @override
+  State<_DriverJobScreen> createState() => _DriverJobScreenState();
+}
+
+class _DriverJobScreenState extends State<_DriverJobScreen> {
+  _DriverJob job = _DriverJob.pickupBusy;
+  double slide = 0;
+  bool dropoffPrompted = false;
+
+  void markUnavailable() {
+    setState(() {
+      switch(job) {
+        case _DriverJob.pickupBusy:
+          job = _DriverJob.pickupUnavailable;
+        case _DriverJob.hospitalBusy:
+          job = _DriverJob.hospitalUnavailable;
+        case _DriverJob.free:
+          job = _DriverJob.idleUnavailable;
+        case _DriverJob.pickupUnavailable:
+        case _DriverJob.hospitalUnavailable:
+        case _DriverJob.dropoff:
+        case _DriverJob.idleUnavailable:
+          break;
+      }
+    });
+  }
+
+  void markAvailable() {
+    setState(() {
+      job = _DriverJob.free;
+    });
+  }
+
+  void pickedUp() {
+    if(job != _DriverJob.pickupBusy) {
+      return;
+    }
+
+    setState(() {
+      job = _DriverJob.hospitalBusy;
+    });
+  }
+
+  void reachedHospital() {
+    if(job != _DriverJob.hospitalBusy) {
+      return;
+    }
+
+    setState(() {
+      job = _DriverJob.dropoff;
+      slide = 0;
+    });
+  }
+
+  void confirmDropoff() {
+    Navigator.of(context).pop();
+    setState(() {
+      job = _DriverJob.pickupBusy;
+      slide = 0;
+      dropoffPrompted = false;
+    });
+  }
+
+  void slideTo(double value) {
+    if(job != _DriverJob.dropoff) {
+      return;
+    }
+
+    setState(() {
+      slide = value;
+    });
+    if(value < 1 || dropoffPrompted) {
+      return;
+    }
+
+    dropoffPrompted = true;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Patient dropped off'),
+          content: const Text('This ambulance is free again.'),
+          actions: [
+            TextButton(
+              onPressed: confirmDropoff,
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = switch(job) {
+      _DriverJob.pickupBusy || _DriverJob.pickupUnavailable => 'Pickup',
+      _DriverJob.hospitalBusy ||
+      _DriverJob.hospitalUnavailable => 'To hospital',
+      _DriverJob.dropoff => 'Drop-off',
+      _DriverJob.free || _DriverJob.idleUnavailable => 'No active call',
+    };
+    final status = switch(job) {
+      _DriverJob.pickupBusy || _DriverJob.hospitalBusy => 'BUSY',
+      _DriverJob.free => 'FREE',
+      _ => 'UNAVAILABLE',
+    };
+    final statusColor = switch(job) {
+      _DriverJob.pickupBusy || _DriverJob.hospitalBusy => AppColors.blue,
+      _DriverJob.free => AppColors.green,
+      _ => AppColors.orange,
+    };
+    final onCall =
+        job == _DriverJob.pickupBusy ||
+        job == _DriverJob.pickupUnavailable ||
+        job == _DriverJob.hospitalBusy ||
+        job == _DriverJob.hospitalUnavailable ||
+        job == _DriverJob.dropoff;
+    final atHospital =
+        job == _DriverJob.hospitalBusy ||
+        job == _DriverJob.hospitalUnavailable;
+    final message = switch(job) {
+      _DriverJob.pickupUnavailable =>
+        'The nearest free ambulance is sent to the address the caller typed.',
+      _DriverJob.hospitalUnavailable =>
+        'The nearest free ambulance is sent to this ambulance so the patient can transfer.',
+      _DriverJob.free => 'The dispatcher now sees this ambulance as FREE.',
+      _DriverJob.idleUnavailable =>
+        'The dispatcher will not send this ambulance a call.',
+      _ => null,
+    };
+    final showMarkUnavailable =
+        job == _DriverJob.pickupBusy ||
+        job == _DriverJob.hospitalBusy ||
+        job == _DriverJob.free;
+    final showMarkAvailable =
+        job == _DriverJob.pickupUnavailable ||
+        job == _DriverJob.hospitalUnavailable ||
+        job == _DriverJob.idleUnavailable;
+
+    return _FlowFrame(
+      title: title,
+      onBack: () {
+        context.read<EmergencyRequestState>().goTo(EmergencyScreen.login);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            height: 190,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.page,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: AppColors.line, width: 2),
+            ),
+            child: const Icon(
+              Icons.location_on_rounded,
+              color: AppColors.blue,
+              size: 42,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.space3,
+                vertical: AppSpacing.space1,
+              ),
+              decoration: BoxDecoration(
+                color: statusColor,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                status,
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: AppColors.surface),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          Text(
+            'Location details',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          if(!onCall)
+            Text(
+              'No call on this ambulance.',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          if(onCall && !atHospital && job != _DriverJob.dropoff) ...[
+            Text(
+              'DHA Phase 5, Street 12, Near XYZ Mall',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            Text(
+              'Chest pain, caller +92 300 1234567',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+          if(atHospital || job == _DriverJob.dropoff) ...[
+            Text(
+              'Indus Hospital, Korangi Crossing',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            Text(
+              'Patient is on board',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+          if(message != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            Text(message, style: Theme.of(context).textTheme.bodyLarge),
+          ],
+          const SizedBox(height: AppSpacing.space5),
+          if(showMarkUnavailable)
+            _ActionButton(
+              label: 'Mark as Unavailable',
+              color: AppColors.orange,
+              onPressed: markUnavailable,
+            ),
+          if(showMarkAvailable)
+            _ActionButton(
+              label: 'Mark as Available',
+              color: AppColors.green,
+              onPressed: markAvailable,
+            ),
+          if(job == _DriverJob.pickupBusy) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _ActionButton(label: 'Picked up', onPressed: pickedUp),
+          ],
+          if(job == _DriverJob.hospitalBusy) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _ActionButton(
+              label: 'Reached the hospital',
+              onPressed: reachedHospital,
+            ),
+          ],
+          if(job == _DriverJob.dropoff) ...[
+            Text(
+              'Dropped off',
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+            Slider(
+              value: slide,
+              label: 'Dropped off',
+              onChanged: slideTo,
+            ),
+            Text(
+              'Slide to the end to confirm.',
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: AppColors.muted),
+            ),
+          ],
         ],
       ),
     );
@@ -227,6 +631,7 @@ class _HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return _FlowFrame(
       title: 'Karachi, DHA Phase 5',
+      tab: _UserTab.home,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -266,6 +671,7 @@ class _EmergencyTypeScreen extends StatelessWidget {
     return _FlowFrame(
       emergency: true,
       title: 'Emergency help',
+      tab: _UserTab.emergency,
       onBack: () {
         context.read<EmergencyRequestState>().goTo(EmergencyScreen.home);
       },
@@ -853,23 +1259,197 @@ class _EmergencyCompleteScreen extends StatelessWidget {
   }
 }
 
+enum _UserTab { home, emergency, services, requests, profile }
+
+class _ProfileScreen extends StatelessWidget {
+  const _ProfileScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return _FlowFrame(
+      title: 'Profile',
+      tab: _UserTab.profile,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Align(
+            child: CircleAvatar(
+              radius: 26,
+              backgroundColor: AppColors.blue,
+              child: Icon(
+                Icons.person,
+                color: AppColors.surface,
+                size: 24,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          Text(
+            'Hal Jordan',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: AppSpacing.space5),
+          const _ProfileRow(label: 'Saved addresses'),
+          const SizedBox(height: AppSpacing.space2),
+          const _ProfileRow(label: 'Notification settings'),
+          const SizedBox(height: AppSpacing.space2),
+          const _ProfileRow(label: 'Language · English'),
+          const SizedBox(height: AppSpacing.space2),
+          _ProfileRow(
+            label: 'Driver portal',
+            onPressed: () {
+              context.read<EmergencyRequestState>().goTo(
+                EmergencyScreen.driverJob,
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileRow extends StatelessWidget {
+  const _ProfileRow({required this.label, this.onPressed});
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 56),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space3),
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.line),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+              ),
+              Text(
+                '›',
+                style: Theme.of(context).textTheme.labelLarge
+                    ?.copyWith(color: AppColors.muted),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UserTabScreen extends StatelessWidget {
+  const _UserTabScreen({required this.title, required this.tab});
+
+  final String title;
+  final _UserTab tab;
+
+  @override
+  Widget build(BuildContext context) {
+    return _FlowFrame(
+      title: title,
+      tab: tab,
+      child: const SizedBox.shrink(),
+    );
+  }
+}
+
+class _UserTabBar extends StatelessWidget {
+  const _UserTabBar({required this.current});
+
+  final _UserTab current;
+
+  @override
+  Widget build(BuildContext context) {
+    return NavigationBarTheme(
+      data: NavigationBarThemeData(
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return IconThemeData(
+            color: selected ? AppColors.blue : AppColors.ink,
+          );
+        }),
+      ),
+      child: NavigationBar(
+      height: 60,
+      backgroundColor: AppColors.surface,
+      indicatorColor: AppColors.surface,
+      selectedIndex: current.index,
+      labelTextStyle: WidgetStateProperty.resolveWith((states) {
+        final selected = states.contains(WidgetState.selected);
+        return TextStyle(
+          fontSize: 11,
+          fontWeight: selected ? FontWeight.w800 : FontWeight.w400,
+          color: selected ? AppColors.blue : AppColors.muted,
+        );
+      }),
+      onDestinationSelected: (index) {
+        final state = context.read<EmergencyRequestState>();
+        switch(_UserTab.values[index]) {
+          case _UserTab.home:
+            state.goTo(EmergencyScreen.home);
+          case _UserTab.emergency:
+            state.goTo(EmergencyScreen.emergencyType);
+          case _UserTab.services:
+            state.goTo(EmergencyScreen.services);
+          case _UserTab.requests:
+            state.goTo(EmergencyScreen.requests);
+          case _UserTab.profile:
+            state.goTo(EmergencyScreen.profile);
+        }
+      },
+      destinations: const [
+        NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
+        NavigationDestination(icon: Icon(Icons.add), label: 'Emergency'),
+        NavigationDestination(icon: Icon(Icons.search), label: 'Services'),
+        NavigationDestination(
+          icon: Icon(Icons.grid_view_outlined),
+          label: 'Requests',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.circle_outlined),
+          label: 'Profile',
+        ),
+      ],
+      ),
+    );
+  }
+}
+
 class _FlowFrame extends StatelessWidget {
   const _FlowFrame({
     required this.child,
     this.title,
     this.onBack,
     this.emergency = false,
+    this.tab,
   });
 
   final Widget child;
   final String? title;
   final VoidCallback? onBack;
   final bool emergency;
+  final _UserTab? tab;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.soft,
+      bottomNavigationBar: tab == null ? null : _UserTabBar(current: tab!),
       body: SafeArea(
         child: Column(
           children: [
@@ -935,15 +1515,17 @@ class _ActionButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.emergency = false,
+    this.color,
   });
 
   final String label;
   final VoidCallback onPressed;
   final bool emergency;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    final backgroundColor = emergency ? AppColors.red : AppColors.blue;
+    final backgroundColor = color ?? (emergency ? AppColors.red : AppColors.blue);
 
     return SizedBox(
       height: emergency ? 56 : 48,
