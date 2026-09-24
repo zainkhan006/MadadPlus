@@ -7,20 +7,21 @@ class AmbulanceAssignment {
   const AmbulanceAssignment({
     required this.id,
     required this.label,
-    required this.distanceKm,
+    this.distanceKm,
     this.status,
   });
 
   final String id;
   final String label;
-  final double distanceKm;
+  final double? distanceKm;
   final String? status;
 
   factory AmbulanceAssignment.fromJson(Map<String, dynamic> json) {
+    final distance = json['distanceKm'];
     return AmbulanceAssignment(
       id: json['id'] as String,
       label: json['label'] as String,
-      distanceKm: (json['distanceKm'] as num).toDouble(),
+      distanceKm: distance is num ? distance.toDouble() : null,
       status: json['status'] as String?,
     );
   }

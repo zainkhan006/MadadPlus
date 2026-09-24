@@ -708,6 +708,18 @@ class _HomeScreen extends StatelessWidget {
               );
             },
           ),
+          const SizedBox(height: AppSpacing.space3),
+          _ChoiceCard(
+            icon: Icons.search,
+            title: 'Find a service provider',
+            subtitle: 'Plumber, electrician, AC technician, mechanic, and more',
+            color: AppColors.green,
+            onTap: () {
+              context.read<EmergencyRequestState>().goTo(
+                EmergencyScreen.services,
+              );
+            },
+          ),
           const SizedBox(height: AppSpacing.space5),
           Text(
             'Simulation mode only. For a real emergency, call 1122.',
@@ -1038,7 +1050,9 @@ class _EmergencyAssignedScreen extends StatelessWidget {
           const SizedBox(height: AppSpacing.space3),
           _InfoCard(
             title: 'City Emergency Services',
-            subtitle: '${assignment.distanceKm.toStringAsFixed(2)} km away',
+            subtitle: assignment.distanceKm == null
+                ? 'Assigned and on the way'
+                : '${assignment.distanceKm!.toStringAsFixed(2)} km away',
             icon: Icons.local_hospital_rounded,
           ),
           if(state.outcome != null) ...[

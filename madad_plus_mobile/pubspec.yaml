@@ -60,6 +60,13 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  fonts:
+    - family: GeneralSans
+      fonts:
+        - asset: fonts/GeneralSans_Complete/Fonts/OTF/GeneralSans-Regular.otf
+          weight: 400
+        - asset: fonts/GeneralSans_Complete/Fonts/OTF/GeneralSans-Bold.otf
+          weight: 700
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -40,45 +40,52 @@ class AppTextTheme {
 
   static const TextTheme textTheme = TextTheme(
     headlineLarge: TextStyle(
+      fontFamily: 'GeneralSans',
       fontSize: 28,
       height: 1.2,
-      fontWeight: FontWeight.w800,
+      fontWeight: FontWeight.w700,
       color: AppColors.ink,
     ),
     headlineMedium: TextStyle(
+      fontFamily: 'GeneralSans',
       fontSize: 22,
       height: 1.25,
-      fontWeight: FontWeight.w800,
+      fontWeight: FontWeight.w700,
       color: AppColors.ink,
     ),
     headlineSmall: TextStyle(
+      fontFamily: 'GeneralSans',
       fontSize: 18,
       height: 1.3,
-      fontWeight: FontWeight.w800,
+      fontWeight: FontWeight.w700,
       color: AppColors.ink,
     ),
     bodyLarge: TextStyle(
+      fontFamily: 'GeneralSans',
       fontSize: 16,
       height: 1.5,
       fontWeight: FontWeight.w400,
       color: AppColors.ink,
     ),
     bodyMedium: TextStyle(
+      fontFamily: 'GeneralSans',
       fontSize: 14,
       height: 1.5,
       fontWeight: FontWeight.w400,
       color: AppColors.ink,
     ),
     labelSmall: TextStyle(
+      fontFamily: 'GeneralSans',
       fontSize: 12,
       height: 1.5,
-      fontWeight: FontWeight.w800,
+      fontWeight: FontWeight.w700,
       color: AppColors.muted,
     ),
     labelLarge: TextStyle(
+      fontFamily: 'GeneralSans',
       fontSize: 14,
       height: 1.5,
-      fontWeight: FontWeight.w800,
+      fontWeight: FontWeight.w700,
       color: AppColors.ink,
     ),
   );
@@ -89,6 +96,7 @@ class AppTheme {
 
   static final ThemeData light = ThemeData(
     useMaterial3: true,
+    fontFamily: 'GeneralSans',
     scaffoldBackgroundColor: AppColors.page,
     dividerColor: AppColors.line,
     focusColor: AppColors.focus,
