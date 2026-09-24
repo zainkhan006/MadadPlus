@@ -249,6 +249,31 @@ app.get("/api/v1/dispatch/requests", async (req, res) => {
   }
 });
 
+app.get("/api/v1/emergency-requests", async (req, res) => {
+  try {
+    const requests = await db("emergency_requests as r")
+      .leftJoin("ambulances as a", "a.id", "r.assigned_ambulance_id")
+      .select(
+        "r.id",
+        "r.status",
+        "r.current_phase as phase",
+        "r.type",
+        "r.caller_phone as callerPhone",
+        "r.pickup_address as pickupAddress",
+        "r.emergency_description as emergencyDescription",
+        "r.created_at as createdAt",
+        "a.label as ambulanceLabel"
+      )
+      .whereNotIn("r.status", ["COMPLETED", "CANCELLED"])
+      .orderBy("r.created_at", "desc");
+
+    res.json(requests);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to load emergency requests" });
+  }
+});
+
 app.get("/api/v1/emergency-requests/:requestId", async (req, res) => {
   try {
     const payload = await db.transaction((trx) => requestPayload(trx, req.params.requestId));
@@ -680,16 +705,55 @@ app.patch("/api/v1/ambulances/:ambulanceId/status", async (req, res) => {
       return res.status(result.statusCode).json(result.body);
     }
 
+    const force = req.body.force === true || req.body.reason === "TEST_RESET";
     const result = await db.transaction(async (trx) => {
-      const updated = await trx("ambulances")
-        .where({ id: req.params.ambulanceId, status: "UNAVAILABLE" })
+      const ambulance = await trx("ambulances")
+        .select("id", "status")
+        .where("id", req.params.ambulanceId)
+        .forUpdate()
+        .first();
+      if (!ambulance) return { notFound: true };
+      if (ambulance.status === "BUSY" && !force) {
+        return { conflict: true, reason: "BUSY ambulance requires force=true for a test reset" };
+      }
+      if (ambulance.status === "FREE") {
+        return { alreadyFree: true };
+      }
+
+      const activeAssignment = await trx("request_assignments")
+        .where({ ambulance_id: ambulance.id, status: "ACTIVE" })
+        .first();
+      let cancelledRequestId = null;
+      if (activeAssignment) {
+        cancelledRequestId = activeAssignment.request_id;
+        await trx("emergency_requests")
+          .where("id", activeAssignment.request_id)
+          .update({ status: "CANCELLED", updated_at: trx.fn.now() });
+        await closeActiveAssignment(trx, activeAssignment.request_id, "DISPATCHER_TEST_RESET");
+      }
+
+      await trx("ambulances")
+        .where("id", req.params.ambulanceId)
         .update({ status: "FREE", unavailable_reason: null, updated_at: trx.fn.now() });
-      if (!updated) return null;
       const waitingRequestId = await dispatchQueuedForAmbulance(trx, req.params.ambulanceId);
-      return { waitingRequestId };
+      return { waitingRequestId, cancelledRequestId };
     });
-    if (!result) return res.status(409).json({ error: "Ambulance is not UNAVAILABLE" });
+    if (result.notFound) return res.status(404).json({ error: "Ambulance not found" });
+    if (result.conflict) return res.status(409).json({ error: result.reason });
+    if (result.alreadyFree) return res.json({ ambulanceId: req.params.ambulanceId, status: "FREE" });
     await emitAmbulance(req.params.ambulanceId);
+    if (result.cancelledRequestId) {
+      io.to(`request:${result.cancelledRequestId}`).emit("request.cancelled", {
+        requestId: result.cancelledRequestId,
+        status: "CANCELLED",
+        reason: "DISPATCHER_TEST_RESET"
+      });
+    }
+    if (result.waitingRequestId) {
+      const waiting = await db.transaction((trx) => requestPayload(trx, result.waitingRequestId));
+      emitRequest(waiting, "request.assigned");
+      if (waiting.assignedAmbulance) await emitAmbulance(waiting.assignedAmbulance.id);
+    }
     res.json({ ambulanceId: req.params.ambulanceId, status: "FREE", ...result });
   } catch (error) {
     console.error(error.message);
