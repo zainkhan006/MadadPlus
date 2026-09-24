@@ -90,6 +90,12 @@ function genRequestId() {
   return `req-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function agentLog(hypothesisId, location, message, data) {
+  // #region agent log
+  fetch('http://127.0.0.1:7305/ingest/3123ab15-a865-40c1-9544-a2717b4e7d1d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2302e5'},body:JSON.stringify({sessionId:'2302e5',runId:'pre-fix',hypothesisId,location,message,data,timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+}
+
 // ---- Animation (simulated live tracking, following real roads) ----
 const routeLines = {}; // ambulance id -> L.Polyline (the visible route path)
 
@@ -261,6 +267,9 @@ async function loadAmbulances() {
       upsertAmbulanceMarker(ambulances[a.id]);
     });
     renderAll();
+    // #region agent log
+    agentLog('A', 'app.js:loadAmbulances', 'server ambulance statuses', {statuses: list.map((a) => ({label: a.label, status: a.status}))});
+    // #endregion
   } catch (err) {
     console.error("Could not load ambulances:", err);
   }
@@ -280,6 +289,9 @@ function simulateNewCall(pickup) {
   requests[req.id] = req;
 
   const nearest = findNearestFree(pickup, [...req.barred]);
+  // #region agent log
+  agentLog('B', 'app.js:simulateNewCall', 'map click is local only', {requestId: req.id, nearestLabel: nearest ? nearest.label : null});
+  // #endregion
   if (nearest) {
     assignAmbulanceToRequest(nearest, req);
   } else {
@@ -405,6 +417,9 @@ function manualFree(ambId) {
   amb.status = STATUS.FREE;
   amb.reason = null;
   amb.currentRequestId = null;
+  // #region agent log
+  agentLog('A', 'app.js:manualFree', 'mark free is local only', {label: amb.label});
+  // #endregion
   renderAll();
   onAmbulanceBecameFree(amb);
 }
@@ -569,7 +584,22 @@ function renderBusyList() {
   const busyRequests = Object.values(requests).filter((r) => r.ambulanceId && ambulances[r.ambulanceId]);
   const waiting = waitQueue;
 
-  if (busyRequests.length === 0 && waiting.length === 0) {
+  const busyWithoutRequest = Object.values(ambulances).filter((amb) => {
+    return amb.status === STATUS.BUSY && !amb.currentRequestId;
+  });
+  const serverBusyHtml = busyWithoutRequest
+    .map(
+      (amb) => `
+      <li class="amb-card">
+        <div>
+          <div class="amb-card__label">${amb.label}</div>
+          <div class="amb-card__meta">Busy on the server. This page cannot mark it free.</div>
+        </div>
+      </li>`
+    )
+    .join("");
+
+  if (busyRequests.length === 0 && waiting.length === 0 && busyWithoutRequest.length === 0) {
     el.innerHTML = `<li class="board-empty">No active bookings. Click the map to simulate a new call.</li>`;
     return;
   }
@@ -640,7 +670,7 @@ function renderBusyList() {
     )
     .join("");
 
-  el.innerHTML = busyHtml + waitingHtml;
+  el.innerHTML = serverBusyHtml + busyHtml + waitingHtml;
 }
 
 function renderUnavailableList() {
@@ -708,6 +738,9 @@ socket.io.on("reconnect", () => {
 // animate movement for it yet — it's reflected on the board without a
 // live-tracking leg until that field is added. See the contract note below.
 socket.on("queue.new", (payload) => {
+  // #region agent log
+  agentLog('C', 'app.js:queue.new', 'phone request reached dispatcher', {requestId: payload.requestId, status: payload.status, assignedLabel: payload.assignedAmbulance ? payload.assignedAmbulance.label : null, hasAmbulanceLocally: !!(payload.assignedAmbulance && ambulances[payload.assignedAmbulance.id])});
+  // #endregion
   if (!payload.assignedAmbulance) return;
   const amb = ambulances[payload.assignedAmbulance.id];
   if (!amb) return;
@@ -728,6 +761,9 @@ socket.on("queue.new", (payload) => {
 });
 
 socket.on("ambulance.updated", (payload) => {
+  // #region agent log
+  agentLog('E', 'app.js:ambulance.updated', 'ambulance status event', {id: payload.id, status: payload.status, known: !!ambulances[payload.id]});
+  // #endregion
   const amb = ambulances[payload.id];
   if (!amb) return;
   if (payload.status) amb.status = payload.status;
