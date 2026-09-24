@@ -2865,7 +2865,7 @@ class _UserTabBar extends StatelessWidget {
           label: 'Requests',
         ),
         NavigationDestination(
-          icon: Icon(Icons.circle_outlined),
+          icon: Icon(Icons.person),
           label: 'Profile',
         ),
       ],
