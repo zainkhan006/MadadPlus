@@ -105,6 +105,7 @@ class EmergencyRequestState extends ChangeNotifier {
   DateTime? domesticScheduledAt;
   DomesticJob domesticJob = DomesticJob.idle;
   bool costFromProvider = false;
+  String? savedRepairTotal;
   String? domesticNotice;
   String? amountOwed;
   final List<({String label, String owed})> domesticHistory = [];
@@ -250,11 +251,6 @@ class EmergencyRequestState extends ChangeNotifier {
     goTo(EmergencyScreen.services);
   }
 
-  void providerAccepts() {
-    domesticJob = DomesticJob.assigned;
-    goTo(EmergencyScreen.domesticJob);
-  }
-
   void cancelAssignedProvider() {
     final request = activeRequest ?? 0;
     blockedRequests.add(request);
@@ -272,20 +268,21 @@ class EmergencyRequestState extends ChangeNotifier {
     goTo(EmergencyScreen.domesticJob);
   }
 
-  void providerArrived() {
-    domesticJob = DomesticJob.inProgress;
-    goTo(EmergencyScreen.domesticJob);
-  }
-
   void startProviderWork() {
     domesticJob = DomesticJob.inProgress;
     notifyListeners();
   }
 
   void openCostReview({required bool fromProvider}) {
+    savedRepairTotal = null;
     costFromProvider = fromProvider;
     domesticJob = DomesticJob.costReview;
     goTo(EmergencyScreen.costReview);
+  }
+
+  void saveRepairTotal(String total) {
+    savedRepairTotal = total;
+    notifyListeners();
   }
 
   void backFromCostReview() {

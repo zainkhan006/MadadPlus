@@ -241,29 +241,33 @@ void main() {
 
     await tapText(tester, 'Confirm');
     expect(find.text('Finding a plumber'), findsOneWidget);
+    expect(find.text('Cancel request'), findsOneWidget);
+    expect(find.text('Provider accepts'), findsNothing);
+    expect(find.text('Provider arrived'), findsNothing);
+    expect(find.text('Mark job as complete'), findsNothing);
 
-    await tapText(tester, 'Provider accepts');
-
-    expect(find.text('John Stewart'), findsOneWidget);
-    expect(find.text('3.2 km away · ETA 25 min'), findsOneWidget);
-    expect(find.text('Inspection fee: x'), findsOneWidget);
-    expect(
-      find.text('Other providers no longer see this request.'),
-      findsOneWidget,
-    );
-
-    await tapText(tester, 'Track on map');
-    expect(find.text('Provider en route'), findsOneWidget);
-
-    await tapText(tester, 'Provider arrived');
-    expect(find.text('John has started work'), findsOneWidget);
-
-    await tapText(tester, 'Mark job as complete');
+    await tester.pumpWidget(const SizedBox());
+    await reachHome(tester);
+    await tapText(tester, 'Profile');
+    await tapText(tester, 'Switch to provider mode');
+    await tapText(tester, 'Pipe leak repair');
+    await tapText(tester, 'Accept job');
+    await tapText(tester, 'Navigate to customer');
+    await tapText(tester, 'Start job');
+    await tapText(tester, 'Complete job');
     expect(find.text('Waiting for the repair total.'), findsOneWidget);
-    expect(find.text('Accept'), findsNothing);
 
     await tester.enterText(find.byType(TextField), '2000');
     await tester.pump();
+    expect(find.text('Accept'), findsNothing);
+    expect(find.text('Refuse'), findsNothing);
+
+    await tapText(tester, 'Save repair total');
+    expect(find.text('Repair total: 2000'), findsOneWidget);
+    expect(find.text('Accept'), findsOneWidget);
+    expect(find.text('Refuse'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+
     await tapText(tester, 'Accept');
 
     expect(find.text('How was John?'), findsOneWidget);
@@ -364,6 +368,7 @@ void main() {
     await tapText(tester, 'Complete job');
     await tester.enterText(find.byType(TextField), '1500');
     await tester.pump();
+    await tapText(tester, 'Save repair total');
     await tapText(tester, 'Refuse');
 
     expect(find.text('Amount owed: x'), findsOneWidget);

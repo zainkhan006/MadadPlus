@@ -1939,12 +1939,14 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
             style: Theme.of(context).textTheme.bodyLarge
                 ?.copyWith(color: AppColors.muted),
           ),
-          const SizedBox(height: AppSpacing.space6),
-          _ActionButton(
-            label: 'Provider accepts',
-            onPressed: state.providerAccepts,
+          const SizedBox(height: AppSpacing.space2),
+          Text(
+            'The provider accepts this from the provider sign-in.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.muted),
           ),
-          const SizedBox(height: AppSpacing.space3),
+          const SizedBox(height: AppSpacing.space6),
           _SecondaryButton(
             label: 'Cancel request',
             onPressed: state.cancelDomestic,
@@ -2073,10 +2075,10 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
           const SizedBox(height: AppSpacing.space3),
           callAndChat(state),
           const SizedBox(height: AppSpacing.space3),
-          _ActionButton(
-            label: 'Provider arrived',
-            color: AppColors.green,
-            onPressed: state.providerArrived,
+          Text(
+            'The provider marks arrival from the provider sign-in.',
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.muted),
           ),
         ],
       ),
@@ -2116,15 +2118,13 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
             icon: Icons.support_agent_rounded,
           ),
           notice(context, state),
-          const SizedBox(height: AppSpacing.space5),
-          _ActionButton(
-            label: 'Mark job as complete',
-            color: AppColors.green,
-            onPressed: () {
-              state.openCostReview(fromProvider: false);
-            },
-          ),
           const SizedBox(height: AppSpacing.space3),
+          Text(
+            'The provider completes the job from the provider sign-in.',
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.muted),
+          ),
+          const SizedBox(height: AppSpacing.space5),
           _SecondaryButton(
             label: 'Contact support',
             onPressed: () {
@@ -2260,6 +2260,7 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
     final typedTotal = repairTotal.text.trim();
+    final savedTotal = state.savedRepairTotal;
 
     return _FlowFrame(
       title: 'Confirm final cost',
@@ -2273,25 +2274,31 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
             style: Theme.of(context).textTheme.headlineLarge,
           ),
           const SizedBox(height: AppSpacing.space4),
-          TextField(
-            controller: repairTotal,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onChanged: (_) {
-              setState(() {});
-            },
-            decoration: const InputDecoration(
-              labelText: 'Repair total',
-              helperText: 'This amount does not include the inspection fee.',
-              border: OutlineInputBorder(),
+          if(savedTotal == null)
+            TextField(
+              controller: repairTotal,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (_) {
+                setState(() {});
+              },
+              decoration: const InputDecoration(
+                labelText: 'Repair total',
+                helperText: 'This amount does not include the inspection fee.',
+                border: OutlineInputBorder(),
+              ),
             ),
-          ),
+          if(savedTotal != null)
+            Text(
+              'Repair total: $savedTotal',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
           const SizedBox(height: AppSpacing.space3),
           Text(
             'Inspection fee: x',
             style: Theme.of(context).textTheme.labelLarge,
           ),
-          if(typedTotal.isEmpty) ...[
+          if(savedTotal == null && typedTotal.isEmpty) ...[
             const SizedBox(height: AppSpacing.space2),
             Text(
               'Waiting for the repair total.',
@@ -2307,12 +2314,22 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
             ),
           ],
           const SizedBox(height: AppSpacing.space5),
-          if(typedTotal.isNotEmpty) ...[
+          if(savedTotal == null && typedTotal.isNotEmpty) ...[
+            _ActionButton(
+              label: 'Save repair total',
+              color: AppColors.green,
+              onPressed: () {
+                state.saveRepairTotal(typedTotal);
+              },
+            ),
+            const SizedBox(height: AppSpacing.space3),
+          ],
+          if(savedTotal != null) ...[
             _ActionButton(
               label: 'Accept',
               color: AppColors.green,
               onPressed: () {
-                state.acceptRepairTotal(typedTotal);
+                state.acceptRepairTotal(savedTotal);
               },
             ),
             const SizedBox(height: AppSpacing.space3),
@@ -2320,14 +2337,14 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
               label: 'Refuse',
               onPressed: state.refuseRepairTotal,
             ),
-            const SizedBox(height: AppSpacing.space3),
           ],
-          _SecondaryButton(
-            label: 'Report an issue',
-            onPressed: () {
-              state.showDomesticNotice('The issue was saved on this phone.');
-            },
-          ),
+          if(savedTotal == null)
+            _SecondaryButton(
+              label: 'Report an issue',
+              onPressed: () {
+                state.showDomesticNotice('The issue was saved on this phone.');
+              },
+            ),
         ],
       ),
     );
