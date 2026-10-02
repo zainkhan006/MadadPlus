@@ -12,6 +12,31 @@
 </head>
 <body>
 
+<!-- Login screen — NOT connected to real accounts yet. Any input logs in.
+     Swap this for a real check once Ibad's backend has dispatcher auth. -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <div class="login-card__brand">Madad+</div>
+    <p class="login-card__sub">Dispatcher sign in</p>
+
+    <label for="loginOrg">Organization / branch</label>
+    <select id="loginOrg">
+      <option>City Emergency Services — Karachi</option>
+      <option>Edhi Foundation — Karachi</option>
+      <option>Al-Khidmat Ambulance — Karachi</option>
+    </select>
+
+    <label for="loginUser">Username</label>
+    <input type="text" id="loginUser" placeholder="dispatcher01" autocomplete="username" />
+
+    <label for="loginPass">Password</label>
+    <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password" />
+
+    <button class="btn btn--primary btn--full" id="loginSubmit">Log in</button>
+    <p class="login-card__note">Not checking real credentials yet — any input works. This will verify against real accounts once backend auth is ready.</p>
+  </div>
+</div>
+
 <div class="app">
 
   <header class="topbar">
@@ -20,9 +45,12 @@
       <span class="topbar__divider">&middot;</span>
       <span class="topbar__org" id="orgName">City Emergency Services</span>
     </div>
-    <div class="topbar__status" id="connectionStatus" data-state="connecting">
-      <span class="status-dot"></span>
-      <span class="topbar__status-text" id="statusText">Connecting&hellip;</span>
+    <div class="topbar__right">
+      <div class="topbar__status" id="connectionStatus" data-state="connecting">
+        <span class="status-dot"></span>
+        <span class="topbar__status-text" id="statusText">Connecting&hellip;</span>
+      </div>
+      <button class="icon-btn" id="settingsOpenBtn" title="Settings" aria-label="Settings">&#9881;</button>
     </div>
   </header>
 
@@ -30,7 +58,6 @@
 
     <section class="map-pane">
       <div id="map"></div>
-      <div class="map-pane__hint">Click anywhere on the map to simulate a new call</div>
       <div class="map-pane__legend">
         <span class="legend-item"><i class="legend-dot legend-dot--free"></i>Free</span>
         <span class="legend-item"><i class="legend-dot legend-dot--busy"></i>Busy</span>
@@ -71,6 +98,47 @@
     <p class="modal__sub" id="reassignSub"></p>
     <ul class="modal__list" id="reassignList"></ul>
     <button class="modal__close" id="reassignClose">Cancel</button>
+  </div>
+</div>
+
+<!-- Settings modal — ambulance/driver management is LOCAL-ONLY for now.
+     Ibad's backend has no CRUD endpoints for these yet; wire this up for
+     real once they exist. See comments in app.js for the proposed shape. -->
+<div class="modal" id="settingsModal">
+  <div class="modal__card modal__card--wide">
+    <div class="modal__header">
+      <h2>Settings</h2>
+      <button class="modal__x" id="settingsClose" aria-label="Close">&times;</button>
+    </div>
+
+    <section class="settings-section">
+      <h3>Dispatcher credentials</h3>
+      <label for="settingsUserId">User ID</label>
+      <input type="text" id="settingsUserId" placeholder="dispatcher01" />
+      <label for="settingsPassword">New password</label>
+      <input type="password" id="settingsPassword" placeholder="••••••••" />
+      <button class="btn btn--free" id="settingsSaveCreds">Save credentials</button>
+      <p class="settings-note" id="settingsCredsNote"></p>
+    </section>
+
+    <section class="settings-section">
+      <h3>Ambulances</h3>
+      <ul class="settings-list" id="settingsAmbulanceList"></ul>
+      <div class="settings-add-row">
+        <input type="text" id="newAmbLabel" placeholder="Label, e.g. A-06" />
+        <button class="btn" id="addAmbulanceBtn">Add ambulance</button>
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <h3>Drivers</h3>
+      <ul class="settings-list" id="settingsDriverList"></ul>
+      <div class="settings-add-row">
+        <input type="text" id="newDriverName" placeholder="Driver name" />
+        <input type="text" id="newDriverPhone" placeholder="Phone" />
+        <button class="btn" id="addDriverBtn">Add driver</button>
+      </div>
+    </section>
   </div>
 </div>
 
