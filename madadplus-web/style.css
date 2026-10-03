@@ -302,6 +302,28 @@ input, select {
   border: none;
 }
 
+.organization-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: #ffffff;
+  border: 2px solid #171d26;
+  border-radius: 3px;
+  color: #171d26;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.organization-marker--legend {
+  width: 14px;
+  height: 14px;
+  font-size: 12px;
+  font-style: normal;
+}
+
 /* ---- Board pane ---- */
 
 .board-pane {
