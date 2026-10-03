@@ -25,12 +25,30 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Ambulance'));
     await tester.pump();
-    await tester.tap(find.text('USE DEMO LOCATION'));
+    final state = Provider.of<EmergencyRequestState>(
+      tester.element(find.text('Where is the emergency?')),
+      listen: false,
+    );
+    state.setTestAmbulanceRequest(
+      latitude: 24.8138,
+      longitude: 67.0300,
+      address: 'Clifton Block 5',
+      incident: 'Accident',
+      people: 2,
+    );
+    await tester.pump();
+    await tester.ensureVisible(find.text('CONTINUE'));
+    await tester.pump();
+    await tester.tap(find.text('CONTINUE'));
+    await tester.pump();
+    expect(find.text('Type the details instead'), findsOneWidget);
+    state.goTo(EmergencyScreen.emergencyDetails);
     await tester.pump();
     await tester.tap(find.text('CONTINUE NOW'));
     await tester.pump();
 
     expect(find.text('REQUEST NOW'), findsOneWidget);
+    expect(find.text('Clifton Block 5'), findsOneWidget);
   });
 
   testWidgets('a new driver can finish a pickup and drop-off', (
@@ -197,7 +215,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Hal Jordan'), findsOneWidget);
-    expect(find.byIcon(Icons.person), findsOneWidget);
+    expect(find.byIcon(Icons.person), findsNWidgets(2));
     expect(find.text('Saved addresses'), findsOneWidget);
     expect(find.text('Notification settings'), findsOneWidget);
     expect(find.text('Language · English'), findsOneWidget);

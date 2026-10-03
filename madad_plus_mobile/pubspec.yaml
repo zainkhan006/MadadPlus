@@ -38,6 +38,10 @@ dependencies:
   socket_io_client: ^3.1.6
   google_maps_flutter: ^2.18.0
   provider: ^6.1.5+1
+  geolocator: ^14.1.1
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
+  record: ^7.1.1
 
 dev_dependencies:
   flutter_test:
@@ -96,5 +100,9 @@ flutter:
   #       - asset: fonts/TrajanPro_Bold.ttf
   #         weight: 700
   #
-  # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/to/font-from-package
+# For details regarding fonts from package dependencies,
+# see https://flutter.dev/to/font-from-package
+
+dependency_overrides:
+  # 2.6.0 pulls objective_c, and that build hook fails when the project path has a space.
+  path_provider_foundation: 2.4.2

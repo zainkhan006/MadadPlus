@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 import 'emergency_outcome.dart';
 import 'emergency_service.dart';
@@ -14,6 +16,7 @@ enum EmergencyScreen {
   home,
   emergencyType,
   emergencyLocation,
+  emergencySpeak,
   emergencyDetails,
   emergencyConfirm,
   emergencySearch,
@@ -60,6 +63,11 @@ enum ProviderDuty { offline, available, onJob }
 class EmergencyRequestState extends ChangeNotifier {
   static const double demoLatitude = 24.8140;
   static const double demoLongitude = 67.0308;
+  static const geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
+  static const geminiTranscribeModel = 'gemini-3.5-transcribe';
+  static const geminiTextModel = 'gemini-3.5-flash';
+  static const _nominatimAgent = 'MadadPlus-mobile/1.0';
+  static const _incidents = {'Cardiac', 'Accident', 'Injury', 'Medical'};
 
   EmergencyRequestState({EmergencyService? emergencyService})
     : _emergencyService = emergencyService ?? EmergencyService();
@@ -118,8 +126,13 @@ class EmergencyRequestState extends ChangeNotifier {
   int? pendingRequest;
   int openedRequest = 0;
   final Set<int> blockedRequests = {};
-  String selectedDetail = 'Cardiac';
-  int peopleNeedingHelp = 1;
+  double? pinLatitude;
+  double? pinLongitude;
+  String? resolvedAddress;
+  String? selectedDetail;
+  int? peopleNeedingHelp;
+  String? additionalDetails;
+  String? detailsNotice;
   String? requestId;
   EmergencyOutcome? outcome;
   EmergencyRequestResult? result;
@@ -401,8 +414,181 @@ class EmergencyRequestState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setAdditionalDetails(String value) {
+    additionalDetails = value;
+  }
+
+  void setEmergencyPin({
+    required double latitude,
+    required double longitude,
+    required String address,
+  }) {
+    pinLatitude = latitude;
+    pinLongitude = longitude;
+    resolvedAddress = address;
+    notifyListeners();
+  }
+
+  void setTestAmbulanceRequest({
+    required double latitude,
+    required double longitude,
+    required String address,
+    required String incident,
+    required int people,
+  }) {
+    pinLatitude = latitude;
+    pinLongitude = longitude;
+    resolvedAddress = address;
+    selectedDetail = incident;
+    peopleNeedingHelp = people;
+    additionalDetails = null;
+    detailsNotice = null;
+    notifyListeners();
+  }
+
+  String? takeDetailsNotice() {
+    final notice = detailsNotice;
+    detailsNotice = null;
+    return notice;
+  }
+
+  void typeDetailsInstead() {
+    selectedDetail = null;
+    peopleNeedingHelp = null;
+    additionalDetails = null;
+    detailsNotice = 'Fill in what happened and how many people need help.';
+    currentScreen = EmergencyScreen.emergencyDetails;
+    notifyListeners();
+  }
+
+  Future<({double latitude, double longitude, String address})?> lookupAddress(
+    String query,
+  ) async {
+    final trimmed = query.trim();
+    if(trimmed.isEmpty) {
+      return null;
+    }
+
+    final response = await http
+        .get(
+          Uri.https('nominatim.openstreetmap.org', '/search', {
+            'format': 'jsonv2',
+            'limit': '1',
+            'q': trimmed,
+          }),
+          headers: {'User-Agent': _nominatimAgent},
+        )
+        .timeout(const Duration(seconds: 20));
+    if(response.statusCode != 200) {
+      throw Exception('The address lookup did not finish.');
+    }
+
+    final decoded = jsonDecode(response.body);
+    if(decoded is! List || decoded.isEmpty || decoded.first is! Map) {
+      return null;
+    }
+
+    final place = decoded.first as Map;
+    final latitude = double.tryParse('${place['lat']}');
+    final longitude = double.tryParse('${place['lon']}');
+    if(latitude == null || longitude == null) {
+      return null;
+    }
+
+    final name = place['display_name'];
+    return (
+      latitude: latitude,
+      longitude: longitude,
+      address: name is String && name.isNotEmpty ? name : trimmed,
+    );
+  }
+
+  Future<String> labelForCoordinates(double latitude, double longitude) async {
+    try {
+      final response = await http
+          .get(
+            Uri.https('nominatim.openstreetmap.org', '/reverse', {
+              'format': 'jsonv2',
+              'lat': '$latitude',
+              'lon': '$longitude',
+            }),
+            headers: {'User-Agent': _nominatimAgent},
+          )
+          .timeout(const Duration(seconds: 20));
+      if(response.statusCode != 200) {
+        return 'Current location';
+      }
+
+      final decoded = jsonDecode(response.body);
+      if(decoded is Map &&
+          decoded['display_name'] is String &&
+          (decoded['display_name'] as String).isNotEmpty) {
+        return decoded['display_name'] as String;
+      }
+    } catch (_) {
+      return 'Current location';
+    }
+
+    return 'Current location';
+  }
+
+  Future<void> submitSpeech(List<int> bytes) async {
+    if(geminiApiKey.isEmpty) {
+      typeDetailsInstead();
+      return;
+    }
+
+    try {
+      final transcript = await _transcribeClip(bytes);
+      if(transcript == null || transcript.trim().isEmpty) {
+        typeDetailsInstead();
+        return;
+      }
+
+      var parsed = _readSpeechJson(transcript);
+      if(parsed == null) {
+        final mapped = await _geminiText(geminiTextModel, [
+          {
+            'text':
+                'Return JSON only with keys incident, people, and details. '
+                'incident is Cardiac, Accident, Injury, Medical, or null. '
+                'people is 1, 2, 3, 4, or null. Use 4 when four or more people need help. '
+                'details is a short extra note or null. Speech: $transcript',
+          },
+        ]);
+        if(mapped != null) {
+          parsed = _readSpeechJson(mapped);
+        }
+      }
+      if(parsed == null) {
+        typeDetailsInstead();
+        return;
+      }
+
+      final incident = _allowedIncident(parsed['incident']);
+      final people = _allowedPeople(parsed['people']);
+      final details = _allowedDetails(parsed['details']);
+      selectedDetail = incident;
+      peopleNeedingHelp = people;
+      additionalDetails = incident == null && people == null ? null : details;
+      detailsNotice = _noticeFor(incident, people);
+      currentScreen = EmergencyScreen.emergencyDetails;
+      notifyListeners();
+    } catch (_) {
+      typeDetailsInstead();
+    }
+  }
+
   Future<void> requestAmbulance() async {
     if(isRequesting) {
+      return;
+    }
+
+    final latitude = pinLatitude;
+    final longitude = pinLongitude;
+    if(latitude == null || longitude == null) {
+      errorMessage = 'Set a location before requesting an ambulance.';
+      notifyListeners();
       return;
     }
 
@@ -413,8 +599,8 @@ class EmergencyRequestState extends ChangeNotifier {
 
     try {
       result = await _emergencyService.createEmergencyRequest(
-        lat: demoLatitude,
-        lng: demoLongitude,
+        lat: latitude,
+        lng: longitude,
       );
       updateRequest(
         requestId: result!.requestId,
@@ -459,7 +645,226 @@ class EmergencyRequestState extends ChangeNotifier {
     remainingSeconds = 15;
     isRequesting = false;
     isCompleting = false;
+    pinLatitude = null;
+    pinLongitude = null;
+    resolvedAddress = null;
+    selectedDetail = null;
+    peopleNeedingHelp = null;
+    additionalDetails = null;
+    detailsNotice = null;
     notifyListeners();
+  }
+
+  String? _noticeFor(String? incident, int? people) {
+    if(incident == null && people == null) {
+      return 'Fill in what happened and how many people need help.';
+    }
+    if(incident == null) {
+      return 'Fill in what happened.';
+    }
+    if(people == null) {
+      return 'Fill in how many people need help.';
+    }
+    return null;
+  }
+
+  String? _allowedIncident(Object? value) {
+    if(value is String && _incidents.contains(value)) {
+      return value;
+    }
+    return null;
+  }
+
+  int? _allowedPeople(Object? value) {
+    final count = value is num ? value.toInt() : int.tryParse('$value');
+    if(count == null || count < 1 || count > 4) {
+      return null;
+    }
+    return count;
+  }
+
+  String? _allowedDetails(Object? value) {
+    if(value is! String) {
+      return null;
+    }
+    final trimmed = value.trim();
+    if(trimmed.isEmpty || trimmed.toLowerCase() == 'null') {
+      return null;
+    }
+    return trimmed;
+  }
+
+  Map<String, dynamic>? _readSpeechJson(String raw) {
+    var text = raw.trim();
+    if(text.startsWith('```')) {
+      final firstLine = text.indexOf('\n');
+      if(firstLine >= 0) {
+        text = text.substring(firstLine + 1);
+      }
+      if(text.endsWith('```')) {
+        text = text.substring(0, text.length - 3);
+      }
+      text = text.trim();
+    }
+
+    final start = text.indexOf('{');
+    final end = text.lastIndexOf('}');
+    if(start < 0 || end <= start) {
+      return null;
+    }
+
+    try {
+      final decoded = jsonDecode(text.substring(start, end + 1));
+      if(decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if(decoded is Map) {
+        return decoded.map((key, value) => MapEntry('$key', value));
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
+  Future<String?> _transcribeClip(List<int> bytes) async {
+    final upload = await http
+        .post(
+          Uri.parse(
+            'https://generativelanguage.googleapis.com/upload/v1beta/files',
+          ),
+          headers: {
+            'x-goog-api-key': geminiApiKey,
+            'X-Goog-Upload-Protocol': 'raw',
+            'X-Goog-Upload-Command': 'upload, finalize',
+            'X-Goog-Upload-Header-Content-Length': '${bytes.length}',
+            'X-Goog-Upload-Header-Content-Type': 'audio/mp4',
+            'Content-Type': 'audio/mp4',
+          },
+          body: bytes,
+        )
+        .timeout(const Duration(seconds: 45));
+    final uploaded = upload.statusCode == 200
+        ? jsonDecode(upload.body)
+        : null;
+    final file = uploaded is Map ? uploaded['file'] : null;
+    final uri = file is Map ? file['uri'] : null;
+    if(uri is! String || uri.isEmpty) {
+      return null;
+    }
+
+    final response = await http
+        .post(
+          Uri.parse(
+            'https://generativelanguage.googleapis.com/v1beta/interactions',
+          ),
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': geminiApiKey,
+          },
+          body: jsonEncode({
+            'model': geminiTranscribeModel,
+            'input': [
+              {
+                'type': 'audio',
+                'uri': uri,
+                'mime_type': 'audio/mp4',
+              },
+            ],
+            'generation_config': {
+              'transcription_config': {
+                'language_codes': ['en-US', 'ur-PK'],
+              },
+            },
+          }),
+        )
+        .timeout(const Duration(seconds: 45));
+    final decodedOk = response.statusCode == 200
+        ? jsonDecode(response.body)
+        : null;
+    if(decodedOk is! Map) {
+      return null;
+    }
+
+    final outputText = decodedOk['output_text'];
+    if(outputText is String && outputText.trim().isNotEmpty) {
+      return outputText.trim();
+    }
+
+    final buffer = StringBuffer();
+    final steps = decodedOk['steps'];
+    if(steps is List) {
+      for(final step in steps) {
+        if(step is! Map) {
+          continue;
+        }
+        final content = step['content'];
+        if(content is! List) {
+          continue;
+        }
+        for(final item in content) {
+          if(item is Map && item['text'] is String) {
+            buffer.write(item['text']);
+          }
+        }
+      }
+    }
+    final text = buffer.toString().trim();
+    if(text.isEmpty) {
+      return null;
+    }
+    return text;
+  }
+
+  Future<String?> _geminiText(
+    String model,
+    List<Map<String, dynamic>> parts,
+  ) async {
+    final response = await http
+        .post(
+          Uri.parse(
+            'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent',
+          ).replace(queryParameters: {'key': geminiApiKey}),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'contents': [
+              {'parts': parts},
+            ],
+          }),
+        )
+        .timeout(const Duration(seconds: 45));
+    if(response.statusCode != 200) {
+      return null;
+    }
+
+    final decoded = jsonDecode(response.body);
+    if(decoded is! Map) {
+      return null;
+    }
+    final candidates = decoded['candidates'];
+    if(candidates is! List || candidates.isEmpty || candidates.first is! Map) {
+      return null;
+    }
+    final content = (candidates.first as Map)['content'];
+    if(content is! Map) {
+      return null;
+    }
+    final responseParts = content['parts'];
+    if(responseParts is! List) {
+      return null;
+    }
+
+    final buffer = StringBuffer();
+    for(final part in responseParts) {
+      if(part is Map && part['text'] is String) {
+        buffer.write(part['text']);
+      }
+    }
+    final text = buffer.toString().trim();
+    if(text.isEmpty) {
+      return null;
+    }
+    return text;
   }
 
   void _connectToRequest(String id) {

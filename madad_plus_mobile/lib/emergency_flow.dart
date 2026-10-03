@@ -1,6 +1,13 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+import 'package:record/record.dart';
 
 import 'services/emergency_request_state.dart';
 import 'theme/app_theme.dart';
@@ -61,6 +68,8 @@ class EmergencyFlow extends StatelessWidget {
         return const _EmergencyTypeScreen();
       case EmergencyScreen.emergencyLocation:
         return const _EmergencyLocationScreen();
+      case EmergencyScreen.emergencySpeak:
+        return const _EmergencySpeakScreen();
       case EmergencyScreen.emergencyDetails:
         return const _EmergencyDetailsScreen();
       case EmergencyScreen.emergencyConfirm:
@@ -777,11 +786,151 @@ class _EmergencyTypeScreen extends StatelessWidget {
   }
 }
 
-class _EmergencyLocationScreen extends StatelessWidget {
+class _EmergencyLocationScreen extends StatefulWidget {
   const _EmergencyLocationScreen();
 
   @override
+  State<_EmergencyLocationScreen> createState() =>
+      _EmergencyLocationScreenState();
+}
+
+class _EmergencyLocationScreenState extends State<_EmergencyLocationScreen> {
+  static const _openCenter = LatLng(24.8600, 67.0100);
+  final _mapController = MapController();
+  final _addressController = TextEditingController();
+  var _busy = false;
+  String? _message;
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    _addressController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _useDeviceLocation() async {
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if(!serviceEnabled) {
+        setState(() {
+          _message = 'Location is turned off. Type the address instead.';
+        });
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if(permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if(permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        setState(() {
+          _message = 'Location permission is off. Type the address instead.';
+        });
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition();
+      if(!mounted) {
+        return;
+      }
+      final state = context.read<EmergencyRequestState>();
+      final address = await state.labelForCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+      if(!mounted) {
+        return;
+      }
+      _dropPin(
+        state,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        address: address,
+      );
+    } catch (_) {
+      if(!mounted) {
+        return;
+      }
+      setState(() {
+        _message = 'Your location could not be read. Type the address instead.';
+      });
+    } finally {
+      if(mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _lookupAddress() async {
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final state = context.read<EmergencyRequestState>();
+      final place = await state.lookupAddress(_addressController.text);
+      if(!mounted) {
+        return;
+      }
+      if(place == null) {
+        setState(() {
+          _message = 'That address was not found.';
+        });
+        return;
+      }
+      _dropPin(
+        state,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        address: place.address,
+      );
+    } catch (_) {
+      if(!mounted) {
+        return;
+      }
+      setState(() {
+        _message = 'The address lookup did not finish. Try again.';
+      });
+    } finally {
+      if(mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  void _dropPin(
+    EmergencyRequestState state, {
+    required double latitude,
+    required double longitude,
+    required String address,
+  }) {
+    state.setEmergencyPin(
+      latitude: latitude,
+      longitude: longitude,
+      address: address,
+    );
+    _mapController.move(LatLng(latitude, longitude), 16);
+    setState(() {
+      _message = null;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final pin = state.pinLatitude == null || state.pinLongitude == null
+        ? null
+        : LatLng(state.pinLatitude!, state.pinLongitude!);
+
     return _FlowFrame(
       emergency: true,
       title: 'Location',
@@ -798,56 +947,342 @@ class _EmergencyLocationScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineLarge,
           ),
           const SizedBox(height: AppSpacing.space4),
-          _ChoiceCard(
-            icon: Icons.location_on_rounded,
-            title: 'USE DEMO LOCATION',
-            subtitle: 'DHA Phase 5, Street 12',
-            color: AppColors.red,
-            onTap: () {
-              context.read<EmergencyRequestState>().goTo(
-                EmergencyScreen.emergencyDetails,
-              );
-            },
-          ),
-          const SizedBox(height: AppSpacing.space4),
-          const TextField(
-            decoration: InputDecoration(
-              labelText: 'Landmark',
-              hintText: 'Near XYZ Mall, Gate 3',
-              border: OutlineInputBorder(),
+          SizedBox(
+            height: 220,
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: pin ?? _openCenter,
+                initialZoom: pin == null ? 12 : 16,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.madadplus.madad_plus_mobile',
+                  tileProvider: Platform.environment['FLUTTER_TEST'] == 'true'
+                      ? _TestTileProvider()
+                      : NetworkTileProvider(),
+                ),
+                if(pin != null)
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: pin,
+                        width: 40,
+                        height: 40,
+                        child: const Icon(
+                          Icons.location_on,
+                          color: AppColors.red,
+                          size: 40,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
             ),
           ),
+          const SizedBox(height: AppSpacing.space4),
+          _ActionButton(
+            label: 'Find my location',
+            emergency: true,
+            onPressed: _busy ? null : _useDeviceLocation,
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          TextField(
+            controller: _addressController,
+            decoration: const InputDecoration(
+              labelText: 'Address',
+              border: OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) {
+              if(!_busy) {
+                _lookupAddress();
+              }
+            },
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _ActionButton(
+            label: 'Show on map',
+            onPressed: _busy ? null : _lookupAddress,
+          ),
+          if(_message != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            _ErrorNotice(message: _message!),
+          ],
           const SizedBox(height: AppSpacing.space5),
           _ActionButton(
             label: 'CONTINUE',
             emergency: true,
-            onPressed: () {
-              context.read<EmergencyRequestState>().goTo(
-                EmergencyScreen.emergencyDetails,
-              );
-            },
+            onPressed: pin == null
+                ? null
+                : () {
+                    state.goTo(EmergencyScreen.emergencySpeak);
+                  },
           ),
-          const SizedBox(height: AppSpacing.space4),
-          const _DemoNotice(),
         ],
       ),
     );
   }
 }
 
-class _EmergencyDetailsScreen extends StatelessWidget {
+class _TestTileProvider extends TileProvider {
+  static final Uint8List _pixel = Uint8List.fromList(const [
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+    0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+    0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
+    0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+    0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
+    0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+  ]);
+
+  @override
+  ImageProvider getImage(TileCoordinates coordinates, TileLayer options) {
+    return MemoryImage(_pixel);
+  }
+}
+
+class _EmergencySpeakScreen extends StatefulWidget {
+  const _EmergencySpeakScreen();
+
+  @override
+  State<_EmergencySpeakScreen> createState() => _EmergencySpeakScreenState();
+}
+
+class _EmergencySpeakScreenState extends State<_EmergencySpeakScreen> {
+  AudioRecorder? _recorder;
+  var _recording = false;
+  var _sending = false;
+
+  @override
+  void dispose() {
+    _recorder?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggleRecording() async {
+    final state = context.read<EmergencyRequestState>();
+    if(EmergencyRequestState.geminiApiKey.isEmpty) {
+      state.typeDetailsInstead();
+      return;
+    }
+    if(_sending) {
+      return;
+    }
+
+    try {
+      if(_recording) {
+        final path = await _recorder?.stop();
+        setState(() {
+          _recording = false;
+          _sending = true;
+        });
+        if(path == null) {
+          if(mounted) {
+            context.read<EmergencyRequestState>().typeDetailsInstead();
+          }
+          return;
+        }
+        final bytes = await File(path).readAsBytes();
+        if(!mounted) {
+          return;
+        }
+        await context.read<EmergencyRequestState>().submitSpeech(bytes);
+        return;
+      }
+
+      final recorder = _recorder ?? AudioRecorder();
+      _recorder = recorder;
+      final allowed = await recorder.hasPermission();
+      if(!allowed) {
+        if(mounted) {
+          context.read<EmergencyRequestState>().typeDetailsInstead();
+        }
+        return;
+      }
+      await recorder.start(
+        const RecordConfig(),
+        path: '${Directory.systemTemp.path}${Platform.pathSeparator}madad-emergency.m4a',
+      );
+      if(!mounted) {
+        return;
+      }
+      setState(() {
+        _recording = true;
+      });
+    } catch (_) {
+      if(mounted) {
+        context.read<EmergencyRequestState>().typeDetailsInstead();
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _FlowFrame(
+      emergency: true,
+      title: 'What happened',
+      onBack: () {
+        context.read<EmergencyRequestState>().goTo(
+          EmergencyScreen.emergencyLocation,
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Speak in English or Urdu',
+            style: Theme.of(context).textTheme.headlineLarge,
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          Text(
+            'Say what happened and how many people need help.',
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.muted),
+          ),
+          const SizedBox(height: AppSpacing.space6),
+          Center(
+            child: _RecordCircle(
+              recording: _recording,
+              onPressed: _sending ? null : _toggleRecording,
+            ),
+          ),
+          if(_sending) ...[
+            const SizedBox(height: AppSpacing.space4),
+            Text(
+              'Sending the recording.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge
+                  ?.copyWith(color: AppColors.muted),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.space6),
+          _ActionButton(
+            label: 'Type the details instead',
+            onPressed: _sending
+                ? null
+                : () {
+                    context.read<EmergencyRequestState>().typeDetailsInstead();
+                  },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecordCircle extends StatelessWidget {
+  const _RecordCircle({required this.recording, required this.onPressed});
+
+  final bool recording;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = onPressed == null ? AppColors.line : AppColors.red;
+
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      label: recording ? 'Stop and send' : 'Record',
+      excludeSemantics: true,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onPressed,
+        child: Container(
+          width: 148,
+          height: 148,
+          padding: const EdgeInsets.all(AppSpacing.space2),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: color, width: 8),
+          ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+            child: Center(
+              child: recording
+                  ? Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                      ),
+                    )
+                  : Text(
+                      'Record',
+                      style: Theme.of(context).textTheme.labelLarge
+                          ?.copyWith(color: AppColors.surface),
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmergencyDetailsScreen extends StatefulWidget {
   const _EmergencyDetailsScreen();
+
+  @override
+  State<_EmergencyDetailsScreen> createState() =>
+      _EmergencyDetailsScreenState();
+}
+
+class _EmergencyDetailsScreenState extends State<_EmergencyDetailsScreen> {
+  late final TextEditingController _detailsController;
+
+  @override
+  void initState() {
+    super.initState();
+    final state = context.read<EmergencyRequestState>();
+    _detailsController = TextEditingController(
+      text: state.additionalDetails ?? '',
+    );
+    final notice = state.takeDetailsNotice();
+    if(notice != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if(!mounted) {
+          return;
+        }
+        showDialog<void>(
+          context: context,
+          builder: (dialogContext) {
+            return AlertDialog(
+              content: Text(notice),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                  },
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
+        );
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _detailsController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
+    final ready = state.selectedDetail != null && state.peopleNeedingHelp != null;
 
     return _FlowFrame(
       emergency: true,
       title: 'Details',
       onBack: () {
         context.read<EmergencyRequestState>().goTo(
-          EmergencyScreen.emergencyLocation,
+          EmergencyScreen.emergencySpeak,
         );
       },
       child: Column(
@@ -859,7 +1294,7 @@ class _EmergencyDetailsScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.space2),
           Text(
-            'These details are optional for the demo request.',
+            'What happened and how many people need help are required.',
             style: Theme.of(context).textTheme.bodyLarge
                 ?.copyWith(color: AppColors.muted),
           ),
@@ -903,22 +1338,27 @@ class _EmergencyDetailsScreen extends StatelessWidget {
                 .toList(),
           ),
           const SizedBox(height: AppSpacing.space4),
-          const TextField(
+          TextField(
+            controller: _detailsController,
             minLines: 3,
             maxLines: 4,
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               labelText: 'Additional details',
               hintText: 'Extra information, if you have time',
               border: OutlineInputBorder(),
             ),
+            onChanged: state.setAdditionalDetails,
           ),
           const SizedBox(height: AppSpacing.space5),
           _ActionButton(
             label: 'CONTINUE NOW',
             emergency: true,
-            onPressed: () {
-              state.goTo(EmergencyScreen.emergencyConfirm);
-            },
+            onPressed: ready
+                ? () {
+                    state.setAdditionalDetails(_detailsController.text);
+                    state.goTo(EmergencyScreen.emergencyConfirm);
+                  }
+                : null,
           ),
         ],
       ),
@@ -947,16 +1387,19 @@ class _EmergencyConfirmScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineLarge,
           ),
           const SizedBox(height: AppSpacing.space4),
-          const _InfoCard(
-            title: 'DHA Phase 5, Street 12',
-            subtitle: 'Near XYZ Mall, Gate 3',
+          _InfoCard(
+            title: state.resolvedAddress ?? 'Location',
+            subtitle: 'Pinned on the map.',
             icon: Icons.location_on_rounded,
           ),
           const SizedBox(height: AppSpacing.space3),
           _InfoCard(
             title:
                 '${state.selectedDetail} · ${state.peopleNeedingHelp == 4 ? '4+' : state.peopleNeedingHelp} person${state.peopleNeedingHelp == 1 ? '' : 's'}',
-            subtitle: 'Optional demo details',
+            subtitle: state.additionalDetails == null ||
+                    state.additionalDetails!.isEmpty
+                ? 'Included with this request.'
+                : state.additionalDetails!,
             icon: Icons.medical_information_rounded,
           ),
           const SizedBox(height: AppSpacing.space3),
@@ -2980,7 +3423,7 @@ class _ActionButton extends StatelessWidget {
   });
 
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final bool emergency;
   final Color? color;
 
