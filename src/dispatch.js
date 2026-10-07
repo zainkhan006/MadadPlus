@@ -154,6 +154,7 @@ async function requestPayload(trx, requestId) {
   const request = await trx("emergency_requests as r")
     .leftJoin("ambulances as a", "a.id", "r.assigned_ambulance_id")
     .leftJoin("drivers as d", "d.id", "a.driver_id")
+    .leftJoin("hospitals as h", "h.id", "r.hospital_id")
     .select(
       "r.id as request_id",
       "r.status",
@@ -162,12 +163,21 @@ async function requestPayload(trx, requestId) {
       "r.caller_phone",
       "r.pickup_address",
       "r.emergency_description",
+      "r.people_count",
+      "r.additional_details",
+      "r.input_method",
+      "r.hospital_id",
       "r.hospital_address",
       "r.assigned_ambulance_id",
+      "h.name as hospital_name",
       "a.label as ambulance_label",
       "d.id as driver_id",
       "d.name as driver_name",
       "d.phone as driver_phone",
+      trx.raw("ST_Y(r.pickup_location::geometry) as pickup_lat"),
+      trx.raw("ST_X(r.pickup_location::geometry) as pickup_lng"),
+      trx.raw("ST_Y(r.hospital_location::geometry) as hospital_lat"),
+      trx.raw("ST_X(r.hospital_location::geometry) as hospital_lng"),
       trx.raw("ST_Y(a.location::geometry) as ambulance_lat"),
       trx.raw("ST_X(a.location::geometry) as ambulance_lng")
     )
@@ -185,7 +195,24 @@ async function requestPayload(trx, requestId) {
     type: request.type,
     callerPhone: request.caller_phone,
     pickupAddress: request.pickup_address,
+    pickupLocation: {
+      lat: Number(request.pickup_lat),
+      lng: Number(request.pickup_lng)
+    },
     emergencyDescription: request.emergency_description,
+    peopleCount: request.people_count,
+    additionalDetails: request.additional_details,
+    inputMethod: request.input_method,
+    hospital: request.hospital_id || request.hospital_address
+      ? {
+          id: request.hospital_id,
+          name: request.hospital_name || null,
+          address: request.hospital_address,
+          location: request.hospital_lat == null
+            ? null
+            : { lat: Number(request.hospital_lat), lng: Number(request.hospital_lng) }
+        }
+      : null,
     hospitalAddress: request.hospital_address,
     assignedAmbulance: request.assigned_ambulance_id
       ? {

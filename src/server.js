@@ -25,6 +25,8 @@ io.on("connection", (socket) => {
   socket.on("join:dispatch", () => socket.join("dispatch"));
   socket.on("join:request", (requestId) => socket.join(`request:${requestId}`));
   socket.on("join:driver", (driverId) => socket.join(`driver:${driverId}`));
+  socket.on("join:provider", (providerId) => socket.join(`provider:${providerId}`));
+  socket.on("join:domestic-request", (requestId) => socket.join(`domestic:${requestId}`));
 });
 
 function validCoordinates(lat, lng) {
@@ -80,6 +82,77 @@ async function emitAmbulance(ambulanceId) {
 function emitRequest(request, event) {
   io.to(`request:${request.requestId}`).emit(event, request);
   io.to("dispatch").emit("queue.updated", request);
+  const driverId = request.assignedAmbulance?.driver?.id;
+  if (driverId) {
+    io.to(`driver:${driverId}`).emit(event, request);
+  }
+}
+
+function money(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount >= 0 ? amount : null;
+}
+
+function domesticRequestPayload(request) {
+  return {
+    requestId: request.id,
+    status: request.status,
+    description: request.description,
+    address: request.address,
+    createdAt: request.created_at,
+    updatedAt: request.updated_at,
+    specialisation: request.specialisation_id
+      ? { id: request.specialisation_id, name: request.specialisation_name }
+      : null,
+    user: request.user_id
+      ? { id: request.user_id, name: request.user_name, phone: request.user_phone }
+      : null,
+    provider: request.provider_id
+      ? {
+          id: request.provider_id,
+          name: request.provider_name,
+          phone: request.provider_phone,
+          rating: Number(request.provider_rating),
+          inspectionFee: Number(request.provider_inspection_fee)
+        }
+      : null
+  };
+}
+
+async function getDomesticRequest(requestId) {
+  const request = await db("domestic_requests as r")
+    .leftJoin("specialisations as s", "s.id", "r.specialisation_id")
+    .leftJoin("users as u", "u.id", "r.user_id")
+    .leftJoin("providers as p", "p.id", "r.provider_id")
+    .select(
+      "r.id",
+      "r.status",
+      "r.description",
+      "r.address",
+      "r.created_at",
+      "r.updated_at",
+      "r.specialisation_id",
+      "s.name as specialisation_name",
+      "r.user_id",
+      "u.name as user_name",
+      "u.phone as user_phone",
+      "r.provider_id",
+      "p.name as provider_name",
+      "p.phone as provider_phone",
+      "p.rating as provider_rating",
+      "p.inspection_fee as provider_inspection_fee"
+    )
+    .where("r.id", requestId)
+    .first();
+
+  return request ? domesticRequestPayload(request) : null;
+}
+
+function emitDomesticRequest(request, event) {
+  io.to(`domestic:${request.requestId}`).emit(event, request);
+  if (request.provider?.id) {
+    io.to(`provider:${request.provider.id}`).emit(event, request);
+  }
 }
 
 async function assignAndLoad(trx, requestId, phase, reason) {
@@ -161,6 +234,30 @@ app.get("/api/v1/ambulances", async (req, res) => {
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Unable to load ambulances" });
+  }
+});
+
+app.get("/api/v1/hospitals", async (req, res) => {
+  try {
+    const hospitals = await db("hospitals")
+      .select(
+        "id",
+        "name",
+        "phone",
+        "address",
+        db.raw("ST_Y(location::geometry) as lat"),
+        db.raw("ST_X(location::geometry) as lng")
+      )
+      .where("active", true)
+      .orderBy("name");
+    res.json(hospitals.map((hospital) => ({
+      ...hospital,
+      lat: Number(hospital.lat),
+      lng: Number(hospital.lng)
+    })));
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to load hospitals" });
   }
 });
 
@@ -292,6 +389,9 @@ app.post("/api/v1/emergency-requests", async (req, res) => {
     type,
     address,
     description,
+    peopleCount,
+    additionalDetails,
+    inputMethod,
     callerPhone,
     hospitalAddress,
     hospitalLat,
@@ -303,6 +403,21 @@ app.post("/api/v1/emergency-requests", async (req, res) => {
       error: "lat, lng, and type: 'ambulance' are required"
     });
   }
+  if (!String(address || "").trim() || !String(description || "").trim()) {
+    return res.status(400).json({
+      error: "address and description (what happened) are required"
+    });
+  }
+  const parsedPeopleCount = Number(peopleCount);
+  if (!Number.isInteger(parsedPeopleCount) || parsedPeopleCount < 1) {
+    return res.status(400).json({
+      error: "peopleCount must be a positive whole number"
+    });
+  }
+  const method = String(inputMethod || "MANUAL").toUpperCase();
+  if (!["MANUAL", "VOICE"].includes(method)) {
+    return res.status(400).json({ error: "inputMethod must be MANUAL or VOICE" });
+  }
 
   try {
     const result = await db.transaction(async (trx) => {
@@ -313,8 +428,11 @@ app.post("/api/v1/emergency-requests", async (req, res) => {
           organization_id: orgId,
           type,
           caller_phone: callerPhone || null,
-          pickup_address: address || null,
-          emergency_description: description || null,
+          pickup_address: String(address).trim(),
+          emergency_description: String(description).trim(),
+          people_count: parsedPeopleCount,
+          additional_details: additionalDetails ? String(additionalDetails).trim() : null,
+          input_method: method,
           hospital_address: hospitalAddress || null,
           hospital_location: validCoordinates(hospitalLat, hospitalLng)
             ? point(trx, hospitalLat, hospitalLng)
@@ -419,7 +537,19 @@ async function markDriverRequest(driverId, requestId, action) {
       .select("d.id as driver_id", "a.id as ambulance_id")
       .where("d.id", driverId)
       .first();
-    const request = await getRequest(trx, requestId);
+    const request = await trx("emergency_requests")
+      .select(
+        "id",
+        "organization_id",
+        "status",
+        "current_phase",
+        "assigned_ambulance_id",
+        "dispatch_location",
+        "hospital_id",
+        "hospital_location"
+      )
+      .where("id", requestId)
+      .first();
 
     if (!driver || !request || request.assigned_ambulance_id !== driver.ambulance_id) {
       return { statusCode: 404, body: { error: "Driver request assignment not found" } };
@@ -438,17 +568,38 @@ async function markDriverRequest(driverId, requestId, action) {
       return { statusCode: 409, body: { error: `Request cannot perform ${action} from ${request.status}` } };
     }
 
+    const updates = {
+      status: transition.status,
+      current_phase: transition.phase,
+      picked_up_at: action === "pickup" && request.status !== "TRANSFER_EN_ROUTE"
+        ? trx.fn.now()
+        : undefined,
+      arrived_hospital_at: action === "hospital" ? trx.fn.now() : undefined,
+      updated_at: trx.fn.now()
+    };
+
+    if (action === "pickup" && !request.hospital_id && !request.hospital_location) {
+      const hospital = await trx("hospitals")
+        .select("id", "name", "address")
+        .where("active", true)
+        .orderByRaw(
+          "location <-> (select pickup_location from emergency_requests where id = ?)",
+          [requestId]
+        )
+        .first();
+      if (hospital) {
+        updates.hospital_id = hospital.id;
+        updates.hospital_address = hospital.address;
+        updates.hospital_location = trx.raw(
+          "(select location from hospitals where id = ?)",
+          [hospital.id]
+        );
+      }
+    }
+
     await trx("emergency_requests")
       .where("id", requestId)
-      .update({
-        status: transition.status,
-        current_phase: transition.phase,
-        picked_up_at: action === "pickup" && request.status !== "TRANSFER_EN_ROUTE"
-          ? trx.fn.now()
-          : undefined,
-        arrived_hospital_at: action === "hospital" ? trx.fn.now() : undefined,
-        updated_at: trx.fn.now()
-      });
+      .update(updates);
 
     return {
       statusCode: 200,
@@ -534,9 +685,15 @@ app.patch("/api/v1/drivers/:driverId/location", async (req, res) => {
       await trx("ambulances")
         .where("id", ambulance.id)
         .update({ location, last_location_at: trx.fn.now(), updated_at: trx.fn.now() });
+      const activeRequest = await trx("emergency_requests")
+        .select("id")
+        .where("assigned_ambulance_id", ambulance.id)
+        .whereNotIn("status", ["COMPLETED", "CANCELLED"])
+        .first();
       await trx("ambulance_location_updates").insert({
         ambulance_id: ambulance.id,
         driver_id: req.params.driverId,
+        request_id: activeRequest?.id || null,
         location
       });
       return ambulance.id;
@@ -814,6 +971,228 @@ app.post("/api/v1/emergency-requests/:requestId/assign", async (req, res) => {
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Unable to manually assign ambulance" });
+  }
+});
+
+app.get("/api/v1/specialisations", async (req, res) => {
+  try {
+    const specialisations = await db("specialisations")
+      .select("id", "name")
+      .where("active", true)
+      .orderBy("name");
+    res.json(specialisations);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to load specialisations" });
+  }
+});
+
+app.get("/api/v1/providers", async (req, res) => {
+  try {
+    const providers = await db("providers as p")
+      .leftJoin("specialisations as s", "s.id", "p.specialisation_id")
+      .select(
+        "p.id",
+        "p.name",
+        "p.status",
+        "p.designation",
+        "p.rating",
+        "p.inspection_fee as inspectionFee",
+        "p.services_provided_count as servicesProvidedCount",
+        "s.id as specialisationId",
+        "s.name as specialisationName"
+      )
+      .modify((query) => {
+        if (req.query.specialisationId) {
+          query.where("p.specialisation_id", req.query.specialisationId);
+        }
+        if (req.query.status) {
+          query.where("p.status", String(req.query.status).toUpperCase());
+        }
+      })
+      .orderBy("p.rating", "desc");
+
+    res.json(providers.map((provider) => ({
+      ...provider,
+      rating: Number(provider.rating),
+      inspectionFee: Number(provider.inspectionFee)
+    })));
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to load providers" });
+  }
+});
+
+app.get("/api/v1/providers/:providerId", async (req, res) => {
+  try {
+    const provider = await db("providers as p")
+      .leftJoin("specialisations as s", "s.id", "p.specialisation_id")
+      .select(
+        "p.id",
+        "p.name",
+        "p.phone",
+        "p.status",
+        "p.designation",
+        "p.rating",
+        "p.inspection_fee as inspectionFee",
+        "p.services_provided_count as servicesProvidedCount",
+        "s.id as specialisationId",
+        "s.name as specialisationName"
+      )
+      .where("p.id", req.params.providerId)
+      .first();
+    if (!provider) return res.status(404).json({ error: "Provider not found" });
+    res.json({
+      ...provider,
+      rating: Number(provider.rating),
+      inspectionFee: Number(provider.inspectionFee)
+    });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to load provider" });
+  }
+});
+
+app.patch("/api/v1/providers/:providerId/inspection-fee", async (req, res) => {
+  const inspectionFee = money(req.body.inspectionFee);
+  if (inspectionFee == null) {
+    return res.status(400).json({ error: "inspectionFee must be a non-negative number" });
+  }
+
+  try {
+    const updated = await db("providers")
+      .where("id", req.params.providerId)
+      .update({ inspection_fee: inspectionFee, updated_at: db.fn.now() });
+    if (updated !== 1) return res.status(404).json({ error: "Provider not found" });
+    res.json({ providerId: req.params.providerId, inspectionFee });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to update inspection fee" });
+  }
+});
+
+app.post("/api/v1/domestic-requests", async (req, res) => {
+  const {
+    userId,
+    providerId,
+    specialisationId,
+    description,
+    address,
+    lat,
+    lng
+  } = req.body;
+
+  if (!userId || !providerId || !specialisationId
+    || !String(description || "").trim() || !String(address || "").trim()) {
+    return res.status(400).json({
+      error: "userId, providerId, specialisationId, description, and address are required"
+    });
+  }
+  if (lat != null || lng != null) {
+    if (!validCoordinates(lat, lng)) {
+      return res.status(400).json({ error: "lat and lng must both be valid coordinates" });
+    }
+  }
+
+  try {
+    const created = await db.transaction(async (trx) => {
+      const user = await trx("users").select("id").where("id", userId).first();
+      if (!user) return { statusCode: 404, body: { error: "User not found" } };
+
+      const provider = await trx("providers")
+        .select("id", "specialisation_id", "status")
+        .where("id", providerId)
+        .first();
+      if (!provider) return { statusCode: 404, body: { error: "Provider not found" } };
+      if (provider.specialisation_id !== specialisationId) {
+        return { statusCode: 409, body: { error: "Provider does not offer this specialisation" } };
+      }
+
+      const [request] = await trx("domestic_requests")
+        .insert({
+          user_id: userId,
+          provider_id: providerId,
+          specialisation_id: specialisationId,
+          description: String(description).trim(),
+          address: String(address).trim(),
+          location: validCoordinates(lat, lng) ? point(trx, lat, lng) : null,
+          status: "PENDING"
+        })
+        .returning("id");
+
+      return { statusCode: 201, requestId: request.id };
+    });
+
+    if (created.statusCode !== 201) {
+      return res.status(created.statusCode).json(created.body);
+    }
+    const payload = await getDomesticRequest(created.requestId);
+    emitDomesticRequest(payload, "domestic.requested");
+    res.status(201).json(payload);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to create domestic request" });
+  }
+});
+
+app.get("/api/v1/domestic-requests/:requestId", async (req, res) => {
+  try {
+    const payload = await getDomesticRequest(req.params.requestId);
+    if (!payload) return res.status(404).json({ error: "Domestic request not found" });
+    res.json(payload);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to load domestic request" });
+  }
+});
+
+app.get("/api/v1/providers/:providerId/requests", async (req, res) => {
+  try {
+    const requests = await db("domestic_requests as r")
+      .leftJoin("specialisations as s", "s.id", "r.specialisation_id")
+      .leftJoin("users as u", "u.id", "r.user_id")
+      .leftJoin("providers as p", "p.id", "r.provider_id")
+      .select(
+        "r.id",
+        "r.status",
+        "r.description",
+        "r.address",
+        "r.created_at",
+        "r.updated_at",
+        "r.specialisation_id",
+        "s.name as specialisation_name",
+        "r.user_id",
+        "u.name as user_name",
+        "u.phone as user_phone",
+        "r.provider_id",
+        "p.name as provider_name",
+        "p.phone as provider_phone",
+        "p.rating as provider_rating",
+        "p.inspection_fee as provider_inspection_fee"
+      )
+      .where("r.provider_id", req.params.providerId)
+      .orderBy("r.created_at", "desc");
+    res.json(requests.map(domesticRequestPayload));
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to load provider requests" });
+  }
+});
+
+app.patch("/api/v1/providers/:providerId/requests/:requestId/accept", async (req, res) => {
+  try {
+    const updated = await db("domestic_requests")
+      .where({ id: req.params.requestId, provider_id: req.params.providerId, status: "PENDING" })
+      .update({ status: "ACCEPTED", updated_at: db.fn.now() });
+    if (updated !== 1) {
+      return res.status(409).json({ error: "Request is not pending for this provider" });
+    }
+    const payload = await getDomesticRequest(req.params.requestId);
+    emitDomesticRequest(payload, "domestic.accepted");
+    res.json(payload);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to accept domestic request" });
   }
 });
 
