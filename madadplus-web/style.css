@@ -296,10 +296,84 @@ input, select {
 .legend-dot--busy { background: var(--marker-busy); }
 .legend-dot--unavailable { background: var(--marker-unavailable); }
 
-/* Ambulance marker icons (Leaflet divIcon) */
+/* Ambulance marker icons (Leaflet divIcon) — represents the driver tied to that ambulance */
 .ambulance-marker {
   background: transparent;
   border: none;
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.35));
+}
+
+/* Light bar on the ambulance roof blinks, so the icon reads as an emergency vehicle */
+.ambulance-marker .amb-lightbar {
+  animation: amb-blink 1.1s steps(1, end) infinite;
+}
+
+@keyframes amb-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0.3; }
+}
+
+/* Hospital marker icons (Leaflet divIcon) — standing layer + active bookings */
+.hospital-marker {
+  background: transparent;
+  border: none;
+}
+
+/* Incoming-request pin: solid dot at the pickup point, two rings pulsing outwards */
+.request-pin {
+  background: transparent;
+  border: none;
+}
+
+.req-pin {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.req-pin__dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-critical);
+  border: 3px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.45);
+  z-index: 2;
+}
+
+.req-pin__pulse {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-critical);
+  opacity: 0;
+  animation: req-pin-pulse 2s ease-out infinite;
+}
+
+.req-pin__pulse--delay {
+  animation-delay: 1s;
+}
+
+@keyframes req-pin-pulse {
+  0% { transform: scale(1); opacity: 0.9; }
+  100% { transform: scale(3.2); opacity: 0; }
+}
+
+.legend-dot--hospital { background: #2563eb; }
+.legend-dot--request { background: var(--accent-critical); }
+
+.legend-line {
+  width: 16px;
+  height: 0;
+  border-top: 2px dashed var(--text-secondary);
+  display: inline-block;
 }
 
 /* ---- Board pane ---- */
@@ -394,6 +468,18 @@ input, select {
 .amb-card__label {
   font-weight: 600;
   font-size: 13.5px;
+}
+
+.amb-card__flag {
+  margin-left: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--status-unavailable);
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  border-radius: 10px;
+  padding: 1px 7px;
+  vertical-align: middle;
 }
 
 .amb-card__meta {
@@ -690,4 +776,27 @@ input, select {
   border: 1px solid var(--border);
   background: var(--bg-panel-alt);
   font-size: 12.5px;
+}
+
+.settings-row__actions {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.settings-note.is-error {
+  color: var(--status-unavailable);
+}
+
+/* Same badge treatment as the ambulance card flag, used inside booking cards. */
+.booking-card__flag {
+  margin-left: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--status-unavailable);
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  border-radius: 10px;
+  padding: 1px 7px;
+  vertical-align: middle;
 }
