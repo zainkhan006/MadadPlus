@@ -163,6 +163,8 @@ class EmergencySocketService {
   void connect({
     required String requestId,
     required void Function(EmergencyOutcome outcome) onOutcome,
+    void Function(EmergencyRequestResult result)? onAssigned,
+    void Function(EmergencyCall call)? onPickedUp,
     void Function(EmergencyCompletion completion)? onCompleted,
     void Function()? onDisconnected,
     void Function()? onReconnected,
@@ -200,8 +202,15 @@ class EmergencySocketService {
           Map<String, dynamic>.from(data as Map),
         );
         onOutcome(createEmergencyOutcome(result));
+        onAssigned?.call(result);
       });
     }
+
+    requestSocket.on('request.pickedUp', (data) {
+      onPickedUp?.call(
+        EmergencyCall.fromJson(Map<String, dynamic>.from(data as Map)),
+      );
+    });
 
     requestSocket.on('request.completed', (data) {
       final completion = EmergencyCompletion.fromJson(

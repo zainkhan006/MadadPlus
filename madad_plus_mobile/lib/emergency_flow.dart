@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 
 import 'services/emergency_request_state.dart';
+import 'services/emergency_service.dart';
 import 'theme/app_theme.dart';
 
 class EmergencyFlow extends StatelessWidget {
@@ -567,20 +568,7 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            height: 190,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.page,
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              border: Border.all(color: AppColors.line, width: 2),
-            ),
-            child: const Icon(
-              Icons.location_on_rounded,
-              color: AppColors.blue,
-              size: 42,
-            ),
-          ),
+          const _TripMap(),
           const SizedBox(height: AppSpacing.space3),
           Text(
             state.driverAmbulanceLabel ?? 'Ambulance',
@@ -1523,7 +1511,7 @@ class _EmergencyAssignedScreen extends StatelessWidget {
             ),
           ],
           const SizedBox(height: AppSpacing.space4),
-          _SimulationRoute(remainingSeconds: state.remainingSeconds),
+          const _TripMap(),
           const SizedBox(height: AppSpacing.space3),
           Text(
             'Arrival simulation starts now: ${state.remainingSeconds} seconds remaining.',
@@ -1531,6 +1519,10 @@ class _EmergencyAssignedScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyMedium
                 ?.copyWith(color: AppColors.muted),
           ),
+          if(state.hospitalError != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            _ErrorNotice(message: state.hospitalError!),
+          ],
           const SizedBox(height: AppSpacing.space4),
           const _DemoNotice(),
         ],
@@ -1605,7 +1597,7 @@ class _EmergencyEnRouteScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: AppSpacing.space4),
-          _SimulationRoute(remainingSeconds: state.remainingSeconds),
+          const _TripMap(),
           const SizedBox(height: AppSpacing.space4),
           Text(
             '${state.remainingSeconds} seconds until arrival',
@@ -1613,6 +1605,10 @@ class _EmergencyEnRouteScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineMedium
                 ?.copyWith(color: AppColors.red),
           ),
+          if(state.hospitalError != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            _ErrorNotice(message: state.hospitalError!),
+          ],
           const SizedBox(height: AppSpacing.space4),
           const _DemoNotice(),
         ],
@@ -1664,10 +1660,102 @@ class _EmergencyApproachingScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.space4),
-          _SimulationRoute(remainingSeconds: state.remainingSeconds),
+          const _TripMap(),
+          if(state.remainingSeconds <= 0) ...[
+            const SizedBox(height: AppSpacing.space4),
+            Text(
+              'Your ambulance is here',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: AppSpacing.space3),
+            _AboutDriverRow(assignment: state.result?.assignedAmbulance),
+          ],
+          if(state.hospitalError != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            _ErrorNotice(message: state.hospitalError!),
+          ],
           const SizedBox(height: AppSpacing.space4),
           const _DemoNotice(),
         ],
+      ),
+    );
+  }
+}
+
+class _AboutDriverRow extends StatefulWidget {
+  const _AboutDriverRow({required this.assignment});
+
+  final AmbulanceAssignment? assignment;
+
+  @override
+  State<_AboutDriverRow> createState() => _AboutDriverRowState();
+}
+
+class _AboutDriverRowState extends State<_AboutDriverRow> {
+  bool expanded = false;
+  bool pressed = false;
+
+  String shown(String? value) {
+    final trimmed = value?.trim() ?? '';
+    if(trimmed.isEmpty) {
+      return 'N/A';
+    }
+    return trimmed;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final assignment = widget.assignment;
+    return GestureDetector(
+      onTapDown: (_) {
+        setState(() {
+          pressed = true;
+          expanded = !expanded;
+        });
+      },
+      onTapUp: (_) {
+        setState(() {
+          pressed = false;
+        });
+      },
+      onTapCancel: () {
+        setState(() {
+          pressed = false;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.all(AppSpacing.space3),
+        decoration: BoxDecoration(
+          color: pressed ? AppColors.line : AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: AppColors.line, width: 2),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'About driver',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            if(expanded) ...[
+              const SizedBox(height: AppSpacing.space2),
+              Text(
+                'Ambulance: ${shown(assignment?.label)}',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              Text(
+                'Driver: ${shown(assignment?.driverName)}',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              Text(
+                'Phone: ${shown(assignment?.driverPhone)}',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -1689,20 +1777,27 @@ class _EmergencyArrivedScreen extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Icon(
-              Icons.local_hospital_rounded,
-              color: AppColors.red,
-              size: 64,
+            const _TripMap(),
+            const SizedBox(height: AppSpacing.space3),
+            Text(
+              state.hospitalName ?? '',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-            const SizedBox(height: AppSpacing.space4),
+            Text(
+              state.hospitalAddress ?? '',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: AppSpacing.space3),
             Text(
               'Ambulance has arrived',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.headlineLarge,
             ),
-            const SizedBox(height: AppSpacing.space3),
+            const SizedBox(height: AppSpacing.space2),
             Text(
-              '${assignment.label} · City Emergency Services',
+              assignment.label,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyLarge
                   ?.copyWith(color: AppColors.muted),
@@ -3735,86 +3830,113 @@ class _SelectionChip extends StatelessWidget {
   }
 }
 
-class _SimulationRoute extends StatelessWidget {
-  const _SimulationRoute({required this.remainingSeconds});
-
-  final int remainingSeconds;
+class _TripMap extends StatelessWidget {
+  const _TripMap();
 
   @override
   Widget build(BuildContext context) {
-    final progress = (15 - remainingSeconds).clamp(0, 15) / 15;
+    final state = context.watch<EmergencyRequestState>();
+    final fromLat = state.routeFromLat;
+    final fromLng = state.routeFromLng;
+    final toLat = state.routeToLat;
+    final toLng = state.routeToLng;
+    if(fromLat == null || fromLng == null || toLat == null || toLng == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            height: 190,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.page,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: AppColors.line, width: 2),
+            ),
+            child: const Icon(
+              Icons.location_on_rounded,
+              color: AppColors.blue,
+              size: 42,
+            ),
+          ),
+          if(state.routeError != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _ErrorNotice(message: state.routeError!),
+          ],
+        ],
+      );
+    }
 
-    return Container(
-      height: 190,
-      decoration: BoxDecoration(
-        color: AppColors.page,
-        border: Border.all(color: AppColors.line, width: 2),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return Stack(
-            children: [
-              Center(
-                child: Container(
-                  width: constraints.maxWidth * .55,
-                  height: 3,
-                  color: AppColors.line,
-                ),
-              ),
-              const Positioned(
-                left: AppSpacing.space3,
-                top: AppSpacing.space3,
-                child: Text('City Emergency Services'),
-              ),
-              const Positioned(
-                right: AppSpacing.space3,
-                bottom: AppSpacing.space3,
-                child: Text('Pickup point'),
-              ),
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 700),
-                curve: Curves.easeInOut,
-                left: constraints.maxWidth * (.12 + (.48 * progress)),
-                top: constraints.maxHeight * (.20 + (.43 * progress)),
-                child: const _RouteMarker(
-                  color: AppColors.red,
-                  icon: Icons.local_hospital_rounded,
-                ),
-              ),
-              Positioned(
-                right: constraints.maxWidth * .10,
-                bottom: constraints.maxHeight * .13,
-                child: const _RouteMarker(
-                  color: AppColors.blue,
-                  icon: Icons.person_pin_circle_rounded,
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+    final progress = state.routeProgress();
+    final ambulance = LatLng(
+      fromLat + ((toLat - fromLat) * progress),
+      fromLng + ((toLng - fromLng) * progress),
     );
-  }
-}
+    final start = LatLng(fromLat, fromLng);
+    final destination = LatLng(toLat, toLng);
+    final samePoint = (fromLat - toLat).abs() < 0.00001 &&
+        (fromLng - toLng).abs() < 0.00001;
 
-class _RouteMarker extends StatelessWidget {
-  const _RouteMarker({required this.color, required this.icon});
-
-  final Color color;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: color,
-        border: Border.all(color: AppColors.surface, width: 3),
-        borderRadius: BorderRadius.circular(22),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Container(
+        height: 190,
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.line, width: 2),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        child: FlutterMap(
+          options: samePoint
+              ? MapOptions(initialCenter: start, initialZoom: 16)
+              : MapOptions(
+                  initialCameraFit: CameraFit.bounds(
+                    bounds: LatLngBounds.fromPoints([start, destination]),
+                    padding: const EdgeInsets.all(36),
+                  ),
+                ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.madadplus.madad_plus_mobile',
+              tileProvider: Platform.environment['FLUTTER_TEST'] == 'true'
+                  ? _TestTileProvider()
+                  : NetworkTileProvider(),
+            ),
+            PolylineLayer(
+              polylines: [
+                Polyline(
+                  points: [start, destination],
+                  strokeWidth: 4,
+                  color: AppColors.blue,
+                ),
+              ],
+            ),
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: ambulance,
+                  width: 36,
+                  height: 36,
+                  child: const Icon(
+                    Icons.local_shipping,
+                    color: AppColors.red,
+                    size: 32,
+                  ),
+                ),
+                Marker(
+                  point: destination,
+                  width: 36,
+                  height: 36,
+                  child: const Icon(
+                    Icons.location_on,
+                    color: AppColors.blue,
+                    size: 36,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
-      child: Icon(icon, color: AppColors.surface),
     );
   }
 }

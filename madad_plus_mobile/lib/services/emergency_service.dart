@@ -3,6 +3,25 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+double? _coord(dynamic value) {
+  if(value is num) {
+    return value.toDouble();
+  }
+  return null;
+}
+
+({double lat, double lng})? _point(dynamic value) {
+  if(value is! Map) {
+    return null;
+  }
+  final lat = _coord(value['lat']);
+  final lng = _coord(value['lng']);
+  if(lat == null || lng == null) {
+    return null;
+  }
+  return (lat: lat, lng: lng);
+}
+
 class ApiException implements Exception {
   const ApiException(this.message);
 
@@ -18,20 +37,34 @@ class AmbulanceAssignment {
     required this.label,
     this.distanceKm,
     this.status,
+    this.driverName,
+    this.driverPhone,
+    this.latitude,
+    this.longitude,
   });
 
   final String id;
   final String label;
   final double? distanceKm;
   final String? status;
+  final String? driverName;
+  final String? driverPhone;
+  final double? latitude;
+  final double? longitude;
 
   factory AmbulanceAssignment.fromJson(Map<String, dynamic> json) {
     final distance = json['distanceKm'];
+    final driver = json['driver'];
+    final location = _point(json['location']);
     return AmbulanceAssignment(
       id: json['id'] as String,
       label: json['label'] as String,
       distanceKm: distance is num ? distance.toDouble() : null,
       status: json['status'] as String?,
+      driverName: driver is Map ? driver['name'] as String? : null,
+      driverPhone: driver is Map ? driver['phone'] as String? : null,
+      latitude: location?.lat,
+      longitude: location?.lng,
     );
   }
 }
@@ -42,17 +75,24 @@ class EmergencyRequestResult {
     required this.status,
     required this.assignedAmbulance,
     required this.consideredNearest,
+    this.pickupLatitude,
+    this.pickupLongitude,
   });
 
   final String requestId;
   final String status;
   final AmbulanceAssignment? assignedAmbulance;
   final AmbulanceAssignment? consideredNearest;
+  final double? pickupLatitude;
+  final double? pickupLongitude;
 
   factory EmergencyRequestResult.fromJson(Map<String, dynamic> json) {
+    final pickup = _point(json['pickupLocation']);
     return EmergencyRequestResult(
       requestId: json['requestId'] as String,
       status: json['status'] as String,
+      pickupLatitude: pickup?.lat,
+      pickupLongitude: pickup?.lng,
       assignedAmbulance: json['assignedAmbulance'] == null
           ? null
           : AmbulanceAssignment.fromJson(
@@ -74,6 +114,8 @@ class AmbulanceRow {
     required this.status,
     required this.driverId,
     required this.driverName,
+    this.latitude,
+    this.longitude,
   });
 
   final String id;
@@ -81,6 +123,8 @@ class AmbulanceRow {
   final String status;
   final String? driverId;
   final String? driverName;
+  final double? latitude;
+  final double? longitude;
 
   factory AmbulanceRow.fromJson(Map<String, dynamic> json) {
     return AmbulanceRow(
@@ -89,6 +133,8 @@ class AmbulanceRow {
       status: json['status'] as String,
       driverId: json['driverId'] as String?,
       driverName: json['driverName'] as String?,
+      latitude: _coord(json['lat']),
+      longitude: _coord(json['lng']),
     );
   }
 }
@@ -104,6 +150,12 @@ class EmergencyCall {
     required this.hospitalName,
     required this.hospitalAddress,
     required this.assignedDriverId,
+    this.pickupLatitude,
+    this.pickupLongitude,
+    this.ambulanceLatitude,
+    this.ambulanceLongitude,
+    this.hospitalLatitude,
+    this.hospitalLongitude,
   });
 
   final String requestId;
@@ -115,12 +167,21 @@ class EmergencyCall {
   final String? hospitalName;
   final String? hospitalAddress;
   final String? assignedDriverId;
+  final double? pickupLatitude;
+  final double? pickupLongitude;
+  final double? ambulanceLatitude;
+  final double? ambulanceLongitude;
+  final double? hospitalLatitude;
+  final double? hospitalLongitude;
 
   factory EmergencyCall.fromJson(Map<String, dynamic> json) {
     final hospital = json['hospital'];
     final ambulance = json['assignedAmbulance'];
     final driver = ambulance is Map ? ambulance['driver'] : null;
     final people = json['peopleCount'];
+    final pickup = _point(json['pickupLocation']);
+    final ambulancePoint = ambulance is Map ? _point(ambulance['location']) : null;
+    final hospitalPoint = hospital is Map ? _point(hospital['location']) : null;
     return EmergencyCall(
       requestId: json['requestId'] as String,
       status: json['status'] as String,
@@ -133,6 +194,12 @@ class EmergencyCall {
           ? hospital['address'] as String?
           : json['hospitalAddress'] as String?,
       assignedDriverId: driver is Map ? driver['id'] as String? : null,
+      pickupLatitude: pickup?.lat,
+      pickupLongitude: pickup?.lng,
+      ambulanceLatitude: ambulancePoint?.lat,
+      ambulanceLongitude: ambulancePoint?.lng,
+      hospitalLatitude: hospitalPoint?.lat,
+      hospitalLongitude: hospitalPoint?.lng,
     );
   }
 }

@@ -500,6 +500,8 @@ class SilentSocketService extends EmergencySocketService {
   void connect({
     required String requestId,
     required void Function(EmergencyOutcome outcome) onOutcome,
+    void Function(EmergencyRequestResult result)? onAssigned,
+    void Function(EmergencyCall call)? onPickedUp,
     void Function(EmergencyCompletion completion)? onCompleted,
     void Function()? onDisconnected,
     void Function()? onReconnected,

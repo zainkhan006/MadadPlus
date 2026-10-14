@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/animation.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -137,12 +138,124 @@ class EmergencyRequestState extends ChangeNotifier {
   EmergencyOutcome? outcome;
   EmergencyRequestResult? result;
   String? errorMessage;
+  String? hospitalName;
+  String? hospitalAddress;
+  String? hospitalError;
+  int routeLeg = 0;
+  double? routeFromLat;
+  double? routeFromLng;
+  double? routeToLat;
+  double? routeToLng;
+  DateTime? routeStartedAt;
+  String? routeError;
+  double? driverAmbulanceLat;
+  double? driverAmbulanceLng;
   int remainingSeconds = 15;
   bool isRequesting = false;
   bool isCompleting = false;
 
   Timer? _arrivalTimer;
+  Timer? _routeTimer;
   bool _socketConnected = false;
+
+  static const _hospitalLegStatuses = {
+    'PICKED_UP',
+    'EN_ROUTE_HOSPITAL',
+    'ARRIVED',
+  };
+
+  double routeProgress() {
+    final started = routeStartedAt;
+    if(started == null) {
+      return 0;
+    }
+    final raw = DateTime.now().difference(started).inMilliseconds / 15000;
+    return Curves.easeInOut.transform(raw.clamp(0.0, 1.0));
+  }
+
+  void clearRoute() {
+    _routeTimer?.cancel();
+    _routeTimer = null;
+    routeLeg = 0;
+    routeFromLat = null;
+    routeFromLng = null;
+    routeToLat = null;
+    routeToLng = null;
+    routeStartedAt = null;
+    routeError = null;
+  }
+
+  void startRouteLeg({
+    required int leg,
+    required double? fromLat,
+    required double? fromLng,
+    required double? toLat,
+    required double? toLng,
+  }) {
+    if(leg == 1 && routeLeg == 1) {
+      return;
+    }
+    if(fromLat == null || fromLng == null || toLat == null || toLng == null) {
+      clearRoute();
+      routeError = 'The location was not sent.';
+      notifyListeners();
+      return;
+    }
+
+    _routeTimer?.cancel();
+    routeLeg = leg;
+    routeFromLat = fromLat;
+    routeFromLng = fromLng;
+    routeToLat = toLat;
+    routeToLng = toLng;
+    routeStartedAt = DateTime.now();
+    routeError = null;
+    _routeTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
+      if(routeProgress() >= 1) {
+        timer.cancel();
+      }
+      notifyListeners();
+    });
+    notifyListeners();
+  }
+
+  void beginCallerLeg(EmergencyRequestResult incoming) {
+    final ambulance = incoming.assignedAmbulance;
+    startRouteLeg(
+      leg: 1,
+      fromLat: ambulance?.latitude,
+      fromLng: ambulance?.longitude,
+      toLat: incoming.pickupLatitude,
+      toLng: incoming.pickupLongitude,
+    );
+  }
+
+  void syncDriverRoute() {
+    final call = driverCall;
+    if(call == null) {
+      return;
+    }
+    if(_hospitalLegStatuses.contains(call.status)) {
+      if(routeLeg == 2) {
+        return;
+      }
+      startRouteLeg(
+        leg: 2,
+        fromLat: call.pickupLatitude,
+        fromLng: call.pickupLongitude,
+        toLat: call.hospitalLatitude,
+        toLng: call.hospitalLongitude,
+      );
+      return;
+    }
+    startRouteLeg(
+      leg: 1,
+      fromLat: call.ambulanceLatitude ?? driverAmbulanceLat,
+      fromLng: call.ambulanceLongitude ?? driverAmbulanceLng,
+      toLat: call.pickupLatitude,
+      toLng: call.pickupLongitude,
+    );
+  }
 
   void updateRequest({
     required String requestId,
@@ -672,7 +785,10 @@ class EmergencyRequestState extends ChangeNotifier {
     driverId = id;
     driverAmbulanceLabel = ambulance.label;
     driverAmbulanceStatus = ambulance.status;
+    driverAmbulanceLat = ambulance.latitude;
+    driverAmbulanceLng = ambulance.longitude;
     driverCall = null;
+    clearRoute();
     _emergencySocketService.connectDriver(
       driverId: id,
       onCall: _receiveDriverCall,
@@ -685,7 +801,10 @@ class EmergencyRequestState extends ChangeNotifier {
     driverId = null;
     driverAmbulanceLabel = null;
     driverAmbulanceStatus = null;
+    driverAmbulanceLat = null;
+    driverAmbulanceLng = null;
     driverCall = null;
+    clearRoute();
     loadDriverAmbulances();
   }
 
@@ -707,6 +826,7 @@ class EmergencyRequestState extends ChangeNotifier {
       driverCall = call == null || _closedCallStatuses.contains(call.status)
           ? null
           : call;
+      syncDriverRoute();
     } on ApiException catch (error) {
       driverError = error.message;
     } on TimeoutException {
@@ -724,9 +844,11 @@ class EmergencyRequestState extends ChangeNotifier {
     if(forThisDriver && !_closedCallStatuses.contains(call.status)) {
       driverCall = call;
       driverAmbulanceStatus = 'BUSY';
+      syncDriverRoute();
     }
     else if(driverCall?.requestId == call.requestId) {
       driverCall = null;
+      clearRoute();
       if(call.status == 'COMPLETED') {
         driverAmbulanceStatus = 'FREE';
       }
@@ -756,9 +878,11 @@ class EmergencyRequestState extends ChangeNotifier {
       if(_closedCallStatuses.contains(updated.status)) {
         driverCall = null;
         driverAmbulanceStatus = 'FREE';
+        clearRoute();
       }
       else {
         driverCall = updated;
+        syncDriverRoute();
       }
       return true;
     } on ApiException catch (error) {
@@ -975,6 +1099,9 @@ class EmergencyRequestState extends ChangeNotifier {
 
     _arrivalTimer?.cancel();
     _arrivalTimer = null;
+    hospitalName = null;
+    hospitalAddress = null;
+    hospitalError = null;
     isRequesting = true;
     errorMessage = null;
     currentScreen = EmergencyScreen.emergencySearch;
@@ -1000,6 +1127,7 @@ class EmergencyRequestState extends ChangeNotifier {
       }
       else {
         currentScreen = EmergencyScreen.emergencyAssigned;
+        beginCallerLeg(result!);
         _connectToRequest(result!.requestId);
         _startArrivalSimulation();
       }
@@ -1033,6 +1161,12 @@ class EmergencyRequestState extends ChangeNotifier {
     outcome = null;
     result = null;
     errorMessage = null;
+    hospitalName = null;
+    hospitalAddress = null;
+    hospitalError = null;
+    clearRoute();
+    driverAmbulanceLat = null;
+    driverAmbulanceLng = null;
     remainingSeconds = 15;
     isRequesting = false;
     isCompleting = false;
@@ -1267,6 +1401,15 @@ class EmergencyRequestState extends ChangeNotifier {
         outcome = newOutcome;
         notifyListeners();
       },
+      onAssigned: (incoming) {
+        if(incoming.requestId != requestId) {
+          return;
+        }
+        result = incoming;
+        beginCallerLeg(incoming);
+        notifyListeners();
+      },
+      onPickedUp: receivePickup,
       onCompleted: (_) {
         _arrivalTimer?.cancel();
         isCompleting = false;
@@ -1275,6 +1418,34 @@ class EmergencyRequestState extends ChangeNotifier {
         notifyListeners();
       },
     );
+  }
+
+  void receivePickup(EmergencyCall call) {
+    if(call.requestId != requestId) {
+      return;
+    }
+
+    final name = call.hospitalName?.trim() ?? '';
+    final address = call.hospitalAddress?.trim() ?? '';
+    if(name.isEmpty || address.isEmpty) {
+      hospitalError = 'The ambulance picked you up, but the hospital was not sent.';
+      notifyListeners();
+      return;
+    }
+
+    _arrivalTimer?.cancel();
+    hospitalName = name;
+    hospitalAddress = address;
+    hospitalError = null;
+    currentScreen = EmergencyScreen.emergencyArrived;
+    startRouteLeg(
+      leg: 2,
+      fromLat: call.pickupLatitude ?? result?.pickupLatitude,
+      fromLng: call.pickupLongitude ?? result?.pickupLongitude,
+      toLat: call.hospitalLatitude,
+      toLng: call.hospitalLongitude,
+    );
+    notifyListeners();
   }
 
   void _startArrivalSimulation() {
@@ -1290,8 +1461,9 @@ class EmergencyRequestState extends ChangeNotifier {
         currentScreen = EmergencyScreen.emergencyApproaching;
       }
       else if(remainingSeconds <= 0) {
+        remainingSeconds = 0;
         timer.cancel();
-        currentScreen = EmergencyScreen.emergencyArrived;
+        currentScreen = EmergencyScreen.emergencyApproaching;
         notifyListeners();
         return;
       }
@@ -1335,6 +1507,7 @@ class EmergencyRequestState extends ChangeNotifier {
   @override
   void dispose() {
     _arrivalTimer?.cancel();
+    _routeTimer?.cancel();
     _disconnectFromRequest();
     _emergencySocketService.disconnectDriver();
     _emergencySocketService.disconnectProvider();
