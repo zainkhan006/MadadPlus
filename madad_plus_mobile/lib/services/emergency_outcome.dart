@@ -23,14 +23,22 @@ EmergencyOutcome createEmergencyOutcome(EmergencyRequestResult result) {
     );
   }
 
-  final assignedAmbulance = result.assignedAmbulance!;
-  final consideredNearest = result.consideredNearest;
+  final assignedAmbulance = result.assignedAmbulance;
+  if(assignedAmbulance == null) {
+    return const EmergencyOutcome(
+      type: EmergencyOutcomeType.queued,
+      message: 'No ambulance is available. Your request is in the queue.',
+    );
+  }
 
-  if(consideredNearest != null) {
+  final consideredNearest = result.consideredNearest;
+  final nearestStatus = consideredNearest?.status;
+
+  if(consideredNearest != null && nearestStatus != null) {
     return EmergencyOutcome(
       type: EmergencyOutcomeType.assigned,
       message:
-          '${consideredNearest.label} was closer but ${consideredNearest.status!.toLowerCase()}. '
+          '${consideredNearest.label} was closer but ${nearestStatus.toLowerCase()}. '
           '${assignedAmbulance.label} was assigned instead.',
     );
   }

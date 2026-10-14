@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 
 import 'services/emergency_request_state.dart';
+import 'services/emergency_service.dart';
 import 'theme/app_theme.dart';
 
 class EmergencyFlow extends StatelessWidget {
@@ -414,14 +415,17 @@ class _RegisterScreen extends StatelessWidget {
   }
 }
 
-enum _DriverJob {
-  pickupBusy,
-  pickupUnavailable,
-  hospitalBusy,
-  hospitalUnavailable,
-  dropoff,
-  free,
-  idleUnavailable,
+const _pickupStatuses = {'ASSIGNED', 'EN_ROUTE', 'TRANSFER_EN_ROUTE'};
+const _hospitalStatuses = {'PICKED_UP', 'EN_ROUTE_HOSPITAL'};
+
+String _peopleLabel(int? count) {
+  if(count == null) {
+    return 'people count not sent';
+  }
+  if(count >= 4) {
+    return '4+ people';
+  }
+  return count == 1 ? '1 person' : '$count people';
 }
 
 class _DriverJobScreen extends StatefulWidget {
@@ -432,77 +436,30 @@ class _DriverJobScreen extends StatefulWidget {
 }
 
 class _DriverJobScreenState extends State<_DriverJobScreen> {
-  _DriverJob job = _DriverJob.pickupBusy;
   double slide = 0;
-  bool dropoffPrompted = false;
+  bool dropoffSending = false;
 
-  void markUnavailable() {
-    setState(() {
-      switch(job) {
-        case _DriverJob.pickupBusy:
-          job = _DriverJob.pickupUnavailable;
-        case _DriverJob.hospitalBusy:
-          job = _DriverJob.hospitalUnavailable;
-        case _DriverJob.free:
-          job = _DriverJob.idleUnavailable;
-        case _DriverJob.pickupUnavailable:
-        case _DriverJob.hospitalUnavailable:
-        case _DriverJob.dropoff:
-        case _DriverJob.idleUnavailable:
-          break;
-      }
-    });
-  }
-
-  void markAvailable() {
-    setState(() {
-      job = _DriverJob.free;
-    });
-  }
-
-  void pickedUp() {
-    if(job != _DriverJob.pickupBusy) {
-      return;
-    }
-
-    setState(() {
-      job = _DriverJob.hospitalBusy;
-    });
-  }
-
-  void reachedHospital() {
-    if(job != _DriverJob.hospitalBusy) {
-      return;
-    }
-
-    setState(() {
-      job = _DriverJob.dropoff;
-      slide = 0;
-    });
-  }
-
-  void confirmDropoff() {
-    Navigator.of(context).pop();
-    setState(() {
-      job = _DriverJob.pickupBusy;
-      slide = 0;
-      dropoffPrompted = false;
-    });
-  }
-
-  void slideTo(double value) {
-    if(job != _DriverJob.dropoff) {
-      return;
-    }
-
+  Future<void> slideTo(EmergencyRequestState state, double value) async {
     setState(() {
       slide = value;
     });
-    if(value < 1 || dropoffPrompted) {
+    if(value < 1 || dropoffSending) {
       return;
     }
 
-    dropoffPrompted = true;
+    dropoffSending = true;
+    final sent = await state.sendDriverUpdate('dropoff');
+    if(!mounted) {
+      return;
+    }
+    setState(() {
+      slide = 0;
+      dropoffSending = false;
+    });
+    if(!sent) {
+      return;
+    }
+
     showDialog<void>(
       context: context,
       builder: (dialogContext) {
@@ -511,7 +468,9 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
           content: const Text('This ambulance is free again.'),
           actions: [
             TextButton(
-              onPressed: confirmDropoff,
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
               child: const Text('OK'),
             ),
           ],
@@ -520,76 +479,102 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final title = switch(job) {
-      _DriverJob.pickupBusy || _DriverJob.pickupUnavailable => 'Pickup',
-      _DriverJob.hospitalBusy ||
-      _DriverJob.hospitalUnavailable => 'To hospital',
-      _DriverJob.dropoff => 'Drop-off',
-      _DriverJob.free || _DriverJob.idleUnavailable => 'No active call',
-    };
-    final status = switch(job) {
-      _DriverJob.pickupBusy || _DriverJob.hospitalBusy => 'BUSY',
-      _DriverJob.free => 'FREE',
-      _ => 'UNAVAILABLE',
-    };
-    final statusColor = switch(job) {
-      _DriverJob.pickupBusy || _DriverJob.hospitalBusy => AppColors.blue,
-      _DriverJob.free => AppColors.green,
-      _ => AppColors.orange,
-    };
-    final onCall =
-        job == _DriverJob.pickupBusy ||
-        job == _DriverJob.pickupUnavailable ||
-        job == _DriverJob.hospitalBusy ||
-        job == _DriverJob.hospitalUnavailable ||
-        job == _DriverJob.dropoff;
-    final atHospital =
-        job == _DriverJob.hospitalBusy ||
-        job == _DriverJob.hospitalUnavailable;
-    final message = switch(job) {
-      _DriverJob.pickupUnavailable =>
-        'The nearest free ambulance is sent to the address the caller typed.',
-      _DriverJob.hospitalUnavailable =>
-        'The nearest free ambulance is sent to this ambulance so the patient can transfer.',
-      _DriverJob.free => 'The dispatcher now sees this ambulance as FREE.',
-      _DriverJob.idleUnavailable =>
-        'The dispatcher will not send this ambulance a call.',
-      _ => null,
-    };
-    final showMarkUnavailable =
-        job == _DriverJob.pickupBusy ||
-        job == _DriverJob.hospitalBusy ||
-        job == _DriverJob.free;
-    final showMarkAvailable =
-        job == _DriverJob.pickupUnavailable ||
-        job == _DriverJob.hospitalUnavailable ||
-        job == _DriverJob.idleUnavailable;
-
+  Widget pickAmbulance(BuildContext context, EmergencyRequestState state) {
     return _FlowFrame(
-      title: title,
+      title: 'Choose your ambulance',
       onBack: () {
-        context.read<EmergencyRequestState>().goTo(EmergencyScreen.login);
+        state.goTo(EmergencyScreen.login);
       },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            height: 190,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.page,
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              border: Border.all(color: AppColors.line, width: 2),
-            ),
-            child: const Icon(
-              Icons.location_on_rounded,
-              color: AppColors.blue,
-              size: 42,
-            ),
+          Text(
+            'Which ambulance are you driving?',
+            style: Theme.of(context).textTheme.headlineMedium,
           ),
+          const SizedBox(height: AppSpacing.space2),
+          Text(
+            'Calls for that ambulance will show up here.',
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.muted),
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          if(state.driverLoading)
+            const Center(child: CircularProgressIndicator()),
+          if(state.driverError != null) ...[
+            _ErrorNotice(message: state.driverError!),
+            const SizedBox(height: AppSpacing.space3),
+            _SecondaryButton(
+              label: 'Try again',
+              onPressed: state.loadDriverAmbulances,
+            ),
+            const SizedBox(height: AppSpacing.space3),
+          ],
+          for(final ambulance in state.driverAmbulances) ...[
+            _ProfileRow(
+              label: '${ambulance.label} · ${ambulance.driverName ?? 'No driver'}',
+              trailing: ambulance.status,
+              onPressed: () {
+                state.chooseDriverAmbulance(ambulance);
+              },
+            ),
+            const SizedBox(height: AppSpacing.space2),
+          ],
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    if(state.driverId == null) {
+      return pickAmbulance(context, state);
+    }
+
+    final call = state.driverCall;
+    final atPickup = _pickupStatuses.contains(call?.status);
+    final toHospital = _hospitalStatuses.contains(call?.status);
+    final atDropoff = call?.status == 'ARRIVED';
+    final String title;
+    if(call == null) {
+      title = 'No active call';
+    }
+    else if(atPickup) {
+      title = 'Pickup';
+    }
+    else if(toHospital) {
+      title = 'To hospital';
+    }
+    else if(atDropoff) {
+      title = 'Drop-off';
+    }
+    else {
+      title = 'Active call';
+    }
+    final status = state.driverAmbulanceStatus ?? 'UNKNOWN';
+    final statusColor = switch(status) {
+      'BUSY' => AppColors.blue,
+      'FREE' => AppColors.green,
+      _ => AppColors.orange,
+    };
+    final busy = state.driverLoading;
+
+    return _FlowFrame(
+      title: title,
+      onBack: () {
+        state.goTo(EmergencyScreen.login);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _TripMap(),
           const SizedBox(height: AppSpacing.space3),
+          Text(
+            state.driverAmbulanceLabel ?? 'Ambulance',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          const SizedBox(height: AppSpacing.space2),
           Align(
             alignment: Alignment.centerLeft,
             child: Container(
@@ -614,60 +599,65 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: AppSpacing.space2),
-          if(!onCall)
+          if(call == null)
             Text(
               'No call on this ambulance.',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
-          if(onCall && !atHospital && job != _DriverJob.dropoff) ...[
+          if(call != null && !toHospital && !atDropoff) ...[
             Text(
-              'DHA Phase 5, Street 12, Near XYZ Mall',
+              call.pickupAddress ?? 'The caller did not send an address.',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
             Text(
-              'Chest pain, caller +92 300 1234567',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-          ],
-          if(atHospital || job == _DriverJob.dropoff) ...[
-            Text(
-              'Indus Hospital, Korangi Crossing',
+              '${call.emergencyDescription ?? 'Emergency'} · ${_peopleLabel(call.peopleCount)}',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
             Text(
-              'Patient is on board',
+              call.callerPhone == null
+                  ? 'No caller phone was sent.'
+                  : 'Caller ${call.callerPhone}',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
           ],
-          if(message != null) ...[
+          if(call != null && (toHospital || atDropoff)) ...[
+            Text(
+              call.hospitalName ?? 'Hospital',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            Text(
+              call.hospitalAddress ?? 'The server did not attach a hospital address.',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            Text(
+              'Patient is on board · ${call.emergencyDescription ?? 'Emergency'}',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+          if(state.driverError != null) ...[
             const SizedBox(height: AppSpacing.space4),
-            Text(message, style: Theme.of(context).textTheme.bodyLarge),
+            _ErrorNotice(message: state.driverError!),
           ],
           const SizedBox(height: AppSpacing.space5),
-          if(showMarkUnavailable)
+          if(atPickup)
             _ActionButton(
-              label: 'Mark as Unavailable',
-              color: AppColors.orange,
-              onPressed: markUnavailable,
+              label: 'Picked up',
+              onPressed: busy
+                  ? null
+                  : () {
+                      state.sendDriverUpdate('pickup');
+                    },
             ),
-          if(showMarkAvailable)
-            _ActionButton(
-              label: 'Mark as Available',
-              color: AppColors.green,
-              onPressed: markAvailable,
-            ),
-          if(job == _DriverJob.pickupBusy) ...[
-            const SizedBox(height: AppSpacing.space3),
-            _ActionButton(label: 'Picked up', onPressed: pickedUp),
-          ],
-          if(job == _DriverJob.hospitalBusy) ...[
-            const SizedBox(height: AppSpacing.space3),
+          if(toHospital)
             _ActionButton(
               label: 'Reached the hospital',
-              onPressed: reachedHospital,
+              onPressed: busy
+                  ? null
+                  : () {
+                      state.sendDriverUpdate('hospital');
+                    },
             ),
-          ],
-          if(job == _DriverJob.dropoff) ...[
+          if(atDropoff) ...[
             Text(
               'Dropped off',
               style: Theme.of(context).textTheme.labelSmall,
@@ -675,7 +665,11 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
             Slider(
               value: slide,
               label: 'Dropped off',
-              onChanged: slideTo,
+              onChanged: busy
+                  ? null
+                  : (value) {
+                      slideTo(state, value);
+                    },
             ),
             Text(
               'Slide to the end to confirm.',
@@ -683,6 +677,16 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
                   ?.copyWith(color: AppColors.muted),
             ),
           ],
+          const SizedBox(height: AppSpacing.space3),
+          _SecondaryButton(
+            label: 'Refresh',
+            onPressed: state.loadDriverPortal,
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _SecondaryButton(
+            label: 'Change ambulance',
+            onPressed: state.changeDriverAmbulance,
+          ),
         ],
       ),
     );
@@ -1507,7 +1511,7 @@ class _EmergencyAssignedScreen extends StatelessWidget {
             ),
           ],
           const SizedBox(height: AppSpacing.space4),
-          _SimulationRoute(remainingSeconds: state.remainingSeconds),
+          const _TripMap(),
           const SizedBox(height: AppSpacing.space3),
           Text(
             'Arrival simulation starts now: ${state.remainingSeconds} seconds remaining.',
@@ -1515,6 +1519,10 @@ class _EmergencyAssignedScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyMedium
                 ?.copyWith(color: AppColors.muted),
           ),
+          if(state.hospitalError != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            _ErrorNotice(message: state.hospitalError!),
+          ],
           const SizedBox(height: AppSpacing.space4),
           const _DemoNotice(),
         ],
@@ -1589,7 +1597,7 @@ class _EmergencyEnRouteScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: AppSpacing.space4),
-          _SimulationRoute(remainingSeconds: state.remainingSeconds),
+          const _TripMap(),
           const SizedBox(height: AppSpacing.space4),
           Text(
             '${state.remainingSeconds} seconds until arrival',
@@ -1597,6 +1605,10 @@ class _EmergencyEnRouteScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineMedium
                 ?.copyWith(color: AppColors.red),
           ),
+          if(state.hospitalError != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            _ErrorNotice(message: state.hospitalError!),
+          ],
           const SizedBox(height: AppSpacing.space4),
           const _DemoNotice(),
         ],
@@ -1648,10 +1660,102 @@ class _EmergencyApproachingScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.space4),
-          _SimulationRoute(remainingSeconds: state.remainingSeconds),
+          const _TripMap(),
+          if(state.remainingSeconds <= 0) ...[
+            const SizedBox(height: AppSpacing.space4),
+            Text(
+              'Your ambulance is here',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: AppSpacing.space3),
+            _AboutDriverRow(assignment: state.result?.assignedAmbulance),
+          ],
+          if(state.hospitalError != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            _ErrorNotice(message: state.hospitalError!),
+          ],
           const SizedBox(height: AppSpacing.space4),
           const _DemoNotice(),
         ],
+      ),
+    );
+  }
+}
+
+class _AboutDriverRow extends StatefulWidget {
+  const _AboutDriverRow({required this.assignment});
+
+  final AmbulanceAssignment? assignment;
+
+  @override
+  State<_AboutDriverRow> createState() => _AboutDriverRowState();
+}
+
+class _AboutDriverRowState extends State<_AboutDriverRow> {
+  bool expanded = false;
+  bool pressed = false;
+
+  String shown(String? value) {
+    final trimmed = value?.trim() ?? '';
+    if(trimmed.isEmpty) {
+      return 'N/A';
+    }
+    return trimmed;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final assignment = widget.assignment;
+    return GestureDetector(
+      onTapDown: (_) {
+        setState(() {
+          pressed = true;
+          expanded = !expanded;
+        });
+      },
+      onTapUp: (_) {
+        setState(() {
+          pressed = false;
+        });
+      },
+      onTapCancel: () {
+        setState(() {
+          pressed = false;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.all(AppSpacing.space3),
+        decoration: BoxDecoration(
+          color: pressed ? AppColors.line : AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: AppColors.line, width: 2),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'About driver',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            if(expanded) ...[
+              const SizedBox(height: AppSpacing.space2),
+              Text(
+                'Ambulance: ${shown(assignment?.label)}',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              Text(
+                'Driver: ${shown(assignment?.driverName)}',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              Text(
+                'Phone: ${shown(assignment?.driverPhone)}',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -1673,20 +1777,27 @@ class _EmergencyArrivedScreen extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Icon(
-              Icons.local_hospital_rounded,
-              color: AppColors.red,
-              size: 64,
+            const _TripMap(),
+            const SizedBox(height: AppSpacing.space3),
+            Text(
+              state.hospitalName ?? '',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-            const SizedBox(height: AppSpacing.space4),
+            Text(
+              state.hospitalAddress ?? '',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: AppSpacing.space3),
             Text(
               'Ambulance has arrived',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.headlineLarge,
             ),
-            const SizedBox(height: AppSpacing.space3),
+            const SizedBox(height: AppSpacing.space2),
             Text(
-              '${assignment.label} · City Emergency Services',
+              assignment.label,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyLarge
                   ?.copyWith(color: AppColors.muted),
@@ -1812,9 +1923,7 @@ class _ProfileScreen extends StatelessWidget {
           _ProfileRow(
             label: 'Driver portal',
             onPressed: () {
-              context.read<EmergencyRequestState>().goTo(
-                EmergencyScreen.driverJob,
-              );
+              context.read<EmergencyRequestState>().openDriverPortal();
             },
           ),
           const SizedBox(height: AppSpacing.space2),
@@ -1996,13 +2105,48 @@ class _TradeDetailScreen extends StatelessWidget {
                 )
                 .toList(),
           ),
+          const SizedBox(height: AppSpacing.space4),
+          Text('CHOOSE A PROVIDER', style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: AppSpacing.space2),
+          if(state.providersLoading)
+            const Center(child: CircularProgressIndicator()),
+          if(state.providersError != null) ...[
+            _ErrorNotice(message: state.providersError!),
+            const SizedBox(height: AppSpacing.space3),
+            _SecondaryButton(label: 'Try again', onPressed: state.loadProviders),
+          ],
+          if(!state.providersLoading &&
+              state.providersError == null &&
+              state.providersForTrade.isEmpty)
+            Text(
+              'No ${state.domesticTrade.toLowerCase()} is listed right now.',
+              style: Theme.of(context).textTheme.bodyLarge
+                  ?.copyWith(color: AppColors.muted),
+            ),
+          for(final provider in state.providersForTrade) ...[
+            _ChoiceCard(
+              icon: Icons.person_rounded,
+              title: provider.name,
+              subtitle:
+                  '${provider.specialisationName ?? state.domesticTrade} · ★ ${provider.rating.toStringAsFixed(1)} · Inspection fee Rs. ${provider.inspectionFee.toStringAsFixed(0)}',
+              color: state.chosenProvider?.id == provider.id
+                  ? AppColors.green
+                  : AppColors.muted,
+              onTap: () {
+                state.chooseProvider(provider);
+              },
+            ),
+            const SizedBox(height: AppSpacing.space2),
+          ],
           const SizedBox(height: AppSpacing.space5),
           _ActionButton(
             label: 'Book ${state.domesticTrade.toLowerCase()}',
             color: AppColors.green,
-            onPressed: () {
-              state.goTo(EmergencyScreen.serviceDescription);
-            },
+            onPressed: state.chosenProvider == null
+                ? null
+                : () {
+                    state.goTo(EmergencyScreen.serviceDescription);
+                  },
           ),
         ],
       ),
@@ -2055,9 +2199,11 @@ class _ServiceDescriptionScreen extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.space4),
           ],
-          TextField(
+          TextFormField(
+            initialValue: state.domesticDescription,
             minLines: 3,
             maxLines: 4,
+            onChanged: state.setDomesticDescription,
             decoration: InputDecoration(
               labelText: 'Describe your service problem',
               hintText: plumber ? 'Kitchen sink leaking from pipe joint.' : null,
@@ -2107,34 +2253,23 @@ class _ServiceLocationScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineLarge,
           ),
           const SizedBox(height: AppSpacing.space4),
-          for(final place in [
-            'Home · DHA Phase 5',
-            'Office · Shahrah-e-Faisal',
-            'Pick on map',
-          ]) ...[
-            _ProfileRow(
-              label: place,
-              trailing: state.domesticPlace == place ? '✓' : '›',
-              onPressed: () {
-                state.selectDomesticPlace(place);
-              },
-            ),
-            const SizedBox(height: AppSpacing.space2),
-          ],
-          const SizedBox(height: AppSpacing.space3),
           TextFormField(
-            initialValue: 'Near XYZ Mall, Gate 3',
+            initialValue: state.domesticAddress,
+            onChanged: state.setDomesticAddress,
             decoration: const InputDecoration(
-              labelText: 'Landmark',
+              labelText: 'Address',
+              hintText: 'House, street, and area',
               border: OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: AppSpacing.space5),
           _ActionButton(
             label: 'Continue',
-            onPressed: () {
-              state.goTo(EmergencyScreen.serviceSchedule);
-            },
+            onPressed: state.domesticAddress.trim().isEmpty
+                ? null
+                : () {
+                    state.goTo(EmergencyScreen.serviceSchedule);
+                  },
           ),
         ],
       ),
@@ -2250,14 +2385,26 @@ class _ServiceConfirmScreen extends StatelessWidget {
           _InfoCard(
             title: '${state.domesticTrade} · ${state.domesticIssue}',
             subtitle:
-                '${state.domesticPlace} · ${_scheduleLabel(context, state.domesticScheduledAt)}',
+                '${state.domesticAddress.trim()} · ${_scheduleLabel(context, state.domesticScheduledAt)}',
             icon: Icons.handyman_rounded,
           ),
+          if(state.chosenProvider != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _InfoCard(
+              title: state.chosenProvider!.name,
+              subtitle: '★ ${state.chosenProvider!.rating.toStringAsFixed(1)}',
+              icon: Icons.person_rounded,
+            ),
+          ],
           const SizedBox(height: AppSpacing.space4),
           Text(
-            'Inspection fee is x within 5 km, plus y for each kilometre after that. Repair cost is set after the visit.',
+            'Inspection fee: ${state.inspectionFeeText}. Repair cost is set after the visit.',
             style: Theme.of(context).textTheme.bodyLarge,
           ),
+          if(state.domesticNotice != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _ErrorNotice(message: state.domesticNotice!),
+          ],
           const SizedBox(height: AppSpacing.space5),
           Row(
             children: [
@@ -2271,7 +2418,7 @@ class _ServiceConfirmScreen extends StatelessWidget {
               Expanded(
                 child: _ActionButton(
                   label: 'Confirm',
-                  onPressed: state.confirmDomestic,
+                  onPressed: state.domesticSending ? null : state.confirmDomestic,
                 ),
               ),
             ],
@@ -2293,12 +2440,31 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
   bool showingProfile = false;
   int stars = 0;
 
+  String providerName(EmergencyRequestState state) {
+    return state.domesticBooking?.providerName ??
+        state.chosenProvider?.name ??
+        state.providerProfile?.name ??
+        'Your provider';
+  }
+
+  String providerTrade(EmergencyRequestState state) {
+    return state.domesticBooking?.specialisationName ??
+        state.chosenProvider?.specialisationName ??
+        state.domesticTrade;
+  }
+
+  String providerRating(EmergencyRequestState state) {
+    final rating =
+        state.domesticBooking?.providerRating ?? state.chosenProvider?.rating;
+    return rating == null ? 'No rating yet' : '★ ${rating.toStringAsFixed(1)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
 
     if(showingProfile) {
-      return providerProfile(context);
+      return providerProfile(context, state);
     }
 
     return switch(state.domesticJob) {
@@ -2407,24 +2573,19 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
         children: [
           const _StatusPill(label: 'Provider found', color: AppColors.green),
           const SizedBox(height: AppSpacing.space3),
-          const _InfoCard(
-            title: 'John Stewart',
-            subtitle: '★ 4.8 · 127 reviews · Plumber',
+          _InfoCard(
+            title: providerName(state),
+            subtitle: '${providerRating(state)} · ${providerTrade(state)}',
             icon: Icons.person_rounded,
           ),
           const SizedBox(height: AppSpacing.space3),
-          Text(
-            '3.2 km away · ETA 25 min',
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-          const SizedBox(height: AppSpacing.space2),
           Text(
             'Other providers no longer see this request.',
             style: Theme.of(context).textTheme.bodyLarge,
           ),
           const SizedBox(height: AppSpacing.space2),
           Text(
-            'Inspection fee: x',
+            'Inspection fee: ${state.inspectionFeeText}',
             style: Theme.of(context).textTheme.labelLarge,
           ),
           notice(context, state),
@@ -2454,7 +2615,7 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
     );
   }
 
-  Widget providerProfile(BuildContext context) {
+  Widget providerProfile(BuildContext context, EmergencyRequestState state) {
     return _FlowFrame(
       title: 'Provider profile',
       tab: _UserTab.services,
@@ -2479,18 +2640,18 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
           ),
           const SizedBox(height: AppSpacing.space2),
           Text(
-            'John Stewart',
+            providerName(state),
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineMedium,
           ),
           Text(
-            'Plumber',
+            providerTrade(state),
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyLarge
                 ?.copyWith(color: AppColors.muted),
           ),
           Text(
-            '★ 4.8 · 127 reviews',
+            providerRating(state),
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyLarge,
           ),
@@ -2507,8 +2668,8 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _InfoCard(
-            title: 'John Stewart · Plumber',
-            subtitle: 'ETA 18 min · ${state.domesticIssue}',
+            title: '${providerName(state)} · ${providerTrade(state)}',
+            subtitle: state.domesticIssue,
             icon: Icons.person_rounded,
           ),
           const SizedBox(height: AppSpacing.space3),
@@ -2542,13 +2703,13 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
           ),
           const SizedBox(height: AppSpacing.space3),
           Text(
-            'John has started work',
+            '${providerName(state)} has started work',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineLarge,
           ),
           const SizedBox(height: AppSpacing.space2),
           Text(
-            '${state.domesticIssue} · Started at 11:15 AM',
+            state.domesticIssue,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyLarge
                 ?.copyWith(color: AppColors.muted),
@@ -2621,7 +2782,7 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
           ),
           const SizedBox(height: AppSpacing.space3),
           Text(
-            'How was John?',
+            'How was ${providerName(state)}?',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineLarge,
           ),
@@ -2737,7 +2898,7 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
             ),
           const SizedBox(height: AppSpacing.space3),
           Text(
-            'Inspection fee: x',
+            'Inspection fee: ${state.inspectionFeeText}',
             style: Theme.of(context).textTheme.labelLarge,
           ),
           if(savedTotal == null && typedTotal.isEmpty) ...[
@@ -2841,12 +3002,67 @@ class _RequestsScreenState extends State<_RequestsScreen> {
   }
 }
 
-class _ProviderDashboardScreen extends StatelessWidget {
+class _ProviderDashboardScreen extends StatefulWidget {
   const _ProviderDashboardScreen();
+
+  @override
+  State<_ProviderDashboardScreen> createState() =>
+      _ProviderDashboardScreenState();
+}
+
+class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
+  String? typedFee;
+
+  Widget pickProfile(BuildContext context, EmergencyRequestState state) {
+    return _FlowFrame(
+      title: 'Provider dashboard',
+      onBack: state.leaveProviderMode,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Which provider are you?',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          Text(
+            'Requests booked with you will show up here.',
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(color: AppColors.muted),
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          if(state.providersLoading)
+            const Center(child: CircularProgressIndicator()),
+          if(state.providersError != null) ...[
+            _ErrorNotice(message: state.providersError!),
+            const SizedBox(height: AppSpacing.space3),
+            _SecondaryButton(label: 'Try again', onPressed: state.loadProviders),
+            const SizedBox(height: AppSpacing.space3),
+          ],
+          for(final provider in state.providers) ...[
+            _ProfileRow(
+              label:
+                  '${provider.name} · ${provider.specialisationName ?? 'Provider'}',
+              trailing: 'Rs. ${provider.inspectionFee.toStringAsFixed(0)}',
+              onPressed: () {
+                state.chooseProviderProfile(provider);
+              },
+            ),
+            const SizedBox(height: AppSpacing.space2),
+          ],
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
+    final provider = state.providerProfile;
+    if(provider == null) {
+      return pickProfile(context, state);
+    }
+
     final offline = state.providerDuty == ProviderDuty.offline;
     final onJob = state.providerDuty == ProviderDuty.onJob;
     final (dutyLabel, dutyColor) = switch(state.providerDuty) {
@@ -2854,6 +3070,9 @@ class _ProviderDashboardScreen extends StatelessWidget {
       ProviderDuty.offline => ('Offline', AppColors.muted),
       ProviderDuty.onJob => ('On a job', AppColors.blue),
     };
+    final savedFee = provider.inspectionFee.toStringAsFixed(0);
+    final incoming = state.incomingJobs;
+    final accepted = state.acceptedJobs;
 
     return _FlowFrame(
       title: 'Provider dashboard',
@@ -2869,19 +3088,21 @@ class _ProviderDashboardScreen extends StatelessWidget {
                 child: Icon(Icons.person, color: AppColors.surface, size: 24),
               ),
               const SizedBox(width: AppSpacing.space3),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'John Stewart',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  Text(
-                    'Plumber · 4.8 rating',
-                    style: Theme.of(context).textTheme.bodyLarge
-                        ?.copyWith(color: AppColors.muted),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      provider.name,
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    Text(
+                      '${provider.specialisationName ?? 'Provider'} · ${provider.rating.toStringAsFixed(1)} rating',
+                      style: Theme.of(context).textTheme.bodyLarge
+                          ?.copyWith(color: AppColors.muted),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -2903,6 +3124,35 @@ class _ProviderDashboardScreen extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyLarge,
             ),
           ],
+          const SizedBox(height: AppSpacing.space4),
+          TextFormField(
+            key: ValueKey('fee-${provider.id}'),
+            initialValue: savedFee,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (value) {
+              typedFee = value;
+            },
+            decoration: const InputDecoration(
+              labelText: 'Inspection fee (Rs.)',
+              helperText: 'Customers see this next to your rating.',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          _SecondaryButton(
+            label: 'Save fee',
+            onPressed: () {
+              state.saveInspectionFee(typedFee ?? savedFee);
+            },
+          ),
+          if(state.domesticNotice != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            Text(
+              state.domesticNotice!,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
           const SizedBox(height: AppSpacing.space5),
           Text(
             'INCOMING REQUEST',
@@ -2915,16 +3165,24 @@ class _ProviderDashboardScreen extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyLarge
                   ?.copyWith(color: AppColors.muted),
             )
+          else if(state.providerJobsLoading && state.providerJobs.isEmpty)
+            const Center(child: CircularProgressIndicator())
+          else if(incoming.isEmpty)
+            Text(
+              'No new requests.',
+              style: Theme.of(context).textTheme.bodyLarge
+                  ?.copyWith(color: AppColors.muted),
+            )
           else
-            for(final request in state.incomingRequests) ...[
+            for(final job in incoming) ...[
               _ChoiceCard(
-                icon: Icons.plumbing,
-                title: EmergencyRequestState.demoRequests[request].title,
+                icon: Icons.handyman_rounded,
+                title: job.description,
                 subtitle:
-                    '${EmergencyRequestState.demoRequests[request].area} · Inspection fee: x',
+                    '${job.address} · ${job.userName ?? 'Customer'} · Inspection fee Rs. ${(job.inspectionFee ?? provider.inspectionFee).toStringAsFixed(0)}',
                 color: AppColors.green,
                 onTap: () {
-                  state.openRequest(request);
+                  state.openJob(job.requestId);
                 },
               ),
               const SizedBox(height: AppSpacing.space3),
@@ -2932,30 +3190,32 @@ class _ProviderDashboardScreen extends StatelessWidget {
           const SizedBox(height: AppSpacing.space4),
           Text("TODAY'S JOBS", style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: AppSpacing.space2),
-          if(onJob) ...[
+          for(final job in accepted) ...[
             _ProfileRow(
               label:
-                  'Active job · ${EmergencyRequestState.demoRequests[state.activeRequest!].title}',
+                  '${job.requestId == state.activeJobId ? 'Active job' : 'Accepted'} · ${job.description}',
               onPressed: () {
-                state.goTo(EmergencyScreen.providerJob);
+                state.openActiveJob(job.requestId);
               },
             ),
             const SizedBox(height: AppSpacing.space2),
           ],
-          if(state.pendingRequest != null)
-            _ProfileRow(
-              label:
-                  'Pending · ${EmergencyRequestState.demoRequests[state.pendingRequest!].title} · ${EmergencyRequestState.demoRequests[state.pendingRequest!].area}',
-              onPressed: () {
-                state.openRequest(state.pendingRequest!);
-              },
-            ),
-          if(state.pendingRequest == null && !onJob)
+          if(accepted.isEmpty)
             Text(
               'No upcoming jobs.',
               style: Theme.of(context).textTheme.bodyLarge
                   ?.copyWith(color: AppColors.muted),
             ),
+          const SizedBox(height: AppSpacing.space4),
+          _SecondaryButton(
+            label: 'Refresh jobs',
+            onPressed: state.loadProviderJobs,
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _SecondaryButton(
+            label: 'Change provider',
+            onPressed: state.changeProviderProfile,
+          ),
         ],
       ),
     );
@@ -2968,24 +3228,19 @@ class _ProviderRequestScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
-    final id = state.openedRequest;
-    final request = EmergencyRequestState.demoRequests[id];
+    final job = state.openedJob;
     final onJob = state.providerDuty == ProviderDuty.onJob;
-    final blocked = state.blockedRequests.contains(id);
-    final pending = state.pendingRequest == id;
-    final incoming = state.incomingRequests.contains(id);
-    final pendingFull = onJob && state.pendingRequest != null && !pending;
-    final canAccept =
-        !blocked && ((incoming && !pendingFull) || (pending && !onJob));
+    final pending = job?.status == 'PENDING';
+    final canAccept = pending && !onJob;
     final String? reason;
-    if(blocked) {
-      reason = 'You cannot take this request again.';
+    if(job == null) {
+      reason = 'This request is no longer on this phone.';
     }
-    else if(pending && onJob) {
+    else if(!pending) {
+      reason = 'This request was already accepted.';
+    }
+    else if(onJob) {
       reason = 'Finish the active job before taking this one.';
-    }
-    else if(incoming && pendingFull) {
-      reason = 'Pending already holds a job.';
     }
     else {
       reason = null;
@@ -2999,51 +3254,33 @@ class _ProviderRequestScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _InfoCard(
-            title: request.title,
-            subtitle: 'Customer: Hal Jordan',
-            icon: Icons.plumbing,
-          ),
-          const SizedBox(height: AppSpacing.space3),
-          _InfoCard(
-            title: 'Location',
-            subtitle: request.location,
-            icon: Icons.location_on_rounded,
-          ),
-          const SizedBox(height: AppSpacing.space3),
-          Text(
-            'Inspection fee: x',
-            style: Theme.of(context).textTheme.labelLarge,
-          ),
-          if(pending) ...[
-            const SizedBox(height: AppSpacing.space4),
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.space3),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                border: Border.all(color: AppColors.line),
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    "CUSTOMER'S SCREEN",
-                    style: Theme.of(context).textTheme.labelSmall,
-                  ),
-                  const SizedBox(height: AppSpacing.space2),
-                  Text(
-                    'This provider is busy',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: AppSpacing.space3),
-                  _SecondaryButton(
-                    label: 'Cancel',
-                    onPressed: state.cancelPendingRequest,
-                  ),
-                ],
-              ),
+          if(job != null) ...[
+            _InfoCard(
+              title: job.specialisationName ?? 'Job request',
+              subtitle: 'Customer: ${job.userName ?? 'name not sent'}',
+              icon: Icons.handyman_rounded,
             ),
+            const SizedBox(height: AppSpacing.space3),
+            _InfoCard(
+              title: 'Problem',
+              subtitle: job.description,
+              icon: Icons.description_outlined,
+            ),
+            const SizedBox(height: AppSpacing.space3),
+            _InfoCard(
+              title: 'Location',
+              subtitle: job.address,
+              icon: Icons.location_on_rounded,
+            ),
+            const SizedBox(height: AppSpacing.space3),
+            Text(
+              'Inspection fee: ${job.inspectionFee == null ? 'not sent' : 'Rs. ${job.inspectionFee!.toStringAsFixed(0)}'}',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+          ],
+          if(state.domesticNotice != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            _ErrorNotice(message: state.domesticNotice!),
           ],
           if(reason != null) ...[
             const SizedBox(height: AppSpacing.space4),
@@ -3054,14 +3291,14 @@ class _ProviderRequestScreen extends StatelessWidget {
             _ActionButton(
               label: 'Accept job',
               color: AppColors.green,
-              onPressed: state.acceptRequest,
+              onPressed: state.acceptJob,
             ),
             const SizedBox(height: AppSpacing.space3),
           ],
-          if(incoming)
+          if(pending)
             _SecondaryButton(
               label: 'Decline',
-              onPressed: state.declineRequest,
+              onPressed: state.declineJob,
             ),
         ],
       ),
@@ -3095,7 +3332,7 @@ class _ProviderAcceptedScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.space2),
           Text(
-            "Your estimated arrival time is 18 minutes. Start navigating when you're ready.",
+            "Start navigating when you're ready.",
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyLarge
                 ?.copyWith(color: AppColors.muted),
@@ -3148,7 +3385,7 @@ class _ProviderJobScreenState extends State<_ProviderJobScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
-    final request = EmergencyRequestState.demoRequests[state.activeRequest!];
+    final job = state.activeJob;
     final started = state.domesticJob == DomesticJob.inProgress;
 
     return _FlowFrame(
@@ -3160,10 +3397,20 @@ class _ProviderJobScreenState extends State<_ProviderJobScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _InfoCard(
-            title: request.title,
-            subtitle: 'Hal Jordan · ${request.address}',
-            icon: Icons.plumbing,
+            title: job?.specialisationName ?? 'Job',
+            subtitle: job == null
+                ? 'This job is no longer on this phone.'
+                : '${job.userName ?? 'Customer'} · ${job.address}',
+            icon: Icons.handyman_rounded,
           ),
+          if(job != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _InfoCard(
+              title: 'Problem',
+              subtitle: job.description,
+              icon: Icons.description_outlined,
+            ),
+          ],
           const SizedBox(height: AppSpacing.space3),
           _ActionButton(
             label: 'Navigate to customer',
@@ -3583,86 +3830,113 @@ class _SelectionChip extends StatelessWidget {
   }
 }
 
-class _SimulationRoute extends StatelessWidget {
-  const _SimulationRoute({required this.remainingSeconds});
-
-  final int remainingSeconds;
+class _TripMap extends StatelessWidget {
+  const _TripMap();
 
   @override
   Widget build(BuildContext context) {
-    final progress = (15 - remainingSeconds).clamp(0, 15) / 15;
+    final state = context.watch<EmergencyRequestState>();
+    final fromLat = state.routeFromLat;
+    final fromLng = state.routeFromLng;
+    final toLat = state.routeToLat;
+    final toLng = state.routeToLng;
+    if(fromLat == null || fromLng == null || toLat == null || toLng == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            height: 190,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.page,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: AppColors.line, width: 2),
+            ),
+            child: const Icon(
+              Icons.location_on_rounded,
+              color: AppColors.blue,
+              size: 42,
+            ),
+          ),
+          if(state.routeError != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _ErrorNotice(message: state.routeError!),
+          ],
+        ],
+      );
+    }
 
-    return Container(
-      height: 190,
-      decoration: BoxDecoration(
-        color: AppColors.page,
-        border: Border.all(color: AppColors.line, width: 2),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return Stack(
-            children: [
-              Center(
-                child: Container(
-                  width: constraints.maxWidth * .55,
-                  height: 3,
-                  color: AppColors.line,
-                ),
-              ),
-              const Positioned(
-                left: AppSpacing.space3,
-                top: AppSpacing.space3,
-                child: Text('City Emergency Services'),
-              ),
-              const Positioned(
-                right: AppSpacing.space3,
-                bottom: AppSpacing.space3,
-                child: Text('Pickup point'),
-              ),
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 700),
-                curve: Curves.easeInOut,
-                left: constraints.maxWidth * (.12 + (.48 * progress)),
-                top: constraints.maxHeight * (.20 + (.43 * progress)),
-                child: const _RouteMarker(
-                  color: AppColors.red,
-                  icon: Icons.local_hospital_rounded,
-                ),
-              ),
-              Positioned(
-                right: constraints.maxWidth * .10,
-                bottom: constraints.maxHeight * .13,
-                child: const _RouteMarker(
-                  color: AppColors.blue,
-                  icon: Icons.person_pin_circle_rounded,
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+    final progress = state.routeProgress();
+    final ambulance = LatLng(
+      fromLat + ((toLat - fromLat) * progress),
+      fromLng + ((toLng - fromLng) * progress),
     );
-  }
-}
+    final start = LatLng(fromLat, fromLng);
+    final destination = LatLng(toLat, toLng);
+    final samePoint = (fromLat - toLat).abs() < 0.00001 &&
+        (fromLng - toLng).abs() < 0.00001;
 
-class _RouteMarker extends StatelessWidget {
-  const _RouteMarker({required this.color, required this.icon});
-
-  final Color color;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: color,
-        border: Border.all(color: AppColors.surface, width: 3),
-        borderRadius: BorderRadius.circular(22),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Container(
+        height: 190,
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.line, width: 2),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        child: FlutterMap(
+          options: samePoint
+              ? MapOptions(initialCenter: start, initialZoom: 16)
+              : MapOptions(
+                  initialCameraFit: CameraFit.bounds(
+                    bounds: LatLngBounds.fromPoints([start, destination]),
+                    padding: const EdgeInsets.all(36),
+                  ),
+                ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.madadplus.madad_plus_mobile',
+              tileProvider: Platform.environment['FLUTTER_TEST'] == 'true'
+                  ? _TestTileProvider()
+                  : NetworkTileProvider(),
+            ),
+            PolylineLayer(
+              polylines: [
+                Polyline(
+                  points: [start, destination],
+                  strokeWidth: 4,
+                  color: AppColors.blue,
+                ),
+              ],
+            ),
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: ambulance,
+                  width: 36,
+                  height: 36,
+                  child: const Icon(
+                    Icons.local_shipping,
+                    color: AppColors.red,
+                    size: 32,
+                  ),
+                ),
+                Marker(
+                  point: destination,
+                  width: 36,
+                  height: 36,
+                  child: const Icon(
+                    Icons.location_on,
+                    color: AppColors.blue,
+                    size: 36,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
-      child: Icon(icon, color: AppColors.surface),
     );
   }
 }

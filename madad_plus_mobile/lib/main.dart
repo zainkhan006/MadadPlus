@@ -10,18 +10,27 @@ void main() {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, this.requestState});
 
-  // This widget is the root of your application.
+  final EmergencyRequestState? requestState;
+
   @override
   Widget build(BuildContext context) {
+    final app = MaterialApp(
+      title: 'Madad+',
+      theme: AppTheme.light,
+      home: const EmergencyFlow(),
+    );
+    if(requestState != null) {
+      return ChangeNotifierProvider<EmergencyRequestState>.value(
+        value: requestState!,
+        child: app,
+      );
+    }
+
     return ChangeNotifierProvider(
       create: (_) => EmergencyRequestState(),
-      child: MaterialApp(
-        title: 'Madad+',
-        theme: AppTheme.light,
-        home: const EmergencyFlow(),
-      ),
+      child: app,
     );
   }
 }
