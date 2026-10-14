@@ -69,7 +69,96 @@ class EmergencyCompletion {
 }
 
 class EmergencySocketService {
-  late final io.Socket socket;
+  io.Socket? _requestSocket;
+  io.Socket? _driverSocket;
+  io.Socket? _providerSocket;
+  io.Socket? _domesticSocket;
+
+  io.Socket _joinRoom(String joinEvent, String id) {
+    final roomSocket = io.io(
+      EmergencyService.baseUrl,
+      io.OptionBuilder()
+          .setTransports(['websocket'])
+          .disableAutoConnect()
+          .enableForceNew()
+          .build(),
+    );
+    roomSocket.onConnect((_) {
+      roomSocket.emit(joinEvent, id);
+    });
+    return roomSocket;
+  }
+
+  void connectDriver({
+    required String driverId,
+    required void Function(EmergencyCall call) onCall,
+  }) {
+    disconnectDriver();
+    final driverSocket = _joinRoom('join:driver', driverId);
+    for(final eventName in [
+      'request.assigned',
+      'request.reassigned',
+      'request.queued',
+      'request.enRoute',
+      'request.pickedUp',
+      'request.patientTransferred',
+      'request.arrived',
+      'request.completed',
+    ]) {
+      driverSocket.on(eventName, (data) {
+        onCall(EmergencyCall.fromJson(Map<String, dynamic>.from(data as Map)));
+      });
+    }
+    driverSocket.connect();
+    _driverSocket = driverSocket;
+  }
+
+  void disconnectDriver() {
+    _driverSocket?.dispose();
+    _driverSocket = null;
+  }
+
+  void connectProvider({
+    required String providerId,
+    required void Function(DomesticBooking booking) onBooking,
+  }) {
+    disconnectProvider();
+    final providerSocket = _joinRoom('join:provider', providerId);
+    for(final eventName in ['domestic.requested', 'domestic.accepted']) {
+      providerSocket.on(eventName, (data) {
+        onBooking(
+          DomesticBooking.fromJson(Map<String, dynamic>.from(data as Map)),
+        );
+      });
+    }
+    providerSocket.connect();
+    _providerSocket = providerSocket;
+  }
+
+  void disconnectProvider() {
+    _providerSocket?.dispose();
+    _providerSocket = null;
+  }
+
+  void connectDomestic({
+    required String requestId,
+    required void Function(DomesticBooking booking) onBooking,
+  }) {
+    disconnectDomestic();
+    final domesticSocket = _joinRoom('join:domestic-request', requestId);
+    domesticSocket.on('domestic.accepted', (data) {
+      onBooking(
+        DomesticBooking.fromJson(Map<String, dynamic>.from(data as Map)),
+      );
+    });
+    domesticSocket.connect();
+    _domesticSocket = domesticSocket;
+  }
+
+  void disconnectDomestic() {
+    _domesticSocket?.dispose();
+    _domesticSocket = null;
+  }
 
   void connect({
     required String requestId,
@@ -78,18 +167,21 @@ class EmergencySocketService {
     void Function()? onDisconnected,
     void Function()? onReconnected,
   }) {
+    disconnect();
     var hasConnected = false;
 
-    socket = io.io(
+    final requestSocket = io.io(
       EmergencyService.baseUrl,
       io.OptionBuilder()
           .setTransports(['websocket'])
           .disableAutoConnect()
+          .enableForceNew()
           .build(),
     );
+    _requestSocket = requestSocket;
 
-    socket.onConnect((_) {
-      socket.emit('join:request', requestId);
+    requestSocket.onConnect((_) {
+      requestSocket.emit('join:request', requestId);
       if(hasConnected) {
         onReconnected?.call();
       }
@@ -98,12 +190,12 @@ class EmergencySocketService {
       }
     });
 
-    socket.onDisconnect((_) {
+    requestSocket.onDisconnect((_) {
       onDisconnected?.call();
     });
 
     for(final eventName in ['request.assigned', 'request.queued']) {
-      socket.on(eventName, (data) {
+      requestSocket.on(eventName, (data) {
         final result = EmergencyRequestResult.fromJson(
           Map<String, dynamic>.from(data as Map),
         );
@@ -111,17 +203,18 @@ class EmergencySocketService {
       });
     }
 
-    socket.on('request.completed', (data) {
+    requestSocket.on('request.completed', (data) {
       final completion = EmergencyCompletion.fromJson(
         Map<String, dynamic>.from(data as Map),
       );
       onCompleted?.call(completion);
     });
 
-    socket.connect();
+    requestSocket.connect();
   }
 
   void disconnect() {
-    socket.disconnect();
+    _requestSocket?.dispose();
+    _requestSocket = null;
   }
 }

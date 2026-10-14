@@ -3,6 +3,15 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+class ApiException implements Exception {
+  const ApiException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class AmbulanceAssignment {
   const AmbulanceAssignment({
     required this.id,
@@ -47,13 +56,202 @@ class EmergencyRequestResult {
       assignedAmbulance: json['assignedAmbulance'] == null
           ? null
           : AmbulanceAssignment.fromJson(
-              json['assignedAmbulance'] as Map<String, dynamic>,
+              Map<String, dynamic>.from(json['assignedAmbulance'] as Map),
             ),
       consideredNearest: json['consideredNearest'] == null
           ? null
           : AmbulanceAssignment.fromJson(
-              json['consideredNearest'] as Map<String, dynamic>,
+              Map<String, dynamic>.from(json['consideredNearest'] as Map),
             ),
+    );
+  }
+}
+
+class AmbulanceRow {
+  const AmbulanceRow({
+    required this.id,
+    required this.label,
+    required this.status,
+    required this.driverId,
+    required this.driverName,
+  });
+
+  final String id;
+  final String label;
+  final String status;
+  final String? driverId;
+  final String? driverName;
+
+  factory AmbulanceRow.fromJson(Map<String, dynamic> json) {
+    return AmbulanceRow(
+      id: json['id'] as String,
+      label: json['label'] as String,
+      status: json['status'] as String,
+      driverId: json['driverId'] as String?,
+      driverName: json['driverName'] as String?,
+    );
+  }
+}
+
+class EmergencyCall {
+  const EmergencyCall({
+    required this.requestId,
+    required this.status,
+    required this.pickupAddress,
+    required this.emergencyDescription,
+    required this.peopleCount,
+    required this.callerPhone,
+    required this.hospitalName,
+    required this.hospitalAddress,
+    required this.assignedDriverId,
+  });
+
+  final String requestId;
+  final String status;
+  final String? pickupAddress;
+  final String? emergencyDescription;
+  final int? peopleCount;
+  final String? callerPhone;
+  final String? hospitalName;
+  final String? hospitalAddress;
+  final String? assignedDriverId;
+
+  factory EmergencyCall.fromJson(Map<String, dynamic> json) {
+    final hospital = json['hospital'];
+    final ambulance = json['assignedAmbulance'];
+    final driver = ambulance is Map ? ambulance['driver'] : null;
+    final people = json['peopleCount'];
+    return EmergencyCall(
+      requestId: json['requestId'] as String,
+      status: json['status'] as String,
+      pickupAddress: json['pickupAddress'] as String?,
+      emergencyDescription: json['emergencyDescription'] as String?,
+      peopleCount: people is num ? people.toInt() : null,
+      callerPhone: json['callerPhone'] as String?,
+      hospitalName: hospital is Map ? hospital['name'] as String? : null,
+      hospitalAddress: hospital is Map
+          ? hospital['address'] as String?
+          : json['hospitalAddress'] as String?,
+      assignedDriverId: driver is Map ? driver['id'] as String? : null,
+    );
+  }
+}
+
+class DriverPortal {
+  const DriverPortal({
+    required this.driverName,
+    required this.ambulanceLabel,
+    required this.ambulanceStatus,
+    required this.activeRequest,
+  });
+
+  final String? driverName;
+  final String? ambulanceLabel;
+  final String? ambulanceStatus;
+  final EmergencyCall? activeRequest;
+
+  factory DriverPortal.fromJson(Map<String, dynamic> json) {
+    final driver = json['driver'];
+    final ambulance = json['ambulance'];
+    final active = json['activeRequest'];
+    return DriverPortal(
+      driverName: driver is Map ? driver['name'] as String? : null,
+      ambulanceLabel: ambulance is Map ? ambulance['label'] as String? : null,
+      ambulanceStatus: ambulance is Map ? ambulance['status'] as String? : null,
+      activeRequest: active is Map
+          ? EmergencyCall.fromJson(Map<String, dynamic>.from(active))
+          : null,
+    );
+  }
+}
+
+class ProviderRow {
+  const ProviderRow({
+    required this.id,
+    required this.name,
+    required this.status,
+    required this.rating,
+    required this.inspectionFee,
+    required this.specialisationId,
+    required this.specialisationName,
+  });
+
+  final String id;
+  final String name;
+  final String? status;
+  final double rating;
+  final double inspectionFee;
+  final String? specialisationId;
+  final String? specialisationName;
+
+  ProviderRow withFee(double fee) {
+    return ProviderRow(
+      id: id,
+      name: name,
+      status: status,
+      rating: rating,
+      inspectionFee: fee,
+      specialisationId: specialisationId,
+      specialisationName: specialisationName,
+    );
+  }
+
+  factory ProviderRow.fromJson(Map<String, dynamic> json) {
+    return ProviderRow(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      status: json['status'] as String?,
+      rating: (json['rating'] as num?)?.toDouble() ?? 0,
+      inspectionFee: (json['inspectionFee'] as num?)?.toDouble() ?? 0,
+      specialisationId: json['specialisationId'] as String?,
+      specialisationName: json['specialisationName'] as String?,
+    );
+  }
+}
+
+class DomesticBooking {
+  const DomesticBooking({
+    required this.requestId,
+    required this.status,
+    required this.description,
+    required this.address,
+    required this.userName,
+    required this.providerName,
+    required this.providerRating,
+    required this.inspectionFee,
+    required this.specialisationName,
+  });
+
+  final String requestId;
+  final String status;
+  final String description;
+  final String address;
+  final String? userName;
+  final String? providerName;
+  final double? providerRating;
+  final double? inspectionFee;
+  final String? specialisationName;
+
+  factory DomesticBooking.fromJson(Map<String, dynamic> json) {
+    final user = json['user'];
+    final provider = json['provider'];
+    final specialisation = json['specialisation'];
+    return DomesticBooking(
+      requestId: json['requestId'] as String,
+      status: json['status'] as String,
+      description: json['description'] as String? ?? '',
+      address: json['address'] as String? ?? '',
+      userName: user is Map ? user['name'] as String? : null,
+      providerName: provider is Map ? provider['name'] as String? : null,
+      providerRating: provider is Map
+          ? (provider['rating'] as num?)?.toDouble()
+          : null,
+      inspectionFee: provider is Map
+          ? (provider['inspectionFee'] as num?)?.toDouble()
+          : null,
+      specialisationName: specialisation is Map
+          ? specialisation['name'] as String?
+          : null,
     );
   }
 }
@@ -64,41 +262,190 @@ class EmergencyService {
     defaultValue: 'https://madadplus.onrender.com',
   );
 
-  static const requestTimeout = Duration(seconds: 45);  
+  static const requestTimeout = Duration(seconds: 45);
+
+  static const _headers = {
+    'Authorization': 'Bearer demo-token',
+    'Content-Type': 'application/json',
+  };
+
+  Future<dynamic> _send(
+    Future<http.Response> request,
+    String fallbackError,
+  ) async {
+    final response = await request.timeout(requestTimeout);
+    dynamic decoded;
+    try {
+      decoded = response.body.isEmpty ? null : jsonDecode(response.body);
+    } on FormatException {
+      decoded = null;
+    }
+
+    if(response.statusCode < 200 || response.statusCode > 299) {
+      final error = decoded is Map ? decoded['error'] : null;
+      throw ApiException(
+        error is String && error.isNotEmpty ? error : fallbackError,
+      );
+    }
+    return decoded;
+  }
 
   Future<EmergencyRequestResult> createEmergencyRequest({
     required double lat,
     required double lng,
+    required String address,
+    required String description,
+    required int peopleCount,
+    required String inputMethod,
+    String? additionalDetails,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/v1/emergency-requests'),
-      headers: {
-        'Authorization': 'Bearer demo-token',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({'lat': lat, 'lng': lng, 'type': 'ambulance'}),
-    ).timeout(requestTimeout);
-
-    if (response.statusCode != 201) {
-      throw Exception('The emergency request could not be sent.');
-    }
+    final details = additionalDetails?.trim() ?? '';
+    final decoded = await _send(
+      http.post(
+        Uri.parse('$baseUrl/api/v1/emergency-requests'),
+        headers: _headers,
+        body: jsonEncode({
+          'lat': lat,
+          'lng': lng,
+          'type': 'ambulance',
+          'address': address,
+          'description': description,
+          'peopleCount': peopleCount,
+          'inputMethod': inputMethod,
+          if(details.isNotEmpty) 'additionalDetails': details,
+        }),
+      ),
+      'The emergency request could not be sent.',
+    );
 
     return EmergencyRequestResult.fromJson(
-      jsonDecode(response.body) as Map<String, dynamic>,
+      Map<String, dynamic>.from(decoded as Map),
     );
   }
 
   Future<void> completeEmergencyRequest({required String requestId}) async {
-    final response = await http.patch(
-      Uri.parse('$baseUrl/api/v1/emergency-requests/$requestId/complete'),
-      headers: {
-        'Authorization': 'Bearer demo-token',
-        'Content-Type': 'application/json',
-      },
-    ).timeout(requestTimeout);
+    await _send(
+      http.patch(
+        Uri.parse('$baseUrl/api/v1/emergency-requests/$requestId/complete'),
+        headers: _headers,
+      ),
+      'The emergency request could not be completed.',
+    );
+  }
 
-    if (response.statusCode != 200) {
-      throw Exception('The emergency request could not be completed.');
-    }
+  Future<List<AmbulanceRow>> listAmbulances() async {
+    final decoded = await _send(
+      http.get(Uri.parse('$baseUrl/api/v1/ambulances'), headers: _headers),
+      'The ambulance list could not be loaded.',
+    );
+    return (decoded as List)
+        .map((row) => AmbulanceRow.fromJson(Map<String, dynamic>.from(row as Map)))
+        .toList();
+  }
+
+  Future<DriverPortal> loadDriverPortal(String driverId) async {
+    final decoded = await _send(
+      http.get(
+        Uri.parse('$baseUrl/api/v1/drivers/$driverId/portal'),
+        headers: _headers,
+      ),
+      'The driver portal could not be loaded.',
+    );
+    return DriverPortal.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<EmergencyCall> updateDriverRequest({
+    required String driverId,
+    required String requestId,
+    required String action,
+  }) async {
+    final decoded = await _send(
+      http.patch(
+        Uri.parse('$baseUrl/api/v1/drivers/$driverId/requests/$requestId/$action'),
+        headers: _headers,
+      ),
+      'The $action update could not be sent.',
+    );
+    return EmergencyCall.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<List<ProviderRow>> listProviders() async {
+    final decoded = await _send(
+      http.get(Uri.parse('$baseUrl/api/v1/providers'), headers: _headers),
+      'The provider list could not be loaded.',
+    );
+    return (decoded as List)
+        .map((row) => ProviderRow.fromJson(Map<String, dynamic>.from(row as Map)))
+        .toList();
+  }
+
+  Future<double> setInspectionFee({
+    required String providerId,
+    required double inspectionFee,
+  }) async {
+    final decoded = await _send(
+      http.patch(
+        Uri.parse('$baseUrl/api/v1/providers/$providerId/inspection-fee'),
+        headers: _headers,
+        body: jsonEncode({'inspectionFee': inspectionFee}),
+      ),
+      'The inspection fee could not be saved.',
+    );
+    return ((decoded as Map)['inspectionFee'] as num).toDouble();
+  }
+
+  Future<DomesticBooking> createDomesticRequest({
+    required String userId,
+    required String providerId,
+    required String specialisationId,
+    required String description,
+    required String address,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse('$baseUrl/api/v1/domestic-requests'),
+        headers: _headers,
+        body: jsonEncode({
+          'userId': userId,
+          'providerId': providerId,
+          'specialisationId': specialisationId,
+          'description': description,
+          'address': address,
+        }),
+      ),
+      'The booking could not be sent.',
+    );
+    return DomesticBooking.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<List<DomesticBooking>> listProviderRequests(String providerId) async {
+    final decoded = await _send(
+      http.get(
+        Uri.parse('$baseUrl/api/v1/providers/$providerId/requests'),
+        headers: _headers,
+      ),
+      'The job list could not be loaded.',
+    );
+    return (decoded as List)
+        .map(
+          (row) => DomesticBooking.fromJson(Map<String, dynamic>.from(row as Map)),
+        )
+        .toList();
+  }
+
+  Future<DomesticBooking> acceptProviderRequest({
+    required String providerId,
+    required String requestId,
+  }) async {
+    final decoded = await _send(
+      http.patch(
+        Uri.parse(
+          '$baseUrl/api/v1/providers/$providerId/requests/$requestId/accept',
+        ),
+        headers: _headers,
+      ),
+      'The job could not be accepted.',
+    );
+    return DomesticBooking.fromJson(Map<String, dynamic>.from(decoded as Map));
   }
 }

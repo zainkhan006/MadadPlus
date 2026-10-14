@@ -68,37 +68,19 @@ class EmergencyRequestState extends ChangeNotifier {
   static const geminiTextModel = 'gemini-3.5-flash';
   static const _nominatimAgent = 'MadadPlus-mobile/1.0';
   static const _incidents = {'Cardiac', 'Accident', 'Injury', 'Medical'};
+  static const _closedCallStatuses = {'COMPLETED', 'CANCELLED'};
 
-  EmergencyRequestState({EmergencyService? emergencyService})
-    : _emergencyService = emergencyService ?? EmergencyService();
+  EmergencyRequestState({
+    EmergencyService? emergencyService,
+    EmergencySocketService? socketService,
+    String? demoUserId,
+  }) : _emergencyService = emergencyService ?? EmergencyService(),
+       _emergencySocketService = socketService ?? EmergencySocketService(),
+       demoUserId = demoUserId ?? const String.fromEnvironment('DEMO_USER_ID');
 
   final EmergencyService _emergencyService;
-  final EmergencySocketService _emergencySocketService =
-      EmergencySocketService();
-
-  static const demoRequests = [
-    (
-      title: 'Pipe leak repair',
-      issue: 'Pipe leak',
-      area: 'DHA Phase 5',
-      address: 'DHA Phase 5, Street 12',
-      location: 'DHA Phase 5, Street 12 · Near XYZ Mall',
-    ),
-    (
-      title: 'Tap install',
-      issue: 'Tap install',
-      area: 'Gulshan-e-Iqbal',
-      address: 'Gulshan-e-Iqbal',
-      location: 'Gulshan-e-Iqbal',
-    ),
-    (
-      title: 'Water motor',
-      issue: 'Water motor',
-      area: 'Shahrah-e-Faisal',
-      address: 'Shahrah-e-Faisal',
-      location: 'Shahrah-e-Faisal',
-    ),
-  ];
+  final EmergencySocketService _emergencySocketService;
+  final String demoUserId;
 
   EmergencyScreen currentScreen = EmergencyScreen.splash;
   AccountPath accountPath = AccountPath.signIn;
@@ -109,7 +91,8 @@ class EmergencyRequestState extends ChangeNotifier {
   String domesticIssue = 'Pipe leak';
   String domesticSpecificIssue = 'Water leak';
   bool domesticPhotoAttached = false;
-  String domesticPlace = 'Home · DHA Phase 5';
+  String domesticDescription = '';
+  String domesticAddress = '';
   DateTime? domesticScheduledAt;
   DomesticJob domesticJob = DomesticJob.idle;
   bool costFromProvider = false;
@@ -118,20 +101,37 @@ class EmergencyRequestState extends ChangeNotifier {
   String? amountOwed;
   final List<({String label, String owed})> domesticHistory = [];
 
+  List<ProviderRow> providers = [];
+  bool providersLoading = false;
+  String? providersError;
+  ProviderRow? chosenProvider;
+  DomesticBooking? domesticBooking;
+  bool domesticSending = false;
+
   ProviderDuty providerDuty = ProviderDuty.available;
   bool providerFromProfile = false;
-  List<int> incomingRequests = [0];
-  int nextRequest = 1;
-  int? activeRequest;
-  int? pendingRequest;
-  int openedRequest = 0;
-  final Set<int> blockedRequests = {};
+  ProviderRow? providerProfile;
+  List<DomesticBooking> providerJobs = [];
+  bool providerJobsLoading = false;
+  final Set<String> declinedJobIds = {};
+  String? openedJobId;
+  String? activeJobId;
+
+  List<AmbulanceRow> driverAmbulances = [];
+  String? driverId;
+  String? driverAmbulanceLabel;
+  String? driverAmbulanceStatus;
+  EmergencyCall? driverCall;
+  bool driverLoading = false;
+  String? driverError;
+
   double? pinLatitude;
   double? pinLongitude;
   String? resolvedAddress;
   String? selectedDetail;
   int? peopleNeedingHelp;
   String? additionalDetails;
+  bool detailsFromSpeech = false;
   String? detailsNotice;
   String? requestId;
   EmergencyOutcome? outcome;
@@ -195,7 +195,7 @@ class EmergencyRequestState extends ChangeNotifier {
 
   void verifyCode() {
     if(accountPath == AccountPath.driver) {
-      goTo(EmergencyScreen.driverJob);
+      openDriverPortal();
       return;
     }
 
@@ -226,7 +226,69 @@ class EmergencyRequestState extends ChangeNotifier {
     domesticIssue = trade == 'Plumber' ? 'Pipe leak' : 'Other';
     domesticSpecificIssue = 'Water leak';
     domesticPhotoAttached = false;
+    chosenProvider = null;
     goTo(EmergencyScreen.tradeDetail);
+    loadProviders();
+  }
+
+  List<ProviderRow> get providersForTrade {
+    final trade = domesticTrade.toLowerCase();
+    return providers
+        .where((row) => row.specialisationName?.toLowerCase() == trade)
+        .toList();
+  }
+
+  Future<void> loadProviders() async {
+    providersLoading = true;
+    providersError = null;
+    notifyListeners();
+
+    try {
+      providers = await _emergencyService.listProviders();
+    } on ApiException catch (error) {
+      providersError = error.message;
+    } on TimeoutException {
+      providersError = 'The provider list took too long to load. Try again.';
+    } catch (_) {
+      providersError = 'The provider list could not be loaded. Try again.';
+    } finally {
+      providersLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void chooseProvider(ProviderRow provider) {
+    chosenProvider = provider;
+    notifyListeners();
+  }
+
+  void setDomesticDescription(String value) {
+    domesticDescription = value;
+  }
+
+  void setDomesticAddress(String value) {
+    domesticAddress = value;
+    notifyListeners();
+  }
+
+  String get domesticRequestText {
+    final typed = domesticDescription.trim();
+    return [
+      domesticIssue,
+      if(domesticTrade == 'Plumber') domesticSpecificIssue,
+      if(typed.isNotEmpty) typed,
+    ].join(' · ');
+  }
+
+  double? get currentInspectionFee {
+    return activeJob?.inspectionFee ??
+        domesticBooking?.inspectionFee ??
+        chosenProvider?.inspectionFee;
+  }
+
+  String get inspectionFeeText {
+    final fee = currentInspectionFee;
+    return fee == null ? 'x' : 'Rs. ${fee.toStringAsFixed(0)}';
   }
 
   void selectDomesticIssue(String issue) {
@@ -244,35 +306,81 @@ class EmergencyRequestState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void selectDomesticPlace(String place) {
-    domesticPlace = place;
-    notifyListeners();
-  }
-
   void scheduleDomestic(DateTime? scheduledAt) {
     domesticScheduledAt = scheduledAt;
     notifyListeners();
   }
 
-  void confirmDomestic() {
-    domesticJob = DomesticJob.searching;
-    goTo(EmergencyScreen.domesticJob);
+  Future<void> confirmDomestic() async {
+    if(domesticSending) {
+      return;
+    }
+
+    final provider = chosenProvider;
+    if(demoUserId.isEmpty) {
+      showDomesticNotice(
+        'The demo user id is missing, so the booking was not sent. '
+        'Run the app with --dart-define=DEMO_USER_ID.',
+      );
+      return;
+    }
+    if(provider == null || provider.specialisationId == null) {
+      showDomesticNotice('Choose a provider before booking.');
+      return;
+    }
+
+    domesticSending = true;
+    domesticNotice = null;
+    notifyListeners();
+
+    try {
+      final booking = await _emergencyService.createDomesticRequest(
+        userId: demoUserId,
+        providerId: provider.id,
+        specialisationId: provider.specialisationId!,
+        description: domesticRequestText,
+        address: domesticAddress.trim(),
+      );
+      domesticBooking = booking;
+      domesticJob = DomesticJob.searching;
+      _emergencySocketService.connectDomestic(
+        requestId: booking.requestId,
+        onBooking: _receiveUserBooking,
+      );
+      currentScreen = EmergencyScreen.domesticJob;
+    } on ApiException catch (error) {
+      domesticNotice = error.message;
+    } on TimeoutException {
+      domesticNotice = 'The server did not answer in time. Try again.';
+    } catch (_) {
+      domesticNotice = 'The booking could not be sent. Try again.';
+    } finally {
+      domesticSending = false;
+      notifyListeners();
+    }
+  }
+
+  void _receiveUserBooking(DomesticBooking booking) {
+    if(booking.requestId != domesticBooking?.requestId) {
+      return;
+    }
+
+    domesticBooking = booking;
+    if(booking.status == 'ACCEPTED' && domesticJob == DomesticJob.searching) {
+      domesticJob = DomesticJob.assigned;
+    }
+    notifyListeners();
   }
 
   void cancelDomestic() {
+    _emergencySocketService.disconnectDomestic();
+    domesticBooking = null;
     domesticJob = DomesticJob.idle;
     goTo(EmergencyScreen.services);
   }
 
   void cancelAssignedProvider() {
-    final request = activeRequest ?? 0;
-    blockedRequests.add(request);
-    if(activeRequest != null) {
-      activeRequest = null;
-      providerDuty = ProviderDuty.available;
-      incomingRequests.add(request);
-    }
-
+    _finishProviderJob();
     cancelDomestic();
   }
 
@@ -306,7 +414,7 @@ class EmergencyRequestState extends ChangeNotifier {
   }
 
   void acceptRepairTotal(String repairTotal) {
-    amountOwed = 'Amount owed: x + $repairTotal';
+    amountOwed = 'Amount owed: $inspectionFeeText + $repairTotal';
     domesticHistory.add((label: '$domesticTrade · Completed', owed: amountOwed!));
     _finishProviderJob();
     domesticJob = DomesticJob.complete;
@@ -314,7 +422,7 @@ class EmergencyRequestState extends ChangeNotifier {
   }
 
   void refuseRepairTotal() {
-    amountOwed = 'Amount owed: x';
+    amountOwed = 'Amount owed: $inspectionFeeText';
     domesticHistory.add(
       (label: '$domesticTrade · Inspection fee only', owed: amountOwed!),
     );
@@ -330,12 +438,16 @@ class EmergencyRequestState extends ChangeNotifier {
 
   void startProviderMode({required bool fromProfile}) {
     providerFromProfile = fromProfile;
-    providerDuty = ProviderDuty.available;
-    activeRequest = null;
-    pendingRequest = null;
-    incomingRequests = [0];
-    nextRequest = 1;
+    if(activeJobId == null) {
+      providerDuty = ProviderDuty.available;
+    }
     goTo(EmergencyScreen.providerDashboard);
+    if(providerProfile == null) {
+      loadProviders();
+    }
+    else {
+      loadProviderJobs();
+    }
   }
 
   void leaveProviderMode() {
@@ -347,61 +459,319 @@ class EmergencyRequestState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void openRequest(int request) {
-    openedRequest = request;
-    goTo(EmergencyScreen.providerRequest);
+  void chooseProviderProfile(ProviderRow provider) {
+    providerProfile = provider;
+    providerJobs = [];
+    declinedJobIds.clear();
+    activeJobId = null;
+    providerDuty = ProviderDuty.available;
+    _emergencySocketService.connectProvider(
+      providerId: provider.id,
+      onBooking: _receiveProviderBooking,
+    );
+    loadProviderJobs();
   }
 
-  void declineRequest() {
-    incomingRequests.remove(openedRequest);
+  void changeProviderProfile() {
+    _emergencySocketService.disconnectProvider();
+    providerProfile = null;
+    providerJobs = [];
+    activeJobId = null;
+    providerDuty = ProviderDuty.available;
     goTo(EmergencyScreen.providerDashboard);
+    loadProviders();
   }
 
-  void acceptRequest() {
-    final request = openedRequest;
-    incomingRequests.remove(request);
-
-    if(providerDuty == ProviderDuty.onJob) {
-      pendingRequest = request;
-      _offerNextRequest();
-      goTo(EmergencyScreen.providerJob);
+  Future<void> loadProviderJobs() async {
+    final provider = providerProfile;
+    if(provider == null) {
       return;
     }
 
-    if(pendingRequest == request) {
-      pendingRequest = null;
+    providerJobsLoading = true;
+    notifyListeners();
+
+    try {
+      providerJobs = await _emergencyService.listProviderRequests(provider.id);
+    } on ApiException catch (error) {
+      domesticNotice = error.message;
+    } on TimeoutException {
+      domesticNotice = 'The job list took too long to load. Try again.';
+    } catch (_) {
+      domesticNotice = 'The job list could not be loaded. Try again.';
+    } finally {
+      providerJobsLoading = false;
+      notifyListeners();
     }
-    activeRequest = request;
-    providerDuty = ProviderDuty.onJob;
-    domesticTrade = 'Plumber';
-    domesticIssue = demoRequests[request].issue;
-    domesticJob = DomesticJob.assigned;
-    _offerNextRequest();
-    goTo(EmergencyScreen.providerAccepted);
   }
 
-  void cancelPendingRequest() {
-    final request = pendingRequest!;
-    pendingRequest = null;
-    blockedRequests.add(request);
-    incomingRequests.add(request);
+  void _receiveProviderBooking(DomesticBooking booking) {
+    final index = providerJobs.indexWhere(
+      (job) => job.requestId == booking.requestId,
+    );
+    if(index >= 0) {
+      providerJobs[index] = booking;
+    }
+    else {
+      providerJobs.insert(0, booking);
+    }
     notifyListeners();
   }
 
-  void _finishProviderJob() {
-    if(activeRequest == null) {
+  Future<void> saveInspectionFee(String typedFee) async {
+    final provider = providerProfile;
+    final fee = double.tryParse(typedFee.trim());
+    if(provider == null) {
+      return;
+    }
+    if(fee == null || fee < 0) {
+      showDomesticNotice('Type the inspection fee as a number.');
       return;
     }
 
-    activeRequest = null;
+    try {
+      final saved = await _emergencyService.setInspectionFee(
+        providerId: provider.id,
+        inspectionFee: fee,
+      );
+      providerProfile = provider.withFee(saved);
+      providers = [
+        for(final row in providers) row.id == provider.id ? row.withFee(saved) : row,
+      ];
+      domesticNotice = 'Inspection fee saved: Rs. ${saved.toStringAsFixed(0)}.';
+    } on ApiException catch (error) {
+      domesticNotice = error.message;
+    } on TimeoutException {
+      domesticNotice = 'The fee took too long to save. Try again.';
+    } catch (_) {
+      domesticNotice = 'The inspection fee could not be saved. Try again.';
+    }
+    notifyListeners();
+  }
+
+  List<DomesticBooking> get incomingJobs {
+    return providerJobs
+        .where(
+          (job) => job.status == 'PENDING' && !declinedJobIds.contains(job.requestId),
+        )
+        .toList();
+  }
+
+  List<DomesticBooking> get acceptedJobs {
+    return providerJobs.where((job) => job.status == 'ACCEPTED').toList();
+  }
+
+  DomesticBooking? _jobById(String? requestId) {
+    for(final job in providerJobs) {
+      if(job.requestId == requestId) {
+        return job;
+      }
+    }
+    return null;
+  }
+
+  DomesticBooking? get openedJob => _jobById(openedJobId);
+
+  DomesticBooking? get activeJob => _jobById(activeJobId);
+
+  void openJob(String requestId) {
+    openedJobId = requestId;
+    goTo(EmergencyScreen.providerRequest);
+  }
+
+  void openActiveJob(String requestId) {
+    activeJobId = requestId;
+    providerDuty = ProviderDuty.onJob;
+    goTo(EmergencyScreen.providerJob);
+  }
+
+  void declineJob() {
+    final requestId = openedJobId;
+    if(requestId != null) {
+      declinedJobIds.add(requestId);
+    }
+    goTo(EmergencyScreen.providerDashboard);
+  }
+
+  Future<void> acceptJob() async {
+    final provider = providerProfile;
+    final requestId = openedJobId;
+    if(provider == null || requestId == null) {
+      showDomesticNotice('There is no job open to accept.');
+      return;
+    }
+
+    try {
+      final accepted = await _emergencyService.acceptProviderRequest(
+        providerId: provider.id,
+        requestId: requestId,
+      );
+      _receiveProviderBooking(accepted);
+      if(domesticBooking?.requestId == accepted.requestId) {
+        domesticBooking = accepted;
+      }
+      activeJobId = accepted.requestId;
+      providerDuty = ProviderDuty.onJob;
+      domesticJob = DomesticJob.assigned;
+      goTo(EmergencyScreen.providerAccepted);
+    } on ApiException catch (error) {
+      showDomesticNotice(error.message);
+    } on TimeoutException {
+      showDomesticNotice('The server did not answer in time. Try again.');
+    } catch (_) {
+      showDomesticNotice('The job could not be accepted. Try again.');
+    }
+  }
+
+  void _finishProviderJob() {
+    if(activeJobId == null) {
+      return;
+    }
+
+    activeJobId = null;
     providerDuty = ProviderDuty.available;
   }
 
-  void _offerNextRequest() {
-    if(nextRequest < demoRequests.length) {
-      incomingRequests.add(nextRequest);
-      nextRequest++;
+  void openDriverPortal() {
+    goTo(EmergencyScreen.driverJob);
+    if(driverId == null) {
+      loadDriverAmbulances();
     }
+    else {
+      loadDriverPortal();
+    }
+  }
+
+  Future<void> loadDriverAmbulances() async {
+    driverLoading = true;
+    driverError = null;
+    notifyListeners();
+
+    try {
+      driverAmbulances = await _emergencyService.listAmbulances();
+    } on ApiException catch (error) {
+      driverError = error.message;
+    } on TimeoutException {
+      driverError = 'The ambulance list took too long to load. Try again.';
+    } catch (_) {
+      driverError = 'The ambulance list could not be loaded. Try again.';
+    } finally {
+      driverLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void chooseDriverAmbulance(AmbulanceRow ambulance) {
+    final id = ambulance.driverId;
+    if(id == null) {
+      driverError = '${ambulance.label} has no driver on record.';
+      notifyListeners();
+      return;
+    }
+
+    driverId = id;
+    driverAmbulanceLabel = ambulance.label;
+    driverAmbulanceStatus = ambulance.status;
+    driverCall = null;
+    _emergencySocketService.connectDriver(
+      driverId: id,
+      onCall: _receiveDriverCall,
+    );
+    loadDriverPortal();
+  }
+
+  void changeDriverAmbulance() {
+    _emergencySocketService.disconnectDriver();
+    driverId = null;
+    driverAmbulanceLabel = null;
+    driverAmbulanceStatus = null;
+    driverCall = null;
+    loadDriverAmbulances();
+  }
+
+  Future<void> loadDriverPortal() async {
+    final id = driverId;
+    if(id == null) {
+      return;
+    }
+
+    driverLoading = true;
+    driverError = null;
+    notifyListeners();
+
+    try {
+      final portal = await _emergencyService.loadDriverPortal(id);
+      driverAmbulanceLabel = portal.ambulanceLabel ?? driverAmbulanceLabel;
+      driverAmbulanceStatus = portal.ambulanceStatus;
+      final call = portal.activeRequest;
+      driverCall = call == null || _closedCallStatuses.contains(call.status)
+          ? null
+          : call;
+    } on ApiException catch (error) {
+      driverError = error.message;
+    } on TimeoutException {
+      driverError = 'The driver portal took too long to load. Try again.';
+    } catch (_) {
+      driverError = 'The driver portal could not be loaded. Try again.';
+    } finally {
+      driverLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void _receiveDriverCall(EmergencyCall call) {
+    final forThisDriver = call.assignedDriverId == driverId;
+    if(forThisDriver && !_closedCallStatuses.contains(call.status)) {
+      driverCall = call;
+      driverAmbulanceStatus = 'BUSY';
+    }
+    else if(driverCall?.requestId == call.requestId) {
+      driverCall = null;
+      if(call.status == 'COMPLETED') {
+        driverAmbulanceStatus = 'FREE';
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<bool> sendDriverUpdate(String action) async {
+    final id = driverId;
+    final call = driverCall;
+    if(id == null || call == null) {
+      driverError = 'There is no active call to update.';
+      notifyListeners();
+      return false;
+    }
+
+    driverLoading = true;
+    driverError = null;
+    notifyListeners();
+
+    try {
+      final updated = await _emergencyService.updateDriverRequest(
+        driverId: id,
+        requestId: call.requestId,
+        action: action,
+      );
+      if(_closedCallStatuses.contains(updated.status)) {
+        driverCall = null;
+        driverAmbulanceStatus = 'FREE';
+      }
+      else {
+        driverCall = updated;
+      }
+      return true;
+    } on ApiException catch (error) {
+      driverError = error.message;
+    } on TimeoutException {
+      driverError = 'The server did not answer in time. Try again.';
+    } catch (_) {
+      driverError = 'The $action update could not be sent. Try again.';
+    } finally {
+      driverLoading = false;
+      notifyListeners();
+    }
+    return false;
   }
 
   void selectDetail(String detail) {
@@ -442,6 +812,7 @@ class EmergencyRequestState extends ChangeNotifier {
     selectedDetail = incident;
     peopleNeedingHelp = people;
     additionalDetails = null;
+    detailsFromSpeech = false;
     detailsNotice = null;
     notifyListeners();
   }
@@ -456,6 +827,7 @@ class EmergencyRequestState extends ChangeNotifier {
     selectedDetail = null;
     peopleNeedingHelp = null;
     additionalDetails = null;
+    detailsFromSpeech = false;
     detailsNotice = 'Fill in what happened and how many people need help.';
     currentScreen = EmergencyScreen.emergencyDetails;
     notifyListeners();
@@ -571,6 +943,7 @@ class EmergencyRequestState extends ChangeNotifier {
       selectedDetail = incident;
       peopleNeedingHelp = people;
       additionalDetails = incident == null && people == null ? null : details;
+      detailsFromSpeech = incident != null || people != null;
       detailsNotice = _noticeFor(incident, people);
       currentScreen = EmergencyScreen.emergencyDetails;
       notifyListeners();
@@ -586,12 +959,22 @@ class EmergencyRequestState extends ChangeNotifier {
 
     final latitude = pinLatitude;
     final longitude = pinLongitude;
-    if(latitude == null || longitude == null) {
+    final address = resolvedAddress;
+    if(latitude == null || longitude == null || address == null) {
       errorMessage = 'Set a location before requesting an ambulance.';
       notifyListeners();
       return;
     }
+    final description = selectedDetail;
+    final peopleCount = peopleNeedingHelp;
+    if(description == null || peopleCount == null) {
+      errorMessage = 'Choose what happened and how many people need help.';
+      notifyListeners();
+      return;
+    }
 
+    _arrivalTimer?.cancel();
+    _arrivalTimer = null;
     isRequesting = true;
     errorMessage = null;
     currentScreen = EmergencyScreen.emergencySearch;
@@ -601,6 +984,11 @@ class EmergencyRequestState extends ChangeNotifier {
       result = await _emergencyService.createEmergencyRequest(
         lat: latitude,
         lng: longitude,
+        address: address,
+        description: description,
+        peopleCount: peopleCount,
+        inputMethod: detailsFromSpeech ? 'VOICE' : 'MANUAL',
+        additionalDetails: additionalDetails,
       );
       updateRequest(
         requestId: result!.requestId,
@@ -619,6 +1007,9 @@ class EmergencyRequestState extends ChangeNotifier {
         currentScreen = EmergencyScreen.emergencyConfirm;
         errorMessage =
             'The server was asleep and is waking up now, so tap request again.';
+      } on ApiException catch (error) {
+        currentScreen = EmergencyScreen.emergencyConfirm;
+        errorMessage = error.message;
       } catch (_) {
         currentScreen = EmergencyScreen.emergencyConfirm;
         errorMessage =
@@ -651,6 +1042,7 @@ class EmergencyRequestState extends ChangeNotifier {
     selectedDetail = null;
     peopleNeedingHelp = null;
     additionalDetails = null;
+    detailsFromSpeech = false;
     detailsNotice = null;
     notifyListeners();
   }
@@ -900,9 +1292,7 @@ class EmergencyRequestState extends ChangeNotifier {
       else if(remainingSeconds <= 0) {
         timer.cancel();
         currentScreen = EmergencyScreen.emergencyArrived;
-        isCompleting = true;
         notifyListeners();
-        _completeEmergencyRequest();
         return;
       }
 
@@ -911,7 +1301,8 @@ class EmergencyRequestState extends ChangeNotifier {
   }
 
   Future<void> _completeEmergencyRequest() async {
-    if(requestId == null ||
+    final id = requestId;
+    if(id == null ||
         isCompleting && currentScreen != EmergencyScreen.emergencyArrived) {
       return;
     }
@@ -922,7 +1313,7 @@ class EmergencyRequestState extends ChangeNotifier {
 
     try {
       await Future<void>.delayed(const Duration(seconds: 1));
-      await _emergencyService.completeEmergencyRequest(requestId: requestId!);
+      await _emergencyService.completeEmergencyRequest(requestId: id);
       isCompleting = false;
       currentScreen = EmergencyScreen.emergencyComplete;
       _disconnectFromRequest();
@@ -945,6 +1336,9 @@ class EmergencyRequestState extends ChangeNotifier {
   void dispose() {
     _arrivalTimer?.cancel();
     _disconnectFromRequest();
+    _emergencySocketService.disconnectDriver();
+    _emergencySocketService.disconnectProvider();
+    _emergencySocketService.disconnectDomestic();
     super.dispose();
   }
 }
