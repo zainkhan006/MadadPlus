@@ -677,6 +677,16 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
                   ?.copyWith(color: AppColors.muted),
             ),
           ],
+          if(call == null && status == 'FREE')
+            _SecondaryButton(
+              label: 'Mark as unavailable',
+              onPressed: state.markDriverUnavailable,
+            ),
+          if(call == null && status == 'UNAVAILABLE')
+            _SecondaryButton(
+              label: 'Mark as available',
+              onPressed: state.markDriverAvailable,
+            ),
           const SizedBox(height: AppSpacing.space3),
           _SecondaryButton(
             label: 'Refresh',

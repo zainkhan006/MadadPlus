@@ -808,6 +808,24 @@ class EmergencyRequestState extends ChangeNotifier {
     loadDriverAmbulances();
   }
 
+  void markDriverUnavailable() {
+    if(driverCall != null || driverAmbulanceStatus != 'FREE') {
+      return;
+    }
+
+    driverAmbulanceStatus = 'UNAVAILABLE';
+    notifyListeners();
+  }
+
+  void markDriverAvailable() {
+    if(driverCall != null || driverAmbulanceStatus != 'UNAVAILABLE') {
+      return;
+    }
+
+    driverAmbulanceStatus = 'FREE';
+    notifyListeners();
+  }
+
   Future<void> loadDriverPortal() async {
     final id = driverId;
     if(id == null) {

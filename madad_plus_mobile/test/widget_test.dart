@@ -85,6 +85,8 @@ void main() {
     expect(find.text('Chest pain, caller +92 300 1234567'), findsNothing);
     expect(find.text('Indus Hospital, Korangi Crossing'), findsNothing);
     expect(find.text('Picked up'), findsOneWidget);
+    expect(find.text('Mark as unavailable'), findsNothing);
+    expect(find.text('Mark as available'), findsNothing);
 
     await tester.tap(find.text('Picked up'));
     await pumpAsync(tester);
@@ -126,7 +128,25 @@ void main() {
     expect(find.text('No call on this ambulance.'), findsOneWidget);
     expect(find.text('DHA Phase 5, Street 12, Near XYZ Mall'), findsNothing);
     expect(find.text('Picked up'), findsNothing);
+    expect(find.text('FREE'), findsOneWidget);
+    expect(find.text('Mark as unavailable'), findsOneWidget);
     expect(session.state.requestId, isNull);
+
+    await tester.ensureVisible(find.text('Mark as unavailable'));
+    await tester.pump();
+    await tester.tap(find.text('Mark as unavailable'));
+    await tester.pump();
+
+    expect(find.text('UNAVAILABLE'), findsOneWidget);
+    expect(find.text('Mark as available'), findsOneWidget);
+    expect(find.text('Mark as unavailable'), findsNothing);
+
+    await tester.tap(find.text('Mark as available'));
+    await tester.pump();
+
+    expect(find.text('FREE'), findsOneWidget);
+    expect(find.text('Mark as unavailable'), findsOneWidget);
+    expect(find.text('Mark as available'), findsNothing);
   });
 
   testWidgets('a new user reaches home and can still open ambulance', (
