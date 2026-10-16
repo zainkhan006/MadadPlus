@@ -166,6 +166,7 @@ async function requestPayload(trx, requestId) {
       "r.people_count",
       "r.additional_details",
       "r.input_method",
+      "r.dispatch_location",
       "r.hospital_id",
       "r.hospital_address",
       "r.assigned_ambulance_id",
@@ -176,6 +177,8 @@ async function requestPayload(trx, requestId) {
       "d.phone as driver_phone",
       trx.raw("ST_Y(r.pickup_location::geometry) as pickup_lat"),
       trx.raw("ST_X(r.pickup_location::geometry) as pickup_lng"),
+      trx.raw("ST_Y(r.dispatch_location::geometry) as dispatch_lat"),
+      trx.raw("ST_X(r.dispatch_location::geometry) as dispatch_lng"),
       trx.raw("ST_Y(r.hospital_location::geometry) as hospital_lat"),
       trx.raw("ST_X(r.hospital_location::geometry) as hospital_lng"),
       trx.raw("ST_Y(a.location::geometry) as ambulance_lat"),
@@ -199,6 +202,9 @@ async function requestPayload(trx, requestId) {
       lat: Number(request.pickup_lat),
       lng: Number(request.pickup_lng)
     },
+    dispatchLocation: request.dispatch_lat == null
+      ? null
+      : { lat: Number(request.dispatch_lat), lng: Number(request.dispatch_lng) },
     emergencyDescription: request.emergency_description,
     peopleCount: request.people_count,
     additionalDetails: request.additional_details,

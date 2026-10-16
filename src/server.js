@@ -578,22 +578,35 @@ async function markDriverRequest(driverId, requestId, action) {
       updated_at: trx.fn.now()
     };
 
-    if (action === "pickup" && !request.hospital_id && !request.hospital_location) {
-      const hospital = await trx("hospitals")
-        .select("id", "name", "address")
-        .where("active", true)
-        .orderByRaw(
-          "location <-> (select pickup_location from emergency_requests where id = ?)",
-          [requestId]
-        )
-        .first();
-      if (hospital) {
-        updates.hospital_id = hospital.id;
-        updates.hospital_address = hospital.address;
-        updates.hospital_location = trx.raw(
+    if (action === "pickup") {
+      if (!request.hospital_id && !request.hospital_location) {
+        const hospital = await trx("hospitals")
+          .select("id", "name", "address")
+          .where("active", true)
+          .orderByRaw(
+            "location <-> (select pickup_location from emergency_requests where id = ?)",
+            [requestId]
+          )
+          .first();
+        if (hospital) {
+          updates.hospital_id = hospital.id;
+          updates.hospital_address = hospital.address;
+          updates.hospital_location = trx.raw(
+            "(select location from hospitals where id = ?)",
+            [hospital.id]
+          );
+          updates.dispatch_location = trx.raw(
+            "(select location from hospitals where id = ?)",
+            [hospital.id]
+          );
+        }
+      } else if (request.hospital_id) {
+        updates.dispatch_location = trx.raw(
           "(select location from hospitals where id = ?)",
-          [hospital.id]
+          [request.hospital_id]
         );
+      } else {
+        updates.dispatch_location = request.hospital_location;
       }
     }
 
@@ -708,20 +721,54 @@ app.patch("/api/v1/drivers/:driverId/location", async (req, res) => {
   }
 });
 
-async function markUnavailable(driverId, reason, lat, lng, ambulanceIdOverride) {
+async function markUnavailable(driverId, reason, lat, lng, ambulanceIdOverride, requestId) {
+  const hasCoordinates = lat != null || lng != null;
+  if (hasCoordinates && !validCoordinates(lat, lng)) {
+    return { statusCode: 400, body: { error: "lat and lng must both be valid coordinates" } };
+  }
+
   return db.transaction(async (trx) => {
     const ambulanceQuery = trx("ambulances")
-      .select("id", "status")
-      .first();
+      .select("id", "status", "driver_id");
     if (ambulanceIdOverride) {
       ambulanceQuery.where("id", ambulanceIdOverride);
     } else {
       ambulanceQuery.where("driver_id", driverId);
     }
-    const ambulance = await ambulanceQuery;
+    const ambulance = await ambulanceQuery.forUpdate().first();
     if (!ambulance) return { statusCode: 404, body: { error: "Driver ambulance not found" } };
 
-    if (validCoordinates(lat, lng)) {
+    const requestQuery = trx("emergency_requests")
+      .select("id", "status", "current_phase", "pickup_location")
+      .where("assigned_ambulance_id", ambulance.id);
+    if (requestId) {
+      requestQuery.where("id", requestId);
+    } else {
+      requestQuery.whereNotIn("status", ["COMPLETED", "CANCELLED"]);
+    }
+    requestQuery.forUpdate();
+    const request = await requestQuery.first();
+
+    if (requestId && !request) {
+      return { statusCode: 404, body: { error: "Driver request assignment not found" } };
+    }
+
+    const reassignableStatuses = [
+      "ASSIGNED",
+      "EN_ROUTE",
+      "PICKED_UP",
+      "EN_ROUTE_HOSPITAL",
+      "TRANSFER_EN_ROUTE",
+      "ARRIVED"
+    ];
+    if (request && !reassignableStatuses.includes(request.status)) {
+      return {
+        statusCode: 409,
+        body: { error: `Request cannot be reassigned from ${request.status}` }
+      };
+    }
+
+    if (hasCoordinates) {
       await trx("ambulances").where("id", ambulance.id).update({
         location: point(trx, lat, lng),
         last_location_at: trx.fn.now(),
@@ -729,31 +776,25 @@ async function markUnavailable(driverId, reason, lat, lng, ambulanceIdOverride) 
       });
     }
 
-    const request = await trx("emergency_requests")
-      .select("id", "status", "pickup_location")
-      .where("assigned_ambulance_id", ambulance.id)
-      .whereNotIn("status", ["COMPLETED", "CANCELLED"])
-      .first();
-
+    const unavailableReason = String(reason || "").trim().slice(0, 255)
+      || "Driver reported a breakdown";
     await trx("ambulances").where("id", ambulance.id).update({
       status: "UNAVAILABLE",
-      unavailable_reason: reason || "Driver reported a breakdown",
+      unavailable_reason: unavailableReason,
       updated_at: trx.fn.now()
     });
 
     let replacementRequestId = null;
+    let requestEventPayload = null;
+    let requestEvent = null;
     if (request) {
       await closeActiveAssignment(trx, request.id, "AMBULANCE_UNAVAILABLE");
-      const afterPickup = ["PICKED_UP", "EN_ROUTE_HOSPITAL", "ARRIVED"].includes(request.status);
+      const afterPickup = ["PICKED_UP", "EN_ROUTE_HOSPITAL", "TRANSFER_EN_ROUTE", "ARRIVED"]
+        .includes(request.status) || request.current_phase === "TRANSFER";
       const currentLocation = await trx("ambulances")
         .select("location")
         .where("id", ambulance.id)
         .first();
-      const dispatchLocation = validCoordinates(lat, lng)
-        ? point(trx, lat, lng)
-        : afterPickup
-          ? currentLocation.location
-          : request.pickup_location;
 
       await trx("emergency_requests")
         .where("id", request.id)
@@ -761,10 +802,8 @@ async function markUnavailable(driverId, reason, lat, lng, ambulanceIdOverride) 
           assigned_ambulance_id: null,
           status: afterPickup ? "TRANSFER_QUEUED" : "QUEUED",
           current_phase: afterPickup ? "TRANSFER" : "PICKUP",
-          dispatch_location: dispatchLocation,
-          breakdown_location: validCoordinates(lat, lng)
-            ? point(trx, lat, lng)
-            : currentLocation.location,
+          dispatch_location: afterPickup ? currentLocation.location : request.pickup_location,
+          breakdown_location: currentLocation.location,
           updated_at: trx.fn.now()
         });
 
@@ -775,17 +814,71 @@ async function markUnavailable(driverId, reason, lat, lng, ambulanceIdOverride) 
         "BREAKDOWN_REPLACEMENT"
       );
       replacementRequestId = request.id;
+
+      const payload = await requestPayload(trx, request.id);
+      const reassigned = Boolean(payload.assignedAmbulance);
+      requestEvent = reassigned ? "request.reassigned" : "request.queued";
+      requestEventPayload = {
+        ...payload,
+        reassignmentStatus: reassigned ? "ASSIGNED" : "QUEUED",
+        callerMessage: reassigned
+          ? `Your ambulance has changed to ${payload.assignedAmbulance.label}.`
+          : "Your ambulance is unavailable. We are finding a replacement now."
+      };
+
+      if (hasCoordinates) {
+        await trx("ambulance_location_updates").insert({
+          ambulance_id: ambulance.id,
+          driver_id: ambulance.driver_id,
+          request_id: request.id,
+          location: point(trx, lat, lng)
+        });
+      }
     }
 
     return {
       statusCode: 200,
-      body: { ambulanceId: ambulance.id, status: "UNAVAILABLE", replacementRequestId },
-      ambulanceId: ambulance.id
+      body: {
+        ambulanceId: ambulance.id,
+        status: "UNAVAILABLE",
+        replacementRequestId,
+        reassignmentStatus: requestEventPayload?.reassignmentStatus || null,
+        callerMessage: requestEventPayload?.callerMessage || null,
+        request: requestEventPayload
+      },
+      ambulanceId: ambulance.id,
+      previousDriverId: ambulance.driver_id,
+      requestEvent,
+      requestEventPayload
     };
   });
 }
 
+async function publishUnavailableResult(result) {
+  await emitAmbulance(result.ambulanceId);
+  if (!result.requestEventPayload) return;
+
+  emitRequest(result.requestEventPayload, result.requestEvent);
+  const nextDriverId = result.requestEventPayload.assignedAmbulance?.driver?.id;
+  if (result.previousDriverId && result.previousDriverId !== nextDriverId) {
+    io.to(`driver:${result.previousDriverId}`).emit("request.reassigned", result.requestEventPayload);
+  }
+  if (result.requestEventPayload.assignedAmbulance) {
+    await emitAmbulance(result.requestEventPayload.assignedAmbulance.id);
+  }
+}
+
+function validateUnavailableCoordinates(req, res) {
+  const { lat, lng } = req.body;
+  if ((lat != null || lng != null) && !validCoordinates(lat, lng)) {
+    res.status(400).json({ error: "lat and lng must both be valid coordinates" });
+    return false;
+  }
+  return true;
+}
+
 app.patch("/api/v1/drivers/:driverId/unavailable", async (req, res) => {
+  if (!validateUnavailableCoordinates(req, res)) return;
   try {
     const result = await markUnavailable(
       req.params.driverId,
@@ -794,17 +887,33 @@ app.patch("/api/v1/drivers/:driverId/unavailable", async (req, res) => {
       req.body.lng
     );
     if (result.statusCode === 200) {
-      await emitAmbulance(result.ambulanceId);
-      if (result.body.replacementRequestId) {
-        const replacement = await db.transaction((trx) => requestPayload(trx, result.body.replacementRequestId));
-        emitRequest(replacement, replacement.status === "QUEUED" || replacement.status === "TRANSFER_QUEUED" ? "request.queued" : "request.reassigned");
-        if (replacement.assignedAmbulance) await emitAmbulance(replacement.assignedAmbulance.id);
-      }
+      await publishUnavailableResult(result);
     }
     res.status(result.statusCode).json(result.body);
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Unable to mark ambulance unavailable" });
+  }
+});
+
+app.patch("/api/v1/drivers/:driverId/requests/:requestId/reassign", async (req, res) => {
+  if (!validateUnavailableCoordinates(req, res)) return;
+  try {
+    const result = await markUnavailable(
+      req.params.driverId,
+      req.body.reason,
+      req.body.lat,
+      req.body.lng,
+      undefined,
+      req.params.requestId
+    );
+    if (result.statusCode === 200) {
+      await publishUnavailableResult(result);
+    }
+    res.status(result.statusCode).json(result.body);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to reassign emergency request" });
   }
 });
 
@@ -858,7 +967,7 @@ app.patch("/api/v1/ambulances/:ambulanceId/status", async (req, res) => {
         undefined,
         req.params.ambulanceId
       );
-      await emitAmbulance(req.params.ambulanceId);
+      if (result.statusCode === 200) await publishUnavailableResult(result);
       return res.status(result.statusCode).json(result.body);
     }
 
