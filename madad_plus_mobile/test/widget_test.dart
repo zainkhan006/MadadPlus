@@ -81,11 +81,12 @@ void main() {
     expect(find.text('BUSY'), findsOneWidget);
     expect(find.text('Clifton Block 5'), findsOneWidget);
     expect(find.text('Accident · 2 people'), findsOneWidget);
+    expect(find.text('I am burnt'), findsOneWidget);
     expect(find.text('Caller +92 300 0000000'), findsOneWidget);
     expect(find.text('Chest pain, caller +92 300 1234567'), findsNothing);
     expect(find.text('Indus Hospital, Korangi Crossing'), findsNothing);
     expect(find.text('Picked up'), findsOneWidget);
-    expect(find.text('Mark as unavailable'), findsNothing);
+    expect(find.text('Mark as unavailable'), findsOneWidget);
     expect(find.text('Mark as available'), findsNothing);
 
     await tester.tap(find.text('Picked up'));
@@ -94,6 +95,8 @@ void main() {
     expect(find.text('To hospital'), findsOneWidget);
     expect(find.text('Parklane Hospital'), findsOneWidget);
     expect(find.text('Reached the hospital'), findsOneWidget);
+    expect(find.text('Mark as unavailable'), findsOneWidget);
+    expect(find.text('Mark as available'), findsNothing);
 
     await tester.tap(find.text('Reached the hospital'));
     await pumpAsync(tester);
@@ -148,6 +151,221 @@ void main() {
     expect(find.text('Mark as unavailable'), findsOneWidget);
     expect(find.text('Mark as available'), findsNothing);
   });
+
+  testWidgets('refresh keeps a free driver free', (WidgetTester tester) async {
+    final session = testSession(withCall: false);
+    await reachDriverCall(tester, session.state);
+
+    expect(find.text('FREE'), findsOneWidget);
+    session.api.portalStatus = 'UNAVAILABLE';
+    await tapText(tester, 'Refresh');
+    await pumpAsync(tester);
+
+    expect(find.text('FREE'), findsOneWidget);
+    expect(find.text('UNAVAILABLE'), findsNothing);
+    expect(find.text('Mark as unavailable'), findsOneWidget);
+  });
+
+  testWidgets('a driver on a call cancels, then confirms, mark as unavailable', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    await reachDriverCall(tester, session.state);
+
+    await tapText(tester, 'Mark as unavailable');
+    await tester.pumpAndSettle();
+    expect(find.text('Mark this ambulance unavailable?'), findsOneWidget);
+    expect(
+      find.text(
+        'This ambulance becomes unavailable and the nearest free ambulance takes this call.',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(session.api.reassignCalls, 0);
+    expect(find.text('BUSY'), findsOneWidget);
+    expect(find.text('Pickup'), findsOneWidget);
+
+    await tapText(tester, 'Mark as unavailable');
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Mark as unavailable'));
+    await tester.pumpAndSettle();
+
+    expect(session.api.reassignCalls, 1);
+    expect(session.api.reassignLat, isNull);
+    expect(session.api.reassignLng, isNull);
+    expect(find.text('UNAVAILABLE'), findsOneWidget);
+    expect(find.text('No active call'), findsOneWidget);
+    expect(session.state.driverCall, isNull);
+    expect(find.text('Mark as available'), findsOneWidget);
+  });
+
+  testWidgets('mark as unavailable sends the ambulance location when known', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    session.api.ambulances[0] = const AmbulanceRow(
+      id: 'amb-1',
+      label: 'A-01',
+      status: 'BUSY',
+      driverId: 'drv-1',
+      driverName: 'Sara Khan',
+      latitude: 24.86,
+      longitude: 67.0,
+    );
+    await reachDriverCall(tester, session.state);
+
+    await tapText(tester, 'Mark as unavailable');
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Mark as unavailable'));
+    await tester.pumpAndSettle();
+
+    expect(session.api.reassignLat, 24.86);
+    expect(session.api.reassignLng, 67.0);
+  });
+
+  for(final failure in [
+    (
+      code: 404,
+      message:
+          'This call is no longer assigned to your ambulance. Tap Refresh to see your current call.',
+    ),
+    (
+      code: 409,
+      message:
+          'This call can no longer be handed over. Tap Refresh to see its current status.',
+    ),
+  ]) {
+    testWidgets('a ${failure.code} keeps the call and shows a readable message', (
+      WidgetTester tester,
+    ) async {
+      final session = testSession();
+      session.api.reassignError = ApiException(
+        'Server said no.',
+        statusCode: failure.code,
+      );
+      await reachDriverCall(tester, session.state);
+
+      await tapText(tester, 'Mark as unavailable');
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Mark as unavailable'));
+      await tester.pumpAndSettle();
+
+      expect(session.api.reassignCalls, 1);
+      expect(find.text('BUSY'), findsOneWidget);
+      expect(find.text('Pickup'), findsOneWidget);
+      expect(session.state.driverCall, isNotNull);
+      expect(find.text(failure.message), findsOneWidget);
+    });
+  }
+
+  test('callerMessageFrom reads only the caller message', () {
+    expect(
+      callerMessageFrom({'callerMessage': 'Your ambulance has changed to A-02.'}),
+      'Your ambulance has changed to A-02.',
+    );
+    expect(
+      callerMessageFrom({'callerMessage': 'A replacement ambulance is being found.'}),
+      'A replacement ambulance is being found.',
+    );
+    expect(callerMessageFrom({'callerMessage': '   '}), isNull);
+    expect(callerMessageFrom({'requestId': 'req-1', 'status': 'ASSIGNED'}), isNull);
+    expect(callerMessageFrom('Your ambulance has changed to A-02.'), isNull);
+    expect(callerMessageFrom(null), isNull);
+  });
+
+  testWidgets('the caller sees the ambulance update on every trip screen', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    session.state.result = const EmergencyRequestResult(
+      requestId: 'req-1',
+      status: 'ASSIGNED',
+      assignedAmbulance: AmbulanceAssignment(id: 'amb-1', label: 'A-01'),
+      consideredNearest: null,
+    );
+    await tester.pumpWidget(MyApp(requestState: session.state));
+    session.state.receiveCallerMessage('Your ambulance has changed to A-02.');
+
+    for(final screen in [
+      EmergencyScreen.emergencyAssigned,
+      EmergencyScreen.emergencyEnRoute,
+      EmergencyScreen.emergencyApproaching,
+      EmergencyScreen.emergencyArrived,
+    ]) {
+      session.state.goTo(screen);
+      await tester.pump();
+      expect(find.text('Ambulance update'), findsOneWidget);
+      expect(find.text('Your ambulance has changed to A-02.'), findsOneWidget);
+    }
+
+    expect(find.text('Ambulance has arrived'), findsOneWidget);
+    expect(find.text('RETURN TO HOME'), findsNothing);
+    expect(find.text('BACK TO HOME'), findsNothing);
+
+    session.state.goTo(EmergencyScreen.emergencyComplete);
+    await tester.pump();
+    expect(find.text('Request complete'), findsWidgets);
+    await tapText(tester, 'BACK TO HOME');
+
+    expect(find.text('How can we help?'), findsOneWidget);
+    expect(session.state.callerMessage, isNull);
+  });
+
+  for(final replaced in [true, false]) {
+    testWidgets(
+      replaced
+          ? 'about driver shows the replacement ambulance'
+          : 'about driver keeps the old ambulance when none is sent',
+      (WidgetTester tester) async {
+        final session = testSession(withCall: false);
+        session.state.result = const EmergencyRequestResult(
+          requestId: 'req-1',
+          status: 'ASSIGNED',
+          assignedAmbulance: AmbulanceAssignment(
+            id: 'amb-2',
+            label: 'A-02',
+            driverName: 'Hassan Ali',
+            driverPhone: '+92 301 1234567',
+          ),
+          consideredNearest: null,
+        );
+        session.state.remainingSeconds = 0;
+        session.state.goTo(EmergencyScreen.emergencyApproaching);
+        await tester.pumpWidget(MyApp(requestState: session.state));
+
+        final payload = <String, dynamic>{
+          'requestId': 'req-1',
+          'status': 'EN_ROUTE',
+          'reassignmentStatus': 'ASSIGNED',
+          'callerMessage': 'Your ambulance has changed to A-05.',
+          if(replaced)
+            'assignedAmbulance': {'id': 'new-ambulance-id', 'label': 'A-05'},
+        };
+        session.state.receiveCallerMessage(
+          callerMessageFrom(payload)!,
+          assignment: reassignedAmbulanceFrom(payload),
+        );
+        await tester.pump();
+
+        expect(find.text('Your ambulance has changed to A-05.'), findsOneWidget);
+        await tapText(tester, 'About driver');
+
+        if(replaced) {
+          expect(find.text('Ambulance: A-05'), findsOneWidget);
+          expect(find.text('Driver: N/A'), findsOneWidget);
+          expect(find.text('Phone: N/A'), findsOneWidget);
+        }
+        else {
+          expect(find.text('Ambulance: A-02'), findsOneWidget);
+          expect(find.text('Driver: Hassan Ali'), findsOneWidget);
+          expect(find.text('Phone: +92 301 1234567'), findsOneWidget);
+        }
+      },
+    );
+  }
 
   testWidgets('a new user reaches home and can still open ambulance', (
     WidgetTester tester,
@@ -523,6 +741,8 @@ class SilentSocketService extends EmergencySocketService {
     void Function(EmergencyRequestResult result)? onAssigned,
     void Function(EmergencyCall call)? onPickedUp,
     void Function(EmergencyCompletion completion)? onCompleted,
+    void Function(String message, AmbulanceAssignment? assignment)?
+        onCallerMessage,
     void Function()? onDisconnected,
     void Function()? onReconnected,
   }) {}
@@ -534,7 +754,12 @@ class SilentSocketService extends EmergencySocketService {
 class FakeEmergencyService extends EmergencyService {
   var emergencyPosts = 0;
   var domesticPosts = 0;
+  var reassignCalls = 0;
+  double? reassignLat;
+  double? reassignLng;
+  ApiException? reassignError;
   EmergencyCall? portalCall;
+  String? portalStatus;
   final jobs = <DomesticBooking>[];
 
   final ambulances = [
@@ -629,7 +854,7 @@ class FakeEmergencyService extends EmergencyService {
     return DriverPortal(
       driverName: 'Sara Khan',
       ambulanceLabel: 'A-01',
-      ambulanceStatus: portalCall == null ? 'FREE' : 'BUSY',
+      ambulanceStatus: portalStatus ?? (portalCall == null ? 'FREE' : 'BUSY'),
       activeRequest: portalCall,
     );
   }
@@ -664,6 +889,31 @@ class FakeEmergencyService extends EmergencyService {
       return completed;
     }
     return portalCall!;
+  }
+
+  @override
+  Future<DriverReassignment> reassignDriverRequest({
+    required String driverId,
+    required String requestId,
+    double? lat,
+    double? lng,
+  }) async {
+    reassignCalls += 1;
+    reassignLat = lat;
+    reassignLng = lng;
+    final error = reassignError;
+    if(error != null) {
+      throw error;
+    }
+    portalCall = null;
+    return const DriverReassignment(
+      ambulanceId: 'amb-1',
+      status: 'UNAVAILABLE',
+      replacementRequestId: 'req-1',
+      reassignmentStatus: 'ASSIGNED',
+      callerMessage: 'Your ambulance has changed to A-02.',
+      request: null,
+    );
   }
 
   @override
@@ -746,6 +996,7 @@ TestSession testSession({
             hospitalName: null,
             hospitalAddress: null,
             assignedDriverId: 'drv-1',
+            additionalDetails: 'I am burnt',
           )
         : null,
   );
@@ -773,6 +1024,23 @@ Future<void> reachSignIn(
   await tester.pump();
   await tester.tap(find.text('CONTINUE'));
   await tester.pump();
+}
+
+Future<void> reachDriverCall(
+  WidgetTester tester,
+  EmergencyRequestState state,
+) async {
+  await reachSignIn(tester, state);
+  await tester.tap(find.text('Create account'));
+  await tester.pump();
+  await tester.tap(find.text('Register as Driver'));
+  await tester.pump();
+  await tester.tap(find.text('Continue'));
+  await tester.pump();
+  await tester.tap(find.text('VERIFY'));
+  await pumpAsync(tester);
+  await tester.tap(find.text('A-01 · Sara Khan'));
+  await pumpAsync(tester);
 }
 
 Future<void> reachHome(
