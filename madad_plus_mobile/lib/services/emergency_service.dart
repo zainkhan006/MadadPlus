@@ -23,9 +23,10 @@ double? _coord(dynamic value) {
 }
 
 class ApiException implements Exception {
-  const ApiException(this.message);
+  const ApiException(this.message, {this.statusCode});
 
   final String message;
+  final int? statusCode;
 
   @override
   String toString() => message;
@@ -156,11 +157,13 @@ class EmergencyCall {
     this.ambulanceLongitude,
     this.hospitalLatitude,
     this.hospitalLongitude,
+    this.additionalDetails,
   });
 
   final String requestId;
   final String status;
   final String? pickupAddress;
+  final String? additionalDetails;
   final String? emergencyDescription;
   final int? peopleCount;
   final String? callerPhone;
@@ -200,6 +203,39 @@ class EmergencyCall {
       ambulanceLongitude: ambulancePoint?.lng,
       hospitalLatitude: hospitalPoint?.lat,
       hospitalLongitude: hospitalPoint?.lng,
+      additionalDetails: json['additionalDetails'] as String?,
+    );
+  }
+}
+
+class DriverReassignment {
+  const DriverReassignment({
+    required this.ambulanceId,
+    required this.status,
+    required this.replacementRequestId,
+    required this.reassignmentStatus,
+    required this.callerMessage,
+    required this.request,
+  });
+
+  final String ambulanceId;
+  final String status;
+  final String? replacementRequestId;
+  final String reassignmentStatus;
+  final String? callerMessage;
+  final EmergencyCall? request;
+
+  factory DriverReassignment.fromJson(Map<String, dynamic> json) {
+    final request = json['request'];
+    return DriverReassignment(
+      ambulanceId: json['ambulanceId'] as String,
+      status: json['status'] as String,
+      replacementRequestId: json['replacementRequestId'] as String?,
+      reassignmentStatus: json['reassignmentStatus'] as String,
+      callerMessage: json['callerMessage'] as String?,
+      request: request is Map
+          ? EmergencyCall.fromJson(Map<String, dynamic>.from(request))
+          : null,
     );
   }
 }
@@ -352,6 +388,7 @@ class EmergencyService {
       final error = decoded is Map ? decoded['error'] : null;
       throw ApiException(
         error is String && error.isNotEmpty ? error : fallbackError,
+        statusCode: response.statusCode,
       );
     }
     return decoded;
@@ -434,6 +471,25 @@ class EmergencyService {
       'The $action update could not be sent.',
     );
     return EmergencyCall.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<DriverReassignment> reassignDriverRequest({
+    required String driverId,
+    required String requestId,
+    double? lat,
+    double? lng,
+  }) async {
+    final decoded = await _send(
+      http.patch(
+        Uri.parse('$baseUrl/api/v1/drivers/$driverId/requests/$requestId/reassign'),
+        headers: _headers,
+        body: lat != null && lng != null
+            ? jsonEncode({'lat': lat, 'lng': lng})
+            : null,
+      ),
+      'The ambulance could not be marked unavailable.',
+    );
+    return DriverReassignment.fromJson(Map<String, dynamic>.from(decoded as Map));
   }
 
   Future<List<ProviderRow>> listProviders() async {

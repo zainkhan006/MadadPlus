@@ -140,6 +140,7 @@ class EmergencyRequestState extends ChangeNotifier {
   String? errorMessage;
   String? hospitalName;
   String? hospitalAddress;
+  String? callerMessage;
   String? hospitalError;
   int routeLeg = 0;
   double? routeFromLat;
@@ -808,6 +809,24 @@ class EmergencyRequestState extends ChangeNotifier {
     loadDriverAmbulances();
   }
 
+  void markDriverUnavailable() {
+    if(driverCall != null || driverAmbulanceStatus != 'FREE') {
+      return;
+    }
+
+    driverAmbulanceStatus = 'UNAVAILABLE';
+    notifyListeners();
+  }
+
+  void markDriverAvailable() {
+    if(driverCall != null || driverAmbulanceStatus != 'UNAVAILABLE') {
+      return;
+    }
+
+    driverAmbulanceStatus = 'FREE';
+    notifyListeners();
+  }
+
   Future<void> loadDriverPortal() async {
     final id = driverId;
     if(id == null) {
@@ -821,11 +840,18 @@ class EmergencyRequestState extends ChangeNotifier {
     try {
       final portal = await _emergencyService.loadDriverPortal(id);
       driverAmbulanceLabel = portal.ambulanceLabel ?? driverAmbulanceLabel;
-      driverAmbulanceStatus = portal.ambulanceStatus;
       final call = portal.activeRequest;
-      driverCall = call == null || _closedCallStatuses.contains(call.status)
+      final openCall = call == null || _closedCallStatuses.contains(call.status)
           ? null
           : call;
+      final portalStatus = portal.ambulanceStatus;
+      final keepLocalFree = openCall == null
+          && driverAmbulanceStatus == 'FREE'
+          && portalStatus == 'UNAVAILABLE';
+      if(!keepLocalFree) {
+        driverAmbulanceStatus = portalStatus;
+      }
+      driverCall = openCall;
       syncDriverRoute();
     } on ApiException catch (error) {
       driverError = error.message;
@@ -891,6 +917,51 @@ class EmergencyRequestState extends ChangeNotifier {
       driverError = 'The server did not answer in time. Try again.';
     } catch (_) {
       driverError = 'The $action update could not be sent. Try again.';
+    } finally {
+      driverLoading = false;
+      notifyListeners();
+    }
+    return false;
+  }
+
+  Future<bool> reassignDriverRequest() async {
+    final id = driverId;
+    final call = driverCall;
+    if(id == null || call == null || driverLoading) {
+      return false;
+    }
+
+    driverLoading = true;
+    driverError = null;
+    notifyListeners();
+
+    try {
+      final reassigned = await _emergencyService.reassignDriverRequest(
+        driverId: id,
+        requestId: call.requestId,
+        lat: driverAmbulanceLat,
+        lng: driverAmbulanceLng,
+      );
+      driverAmbulanceStatus = reassigned.status;
+      driverCall = null;
+      clearRoute();
+      return true;
+    } on ApiException catch (error) {
+      if(error.statusCode == 404) {
+        driverError =
+            'This call is no longer assigned to your ambulance. Tap Refresh to see your current call.';
+      }
+      else if(error.statusCode == 409) {
+        driverError =
+            'This call can no longer be handed over. Tap Refresh to see its current status.';
+      }
+      else {
+        driverError = error.message;
+      }
+    } on TimeoutException {
+      driverError = 'The server did not answer in time. Try again.';
+    } catch (_) {
+      driverError = 'The ambulance could not be marked unavailable. Try again.';
     } finally {
       driverLoading = false;
       notifyListeners();
@@ -1102,6 +1173,7 @@ class EmergencyRequestState extends ChangeNotifier {
     hospitalName = null;
     hospitalAddress = null;
     hospitalError = null;
+    callerMessage = null;
     isRequesting = true;
     errorMessage = null;
     currentScreen = EmergencyScreen.emergencySearch;
@@ -1161,6 +1233,7 @@ class EmergencyRequestState extends ChangeNotifier {
     outcome = null;
     result = null;
     errorMessage = null;
+    callerMessage = null;
     hospitalName = null;
     hospitalAddress = null;
     hospitalError = null;
@@ -1410,6 +1483,9 @@ class EmergencyRequestState extends ChangeNotifier {
         notifyListeners();
       },
       onPickedUp: receivePickup,
+      onCallerMessage: (message, assignment) {
+        receiveCallerMessage(message, assignment: assignment);
+      },
       onCompleted: (_) {
         _arrivalTimer?.cancel();
         isCompleting = false;
@@ -1418,6 +1494,22 @@ class EmergencyRequestState extends ChangeNotifier {
         notifyListeners();
       },
     );
+  }
+
+  void receiveCallerMessage(String message, {AmbulanceAssignment? assignment}) {
+    callerMessage = message;
+    final current = result;
+    if(assignment != null && current != null) {
+      result = EmergencyRequestResult(
+        requestId: current.requestId,
+        status: current.status,
+        assignedAmbulance: assignment,
+        consideredNearest: current.consideredNearest,
+        pickupLatitude: current.pickupLatitude,
+        pickupLongitude: current.pickupLongitude,
+      );
+    }
+    notifyListeners();
   }
 
   void receivePickup(EmergencyCall call) {

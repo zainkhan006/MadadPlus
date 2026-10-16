@@ -479,6 +479,39 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
     );
   }
 
+  Future<void> confirmUnavailable(EmergencyRequestState state) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Mark this ambulance unavailable?'),
+          content: const Text(
+            'This ambulance becomes unavailable and the nearest free ambulance takes this call.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('Mark as unavailable'),
+            ),
+          ],
+        );
+      },
+    );
+    if(confirmed != true || !mounted) {
+      return;
+    }
+
+    await state.reassignDriverRequest();
+  }
+
   Widget pickAmbulance(BuildContext context, EmergencyRequestState state) {
     return _FlowFrame(
       title: 'Choose your ambulance',
@@ -613,6 +646,11 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
               '${call.emergencyDescription ?? 'Emergency'} · ${_peopleLabel(call.peopleCount)}',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
+            if((call.additionalDetails?.trim() ?? '').isNotEmpty)
+              Text(
+                call.additionalDetails!.trim(),
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
             Text(
               call.callerPhone == null
                   ? 'No caller phone was sent.'
@@ -675,6 +713,27 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
               'Slide to the end to confirm.',
               style: Theme.of(context).textTheme.bodyMedium
                   ?.copyWith(color: AppColors.muted),
+            ),
+          ],
+          if(call == null && status == 'FREE')
+            _SecondaryButton(
+              label: 'Mark as unavailable',
+              onPressed: state.markDriverUnavailable,
+            ),
+          if(call == null && status == 'UNAVAILABLE')
+            _SecondaryButton(
+              label: 'Mark as available',
+              onPressed: state.markDriverAvailable,
+            ),
+          if(atPickup || toHospital) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _SecondaryButton(
+              label: 'Mark as unavailable',
+              onPressed: busy
+                  ? null
+                  : () {
+                      confirmUnavailable(state);
+                    },
             ),
           ],
           const SizedBox(height: AppSpacing.space3),
@@ -1510,6 +1569,15 @@ class _EmergencyAssignedScreen extends StatelessWidget {
               highlighted: true,
             ),
           ],
+          if(state.callerMessage != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _InfoCard(
+              title: 'Ambulance update',
+              subtitle: state.callerMessage!,
+              icon: Icons.swap_horiz_rounded,
+              highlighted: true,
+            ),
+          ],
           const SizedBox(height: AppSpacing.space4),
           const _TripMap(),
           const SizedBox(height: AppSpacing.space3),
@@ -1596,6 +1664,15 @@ class _EmergencyEnRouteScreen extends StatelessWidget {
             '${assignment.label} · City Emergency Services',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
+          if(state.callerMessage != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _InfoCard(
+              title: 'Ambulance update',
+              subtitle: state.callerMessage!,
+              icon: Icons.swap_horiz_rounded,
+              highlighted: true,
+            ),
+          ],
           const SizedBox(height: AppSpacing.space4),
           const _TripMap(),
           const SizedBox(height: AppSpacing.space4),
@@ -1659,6 +1736,15 @@ class _EmergencyApproachingScreen extends StatelessWidget {
               ],
             ),
           ),
+          if(state.callerMessage != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _InfoCard(
+              title: 'Ambulance update',
+              subtitle: state.callerMessage!,
+              icon: Icons.swap_horiz_rounded,
+              highlighted: true,
+            ),
+          ],
           const SizedBox(height: AppSpacing.space4),
           const _TripMap(),
           if(state.remainingSeconds <= 0) ...[
@@ -1778,6 +1864,15 @@ class _EmergencyArrivedScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const _TripMap(),
+            if(state.callerMessage != null) ...[
+              const SizedBox(height: AppSpacing.space3),
+              _InfoCard(
+              title: 'Ambulance update',
+              subtitle: state.callerMessage!,
+              icon: Icons.swap_horiz_rounded,
+              highlighted: true,
+            ),
+            ],
             const SizedBox(height: AppSpacing.space3),
             Text(
               state.hospitalName ?? '',
@@ -3497,7 +3592,7 @@ class _SecondaryButton extends StatelessWidget {
   const _SecondaryButton({required this.label, required this.onPressed});
 
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {

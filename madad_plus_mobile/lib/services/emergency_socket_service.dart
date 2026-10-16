@@ -3,6 +3,28 @@ import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'emergency_outcome.dart';
 import 'emergency_service.dart';
 
+String? callerMessageFrom(dynamic data) {
+  if(data is! Map) {
+    return null;
+  }
+  final message = data['callerMessage'];
+  if(message is! String || message.trim().isEmpty) {
+    return null;
+  }
+  return message;
+}
+
+AmbulanceAssignment? reassignedAmbulanceFrom(dynamic data) {
+  if(data is! Map) {
+    return null;
+  }
+  final ambulance = data['assignedAmbulance'];
+  if(ambulance is! Map || ambulance['id'] is! String || ambulance['label'] is! String) {
+    return null;
+  }
+  return AmbulanceAssignment.fromJson(Map<String, dynamic>.from(ambulance));
+}
+
 class CompletedAmbulance {
   const CompletedAmbulance({
     required this.id,
@@ -166,6 +188,8 @@ class EmergencySocketService {
     void Function(EmergencyRequestResult result)? onAssigned,
     void Function(EmergencyCall call)? onPickedUp,
     void Function(EmergencyCompletion completion)? onCompleted,
+    void Function(String message, AmbulanceAssignment? assignment)?
+        onCallerMessage,
     void Function()? onDisconnected,
     void Function()? onReconnected,
   }) {
@@ -196,15 +220,27 @@ class EmergencySocketService {
       onDisconnected?.call();
     });
 
-    for(final eventName in ['request.assigned', 'request.queued']) {
-      requestSocket.on(eventName, (data) {
-        final result = EmergencyRequestResult.fromJson(
-          Map<String, dynamic>.from(data as Map),
-        );
-        onOutcome(createEmergencyOutcome(result));
-        onAssigned?.call(result);
-      });
-    }
+    requestSocket.on('request.assigned', (data) {
+      final result = EmergencyRequestResult.fromJson(
+        Map<String, dynamic>.from(data as Map),
+      );
+      onOutcome(createEmergencyOutcome(result));
+      onAssigned?.call(result);
+    });
+
+    requestSocket.on('request.queued', (data) {
+      final message = callerMessageFrom(data);
+      if(message != null) {
+        onCallerMessage?.call(message, null);
+      }
+    });
+
+    requestSocket.on('request.reassigned', (data) {
+      final message = callerMessageFrom(data);
+      if(message != null) {
+        onCallerMessage?.call(message, reassignedAmbulanceFrom(data));
+      }
+    });
 
     requestSocket.on('request.pickedUp', (data) {
       onPickedUp?.call(
