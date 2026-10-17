@@ -1,92 +1,41 @@
-# Madad+ demo status, v4 through v4.3
+# Madad+ demo two task list
 
-Checked against the phone code on `mobiletest`, the backend on `main`, the dispatcher on `Web`, and the live server at `https://madadplus.onrender.com`.
+Ahmed's `origin/Web` already has hospital pins, the pulsing pin, OSRM road routes, and Mark free. The earlier list said they were missing because it was read from a stale local `Web`.
 
-Straight-line maps count as done. Road tracking is listed under yet to do.
+## Ambulance
 
-## Done
+- [x] Find my location and a typed address, shown as a pin. The hardcoded location is gone.
+- [x] Mic, English and Urdu transcription, and the what happened and people fields. English and Urdu work.
+- [x] The missing-fields popup, with partial answers kept and a mic-free form when nothing comes back.
 
-### Ambulance
+## Dispatcher
 
-- [x] Replace the hardcoded DHA pin with Find my location and a typed address.
-- [x] Show the chosen place as a pin on the map.
-- [x] Send that latitude and longitude with the request.
-- [x] Add a mic button before the details form, using Gemini's free transcription tier for English and Urdu.
-- [x] From the speech, fill what happened and people needing help.
-- [x] If neither comes back, the popup names both missing fields and opens the details form empty, with no mic.
-- [x] If only one comes back, the popup names the missing field and the form keeps the one that was understood.
-- [x] What happened and people needing help stay required. Extra details stay optional.
+- [x] Hospital pins on the map.
+- [x] Ambulance driving on roads to the user, then to the hospital. It animates on the dispatcher only, since the backend never moves a unit.
+- [x] Mark free.
+- [ ] Pulsing pin where a request came from. It is in the code, and it has not been ticked.
+- [ ] Ambulance icons colored for free, busy, and unavailable. The screenshots only show busy units.
+- [ ] Five ambulances free on the live server. Mark free works, so this can be done from the dispatcher. The last check had only A-04 free.
 
-### Ambulance driver
+## Driver
 
-- [x] Show the address, incident, extra details, and phone number from the user's live request.
-- [x] Keep the map hidden until a request arrives.
-- [x] When a request arrives, show the map with the user's pin and a straight line from the ambulance.
-- [x] After Picked up, show the hospital pin and a straight line to it.
-- [x] Send Picked up to the server so the trip can continue to the hospital.
+Counted done on your word. There is no screenshot of that run.
 
-### Backend
+- [x] Address, incident, extra details, and phone number show from the user's request.
+- [x] The map stays hidden until a request arrives, then shows the user's pin. The hospital pin appears after Picked up.
+- [x] The user phone and the driver phone show the same address and incident.
+- [x] Straight lines on the driver phone are fine for now. Roads come later.
 
-- [x] Store the request's address, latitude, longitude, incident, people count, input method, and extra details.
-- [x] Add the ambulance status update so Mark free can set FREE.
-- [x] In the seed file, set A-01, A-02, A-04, A-05, and A-06 to FREE. A-03 and A-07 stay BUSY.
-- [x] Accept Picked up from the driver so the trip can continue to the hospital.
-- [x] Add a domestic request the user can create and the provider can see and accept.
-- [x] Store each provider's inspection charge.
-- [x] Store a rating for each provider.
+## Domestic
 
-### Dispatcher
+- [x] A booking from the user phone reaches the provider phone. Tested on both emulators.
+- [x] The user sees each provider's rating and inspection charge.
+- [x] The provider can save an inspection charge. The saved value was Rs. 500, which was already the value.
+- [ ] Add a second provider for each trade. The user cannot choose between providers until then.
+- [ ] Change the fee to a new number and confirm the user phone shows it.
+- [ ] Accept the job on the provider phone and watch the user phone leave "Finding a plumber."
 
-- [x] Draw each unit as an ambulance icon, colored for free, busy, and unavailable.
+## Other
 
-## Yet to do
-
-### Domestic services and domestic provider
-
-The screens for this are already in the phone app. They have not been tried on a device.
-
-- [ ] Show each provider's rating and the inspection charge that provider set.
-- [ ] Seed a second provider for each trade, so the user can choose between two. The live server has one plumber, one electrician, and one AC technician.
-- [ ] Send the domestic request to the server and confirm the provider's phone sees the same job.
-- [ ] Let the provider set their own inspection charge and save it on the server.
-
-### Live ambulances
-
-- [ ] Set five of A-01 through A-07 to FREE on the live server. The last check found only A-04 and A-05 free. The seed file already has five free, but the running database does not match it.
-
-### Dispatcher map
-
-- [ ] Put the nine hospital pins on the `Web` branch. The pin code from v4.1 is in `stash@{2}` (`dispatcher on main`). `Web` does not have it. The nine hospitals are already on the live server: Parklane Hospital, Clifton Kidney & General Hospital, South City Hospital, Infinity Eye Care Centre, Clifton Hospital, KKT Orthopedic Spine Center, Niazi Hospital, Medi Life Clinics, and Doctors Plaza.
-- [ ] When a request arrives, pulse a pin at the user's coordinates.
-- [ ] Move the assigned ambulance along a street route to that pin.
-- [ ] After Picked up, continue the route from the user to the chosen hospital.
-
-### Driver map, later
-
-- [ ] Replace the straight line on the driver map with a route that follows roads, first to the user and then to the hospital.
-
-## Cannot do yet
-
-### Choose the hospital from the incident and the distance
-
-- [ ] Choose the hospital from the named list using the incident and the distance.
-
-The hospital table stores a name, phone, address, location, and whether it is active. It does not store which incidents a hospital takes. On Picked up, the server picks the nearest active hospital to the pickup point and ignores what happened.
-
-To finish this:
-
-1. Decide which of Cardiac, Accident, Injury, and Medical each of the nine hospitals takes, and store that on the hospital.
-2. On Picked up, keep hospitals that match the incident, then pick the nearest of those. If none match, use the nearest hospital overall.
-3. The pickup response already sends the hospital name, address, and location, so the phone and the dispatcher can show whichever hospital the server chose.
-
-### Move the dispatcher ambulance along streets
-
-- [ ] Move the assigned ambulance along a street route to the user, then to the hospital, on the dispatcher map.
-
-The dispatcher only moves an ambulance when the server sends a new position. The driver app draws its own straight line and does not send positions along a road. The server has no road route either.
-
-To finish this:
-
-1. When a request is assigned, ask a road router for the driving line from the ambulance to the pickup, and draw that line. If the router does not answer within 5 seconds, draw a straight line.
-2. Step the ambulance icon along that line until the driver taps Picked up.
-3. After Picked up, ask for the driving line from the pickup to the hospital and step the icon along it until the request is complete.
+- [ ] One full run: an ambulance request from the phone showing on the dispatcher and the driver phone together, live.
+- [ ] Choosing the hospital from the incident and the distance. The hospital table has no incident data, and the server picks only the nearest hospital.
