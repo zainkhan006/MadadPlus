@@ -111,6 +111,8 @@ class EmergencyRequestState extends ChangeNotifier {
 
   ProviderDuty providerDuty = ProviderDuty.available;
   bool providerFromProfile = false;
+  bool providerDemo = false;
+  String? providerTrade;
   ProviderRow? providerProfile;
   List<DomesticBooking> providerJobs = [];
   bool providerJobsLoading = false;
@@ -289,7 +291,20 @@ class EmergencyRequestState extends ChangeNotifier {
   void continueProviderSignIn() {
     accountPath = AccountPath.provider;
     otpFromRegistration = false;
+    providerDemo = false;
     goTo(EmergencyScreen.otp);
+  }
+
+  void openProviderDemo() {
+    providerDemo = true;
+    providerTrade = null;
+    _emergencySocketService.disconnectProvider();
+    providerProfile = null;
+    providerJobs = [];
+    declinedJobIds.clear();
+    activeJobId = null;
+    openedJobId = null;
+    startProviderMode(fromProfile: false, demo: true);
   }
 
   void chooseAccount(AccountPath path) {
@@ -350,6 +365,41 @@ class EmergencyRequestState extends ChangeNotifier {
     return providers
         .where((row) => row.specialisationName?.toLowerCase() == trade)
         .toList();
+  }
+
+  List<String> get providerTradeNames {
+    final names = <String>[];
+    for(final provider in providers) {
+      final name = provider.specialisationName;
+      if(name == null || name.isEmpty) {
+        continue;
+      }
+      final alreadyListed = names.any(
+        (listed) => listed.toLowerCase() == name.toLowerCase(),
+      );
+      if(alreadyListed) {
+        continue;
+      }
+      names.add(name);
+    }
+    return names;
+  }
+
+  List<ProviderRow> providersForSignInTrade(String trade) {
+    final wanted = trade.toLowerCase();
+    return providers
+        .where((row) => row.specialisationName?.toLowerCase() == wanted)
+        .toList();
+  }
+
+  void chooseProviderTrade(String trade) {
+    providerTrade = trade;
+    notifyListeners();
+  }
+
+  void clearProviderTrade() {
+    providerTrade = null;
+    notifyListeners();
   }
 
   Future<void> loadProviders() async {
@@ -550,8 +600,17 @@ class EmergencyRequestState extends ChangeNotifier {
     goTo(screen);
   }
 
-  void startProviderMode({required bool fromProfile}) {
+  void startProviderMode({required bool fromProfile, bool demo = false}) {
     providerFromProfile = fromProfile;
+    providerDemo = demo;
+    if(providerProfile == null && !demo) {
+      if(otpFromRegistration && accountPath == AccountPath.provider) {
+        providerTrade = registerTrade;
+      }
+      else {
+        providerTrade = null;
+      }
+    }
     if(activeJobId == null) {
       providerDuty = ProviderDuty.available;
     }
@@ -565,6 +624,8 @@ class EmergencyRequestState extends ChangeNotifier {
   }
 
   void leaveProviderMode() {
+    providerDemo = false;
+    providerTrade = null;
     goTo(providerFromProfile ? EmergencyScreen.home : EmergencyScreen.login);
   }
 
@@ -592,6 +653,9 @@ class EmergencyRequestState extends ChangeNotifier {
     providerJobs = [];
     activeJobId = null;
     providerDuty = ProviderDuty.available;
+    if(!providerDemo) {
+      providerTrade = null;
+    }
     goTo(EmergencyScreen.providerDashboard);
     loadProviders();
   }

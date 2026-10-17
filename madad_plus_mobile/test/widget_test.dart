@@ -524,7 +524,8 @@ void main() {
     await tapText(tester, 'Profile');
     await tapText(tester, 'Switch to provider mode');
     await pumpAsync(tester);
-    await tapText(tester, 'Karachi Plumbers · Plumber');
+    await tapText(tester, 'Plumber');
+    await tapText(tester, 'Yes, continue');
     await pumpAsync(tester);
     await tapText(tester, 'Pipe leak · Water leak · Kitchen sink leak');
     expect(find.text('Customer: Test User'), findsOneWidget);
@@ -594,8 +595,12 @@ void main() {
     await tapText(tester, 'VERIFY');
     await pumpAsync(tester);
 
-    expect(find.text('Which provider are you?'), findsOneWidget);
-    await tapText(tester, 'Karachi Plumbers · Plumber');
+    expect(find.text('What work do you do?'), findsOneWidget);
+    expect(find.textContaining('Rs.'), findsNothing);
+    await tapText(tester, 'Plumber');
+    expect(find.text('Is this you?'), findsOneWidget);
+    expect(find.text('Rs. 500'), findsNothing);
+    await tapText(tester, 'Yes, continue');
     await pumpAsync(tester);
 
     expect(find.text('Provider dashboard'), findsOneWidget);
@@ -642,7 +647,8 @@ void main() {
     await tapText(tester, 'Profile');
     await tapText(tester, 'Switch to provider mode');
     await pumpAsync(tester);
-    await tapText(tester, 'Karachi Plumbers · Plumber');
+    await tapText(tester, 'Plumber');
+    await tapText(tester, 'Yes, continue');
     await pumpAsync(tester);
     await tapText(tester, 'Pipe leak');
     await tapText(tester, 'Accept job');
@@ -676,7 +682,7 @@ void main() {
     expect(find.text('How can we help?'), findsOneWidget);
   });
 
-  testWidgets('a new provider registers with a trade and lands on the dashboard', (
+  testWidgets('a new provider registers with a trade and confirms that business', (
     WidgetTester tester,
   ) async {
     final session = testSession();
@@ -697,12 +703,34 @@ void main() {
     await tapText(tester, 'Continue');
     await tapText(tester, 'VERIFY');
     await pumpAsync(tester);
-    expect(find.text('Which provider are you?'), findsOneWidget);
-    expect(find.text('Provider dashboard'), findsOneWidget);
+    expect(find.text('Is this you?'), findsOneWidget);
+    expect(find.text('Your business'), findsOneWidget);
+    expect(find.text('Karachi Plumbers · Plumber'), findsOneWidget);
+    expect(find.text('Which provider are you?'), findsNothing);
 
     await tester.tap(find.byTooltip('Back'));
     await tester.pump();
     expect(find.text('Existing account'), findsOneWidget);
+  });
+
+  testWidgets('the demo provider list hides fees', (WidgetTester tester) async {
+    final session = testSession();
+    await reachSignIn(tester, session.state);
+    await tapText(tester, 'Demo: act as a provider');
+    await pumpAsync(tester);
+
+    expect(find.text('Which provider do you want to test as?'), findsOneWidget);
+    expect(
+      find.text('Demo only. Anyone can open any provider here.'),
+      findsOneWidget,
+    );
+    expect(find.text('Karachi Plumbers · Plumber'), findsOneWidget);
+    expect(find.textContaining('Rs.'), findsNothing);
+    expect(find.text('Provider dashboard'), findsNothing);
+    expect(
+      find.text('Requests booked with you will show up here.'),
+      findsNothing,
+    );
   });
 }
 
