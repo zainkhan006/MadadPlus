@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -92,42 +93,61 @@ class EmergencyFlow extends StatelessWidget {
   }
 }
 
+TextStyle? _largeTitle(BuildContext context) {
+  return Theme.of(context).textTheme.headlineLarge?.copyWith(
+    height: 1.08,
+    letterSpacing: -0.6,
+  );
+}
+
+TextStyle? _sectionTitle(BuildContext context) {
+  return Theme.of(context).textTheme.headlineMedium?.copyWith(
+    height: 1.15,
+    letterSpacing: -0.4,
+  );
+}
+
 class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
 
   @override
   Widget build(BuildContext context) {
     return _FlowFrame(
+      plainChrome: true,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(
-            Icons.health_and_safety_rounded,
+          const _MarkPlate(
+            icon: Icons.health_and_safety_rounded,
             color: AppColors.red,
-            size: 84,
+            alignment: Alignment.center,
           ),
           const SizedBox(height: AppSpacing.space5),
           Text(
             'Madad+',
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.headlineLarge,
+            style: _largeTitle(context),
           ),
           const SizedBox(height: AppSpacing.space2),
           Text(
             'Emergency help and trusted local services.',
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: AppColors.muted),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              color: AppColors.muted,
+              height: 1.45,
+            ),
           ),
           const SizedBox(height: AppSpacing.space6),
-          _ActionButton(
-            label: 'GET STARTED',
-            onPressed: () {
-              context.read<EmergencyRequestState>().goTo(
-                EmergencyScreen.onboarding,
-              );
-            },
+          _PressScale(
+            child: _ActionButton(
+              label: 'GET STARTED',
+              onPressed: () {
+                context.read<EmergencyRequestState>().goTo(
+                  EmergencyScreen.onboarding,
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -141,6 +161,7 @@ class _OnboardingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _FlowFrame(
+      plainChrome: true,
       title: 'Welcome',
       onBack: () {
         context.read<EmergencyRequestState>().goTo(EmergencyScreen.splash);
@@ -149,28 +170,30 @@ class _OnboardingScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: AppSpacing.space6),
-          const Icon(
-            Icons.support_agent_rounded,
+          const _MarkPlate(
+            icon: Icons.support_agent_rounded,
             color: AppColors.green,
-            size: 72,
           ),
           const SizedBox(height: AppSpacing.space5),
-          Text(
-            'Help when you need it',
-            style: Theme.of(context).textTheme.headlineLarge,
-          ),
+          Text('Help when you need it', style: _largeTitle(context)),
           const SizedBox(height: AppSpacing.space3),
           Text(
             'Request emergency help or find a trusted local service provider.',
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: AppColors.muted),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              color: AppColors.muted,
+              height: 1.45,
+            ),
           ),
           const SizedBox(height: AppSpacing.space6),
-          _ActionButton(
-            label: 'CONTINUE',
-            onPressed: () {
-              context.read<EmergencyRequestState>().goTo(EmergencyScreen.login);
-            },
+          _PressScale(
+            child: _ActionButton(
+              label: 'CONTINUE',
+              onPressed: () {
+                context.read<EmergencyRequestState>().goTo(
+                  EmergencyScreen.login,
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -183,23 +206,24 @@ class _LoginScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final state = context.read<EmergencyRequestState>();
     return _FlowFrame(
+      plainChrome: true,
       title: 'Sign in',
       onBack: () {
-        context.read<EmergencyRequestState>().goTo(EmergencyScreen.onboarding);
+        state.goTo(EmergencyScreen.onboarding);
       },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Existing account',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
+          Text('Existing account', style: _sectionTitle(context)),
           const SizedBox(height: AppSpacing.space2),
           Text(
             'We will send a verification code. Demo mode does not send a real SMS.',
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: AppColors.muted),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              color: AppColors.muted,
+              height: 1.45,
+            ),
           ),
           const SizedBox(height: AppSpacing.space5),
           const TextField(
@@ -207,36 +231,46 @@ class _LoginScreen extends StatelessWidget {
             decoration: InputDecoration(
               labelText: 'Phone number',
               hintText: '+92 300 1234567',
-              border: OutlineInputBorder(),
+              filled: true,
+              fillColor: AppColors.surface,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: AppSpacing.space4,
+                vertical: AppSpacing.space4,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+                borderSide: BorderSide(color: AppColors.focus, width: 1.5),
+              ),
             ),
           ),
           const SizedBox(height: AppSpacing.space5),
-          _ActionButton(
-            label: 'CONTINUE',
-            onPressed: () {
-              context.read<EmergencyRequestState>().continueSignIn();
-            },
+          _PressScale(
+            child: _ActionButton(
+              label: 'CONTINUE',
+              onPressed: state.continueSignIn,
+            ),
           ),
-          const SizedBox(height: AppSpacing.space3),
-          TextButton(
-            onPressed: () {
-              context.read<EmergencyRequestState>().continueDriverSignIn();
-            },
-            child: const Text('Sign in as driver'),
-          ),
-          TextButton(
-            onPressed: () {
-              context.read<EmergencyRequestState>().continueProviderSignIn();
-            },
-            child: const Text('Sign in as provider'),
-          ),
-          TextButton(
-            onPressed: () {
-              context.read<EmergencyRequestState>().goTo(
-                EmergencyScreen.roleChoice,
-              );
-            },
-            child: const Text('Create account'),
+          const SizedBox(height: AppSpacing.space4),
+          _GroupedLinks(
+            links: [
+              _GroupedLink('Sign in as driver', state.continueDriverSignIn),
+              _GroupedLink('Sign in as provider', state.continueProviderSignIn),
+              _GroupedLink('Demo: act as a provider', state.openProviderDemo),
+              _GroupedLink(
+                'Create account',
+                () {
+                  state.goTo(EmergencyScreen.roleChoice);
+                },
+              ),
+            ],
           ),
         ],
       ),
@@ -250,6 +284,7 @@ class _OtpScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _FlowFrame(
+      plainChrome: true,
       title: 'Verify phone',
       onBack: () {
         context.read<EmergencyRequestState>().backFromOtp();
@@ -257,15 +292,14 @@ class _OtpScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Enter verification code',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
+          Text('Enter verification code', style: _sectionTitle(context)),
           const SizedBox(height: AppSpacing.space2),
           Text(
             'Demo mode: tap verify to continue.',
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: AppColors.muted),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              color: AppColors.muted,
+              height: 1.45,
+            ),
           ),
           const SizedBox(height: AppSpacing.space5),
           const Row(
@@ -273,11 +307,13 @@ class _OtpScreen extends StatelessWidget {
             children: [_OtpBox(), _OtpBox(), _OtpBox(), _OtpBox()],
           ),
           const SizedBox(height: AppSpacing.space5),
-          _ActionButton(
-            label: 'VERIFY',
-            onPressed: () {
-              context.read<EmergencyRequestState>().verifyCode();
-            },
+          _PressScale(
+            child: _ActionButton(
+              label: 'VERIFY',
+              onPressed: () {
+                context.read<EmergencyRequestState>().verifyCode();
+              },
+            ),
           ),
         ],
       ),
@@ -757,45 +793,49 @@ class _HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final state = context.read<EmergencyRequestState>();
     return _FlowFrame(
+      plainChrome: true,
       title: 'Karachi, DHA Phase 5',
       tab: _UserTab.home,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'How can we help?',
-            style: Theme.of(context).textTheme.headlineLarge,
-          ),
+          Text('How can we help?', style: _largeTitle(context)),
           const SizedBox(height: AppSpacing.space4),
-          _ChoiceCard(
-            icon: Icons.emergency_rounded,
-            title: 'Emergency help',
-            subtitle: 'Request an ambulance for a medical emergency.',
-            color: AppColors.red,
-            onTap: () {
-              context.read<EmergencyRequestState>().goTo(
-                EmergencyScreen.emergencyType,
-              );
-            },
+          _PressScale(
+            child: _ChoiceCard(
+              quiet: true,
+              icon: Icons.emergency_rounded,
+              title: 'Emergency help',
+              subtitle: 'Request an ambulance for a medical emergency.',
+              color: AppColors.red,
+              onTap: () {
+                state.goTo(EmergencyScreen.emergencyType);
+              },
+            ),
           ),
           const SizedBox(height: AppSpacing.space3),
-          _ChoiceCard(
-            icon: Icons.search,
-            title: 'Find a service provider',
-            subtitle: 'Plumber, electrician, AC technician, mechanic, and more',
-            color: AppColors.green,
-            onTap: () {
-              context.read<EmergencyRequestState>().goTo(
-                EmergencyScreen.services,
-              );
-            },
+          _PressScale(
+            child: _ChoiceCard(
+              quiet: true,
+              icon: Icons.search,
+              title: 'Find a service provider',
+              subtitle:
+                  'Plumber, electrician, AC technician, mechanic, and more',
+              color: AppColors.green,
+              onTap: () {
+                state.goTo(EmergencyScreen.services);
+              },
+            ),
           ),
           const SizedBox(height: AppSpacing.space5),
           Text(
             'Simulation mode only. For a real emergency, call 1122.',
-            style: Theme.of(context).textTheme.bodyMedium
-                ?.copyWith(color: AppColors.muted),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.muted,
+              height: 1.45,
+            ),
           ),
         ],
       ),
@@ -3108,37 +3148,135 @@ class _ProviderDashboardScreen extends StatefulWidget {
 class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
   String? typedFee;
 
+  List<Widget> providerLoadNotes(
+    BuildContext context,
+    EmergencyRequestState state,
+  ) {
+    return [
+      if(state.providersLoading)
+        const Center(child: CircularProgressIndicator()),
+      if(state.providersError != null) ...[
+        _ErrorNotice(message: state.providersError!),
+        const SizedBox(height: AppSpacing.space3),
+        _SecondaryButton(label: 'Try again', onPressed: state.loadProviders),
+        const SizedBox(height: AppSpacing.space3),
+      ],
+    ];
+  }
+
   Widget pickProfile(BuildContext context, EmergencyRequestState state) {
+    if(state.providerDemo) {
+      return demoProviderList(context, state);
+    }
+    if(state.providerTrade == null) {
+      return tradeQuestion(context, state);
+    }
+    return confirmBusiness(context, state);
+  }
+
+  Widget tradeQuestion(BuildContext context, EmergencyRequestState state) {
     return _FlowFrame(
-      title: 'Provider dashboard',
+      title: 'Your trade',
       onBack: state.leaveProviderMode,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Which provider are you?',
+            'What work do you do?',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          ...providerLoadNotes(context, state),
+          for(final trade in state.providerTradeNames) ...[
+            _ProfileRow(
+              label: trade,
+              onPressed: () {
+                state.chooseProviderTrade(trade);
+              },
+            ),
+            const SizedBox(height: AppSpacing.space2),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget confirmBusiness(BuildContext context, EmergencyRequestState state) {
+    final trade = state.providerTrade ?? '';
+    final matches = state.providersForSignInTrade(trade);
+    final waiting = state.providersLoading && state.providers.isEmpty;
+
+    return _FlowFrame(
+      title: 'Your business',
+      onBack: state.leaveProviderMode,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Is this you?',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          ...providerLoadNotes(context, state),
+          if(!waiting && matches.length == 1) ...[
+            _ProfileRow(
+              label:
+                  '${matches.first.name} · ${matches.first.specialisationName ?? 'Provider'}',
+              trailing: '',
+            ),
+            const SizedBox(height: AppSpacing.space3),
+            _ActionButton(
+              label: 'Yes, continue',
+              onPressed: () {
+                state.chooseProviderProfile(matches.first);
+              },
+            ),
+          ],
+          if(!waiting && matches.isEmpty && state.providersError == null)
+            Text(
+              'No $trade is signed up yet.',
+              style: Theme.of(context).textTheme.bodyLarge
+                  ?.copyWith(color: AppColors.muted),
+            ),
+          if(!waiting && matches.length > 1)
+            Text(
+              'More than one business does this work, so this screen cannot pick one.',
+              style: Theme.of(context).textTheme.bodyLarge
+                  ?.copyWith(color: AppColors.muted),
+            ),
+          const SizedBox(height: AppSpacing.space3),
+          _SecondaryButton(
+            label: 'Choose a different trade',
+            onPressed: state.clearProviderTrade,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget demoProviderList(BuildContext context, EmergencyRequestState state) {
+    return _FlowFrame(
+      title: 'Demo: act as a provider',
+      onBack: state.leaveProviderMode,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Which provider do you want to test as?',
             style: Theme.of(context).textTheme.headlineMedium,
           ),
           const SizedBox(height: AppSpacing.space2),
           Text(
-            'Requests booked with you will show up here.',
+            'Demo only. Anyone can open any provider here.',
             style: Theme.of(context).textTheme.bodyLarge
                 ?.copyWith(color: AppColors.muted),
           ),
           const SizedBox(height: AppSpacing.space4),
-          if(state.providersLoading)
-            const Center(child: CircularProgressIndicator()),
-          if(state.providersError != null) ...[
-            _ErrorNotice(message: state.providersError!),
-            const SizedBox(height: AppSpacing.space3),
-            _SecondaryButton(label: 'Try again', onPressed: state.loadProviders),
-            const SizedBox(height: AppSpacing.space3),
-          ],
+          ...providerLoadNotes(context, state),
           for(final provider in state.providers) ...[
             _ProfileRow(
               label:
                   '${provider.name} · ${provider.specialisationName ?? 'Provider'}',
-              trailing: 'Rs. ${provider.inspectionFee.toStringAsFixed(0)}',
               onPressed: () {
                 state.chooseProviderProfile(provider);
               },
@@ -3614,13 +3752,15 @@ class _SecondaryButton extends StatelessWidget {
 }
 
 class _UserTabBar extends StatelessWidget {
-  const _UserTabBar({required this.current});
+  const _UserTabBar({required this.current, this.frosted = false});
 
   final _UserTab current;
+  final bool frosted;
 
   @override
   Widget build(BuildContext context) {
-    return NavigationBarTheme(
+    final blur = frosted;
+    final bar = NavigationBarTheme(
       data: NavigationBarThemeData(
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
@@ -3631,7 +3771,10 @@ class _UserTabBar extends StatelessWidget {
       ),
       child: NavigationBar(
       height: 60,
-      backgroundColor: AppColors.surface,
+      elevation: blur ? 0 : null,
+      surfaceTintColor: blur ? Colors.transparent : null,
+      shadowColor: blur ? Colors.transparent : null,
+      backgroundColor: blur ? const Color(0xB8FFFFFF) : AppColors.surface,
       indicatorColor: AppColors.surface,
       selectedIndex: current.index,
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
@@ -3672,6 +3815,20 @@ class _UserTabBar extends StatelessWidget {
       ],
       ),
     );
+    if(!blur) {
+      return bar;
+    }
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: Color(0x66FFFFFF))),
+          ),
+          child: bar,
+        ),
+      ),
+    );
   }
 }
 
@@ -3682,6 +3839,7 @@ class _FlowFrame extends StatelessWidget {
     this.onBack,
     this.emergency = false,
     this.tab,
+    this.plainChrome = false,
   });
 
   final Widget child;
@@ -3689,12 +3847,15 @@ class _FlowFrame extends StatelessWidget {
   final VoidCallback? onBack;
   final bool emergency;
   final _UserTab? tab;
+  final bool plainChrome;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.soft,
-      bottomNavigationBar: tab == null ? null : _UserTabBar(current: tab!),
+      backgroundColor: plainChrome ? const Color(0xFFF2F2F7) : AppColors.soft,
+      bottomNavigationBar: tab == null
+          ? null
+          : _UserTabBar(current: tab!, frosted: plainChrome),
       body: SafeArea(
         child: Column(
           children: [
@@ -3731,8 +3892,13 @@ class _FlowFrame extends StatelessWidget {
                         textAlign: onBack == null
                             ? TextAlign.center
                             : TextAlign.left,
-                        style: Theme.of(context).textTheme.labelLarge
-                            ?.copyWith(color: AppColors.blue),
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: plainChrome ? AppColors.ink : AppColors.blue,
+                          fontWeight: plainChrome
+                              ? FontWeight.w600
+                              : FontWeight.w700,
+                          letterSpacing: plainChrome ? -0.2 : 0,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 48),
@@ -3797,6 +3963,7 @@ class _ChoiceCard extends StatelessWidget {
     required this.subtitle,
     required this.color,
     required this.onTap,
+    this.quiet = false,
   });
 
   final IconData icon;
@@ -3804,25 +3971,39 @@ class _ChoiceCard extends StatelessWidget {
   final String subtitle;
   final Color color;
   final VoidCallback onTap;
+  final bool quiet;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    final radius = BorderRadius.circular(quiet ? 16 : AppRadius.md);
+    final card = Material(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(AppRadius.md),
+      borderRadius: radius,
       child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.md),
+        borderRadius: radius,
         onTap: onTap,
         child: Container(
           constraints: const BoxConstraints(minHeight: 88),
           padding: const EdgeInsets.all(AppSpacing.space4),
           decoration: BoxDecoration(
-            border: Border.all(color: color, width: 2),
-            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: quiet ? null : Border.all(color: color, width: 2),
+            borderRadius: radius,
           ),
           child: Row(
             children: [
-              Icon(icon, color: color, size: 34),
+              if(quiet)
+                Container(
+                  width: 44,
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: color, size: 24),
+                )
+              else
+                Icon(icon, color: color, size: 34),
               const SizedBox(width: AppSpacing.space3),
               Expanded(
                 child: Column(
@@ -3831,7 +4012,9 @@ class _ChoiceCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: Theme.of(context).textTheme.headlineSmall,
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        letterSpacing: quiet ? -0.3 : 0,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.space1),
                     Text(
@@ -3846,6 +4029,22 @@ class _ChoiceCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+    if(!quiet) {
+      return card;
+    }
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1417212F),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: card,
     );
   }
 }
@@ -4119,10 +4318,131 @@ class _OtpBox extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: AppColors.surface,
-        border: Border.all(color: AppColors.line),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1417212F),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       child: Text('•', style: Theme.of(context).textTheme.headlineSmall),
+    );
+  }
+}
+
+class _MarkPlate extends StatelessWidget {
+  const _MarkPlate({
+    required this.icon,
+    required this.color,
+    this.alignment = Alignment.centerLeft,
+  });
+
+  final IconData icon;
+  final Color color;
+  final Alignment alignment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: alignment,
+      child: Container(
+        width: 88,
+        height: 88,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(28),
+        ),
+        child: Icon(icon, color: color, size: 44),
+      ),
+    );
+  }
+}
+
+class _PressScale extends StatefulWidget {
+  const _PressScale({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_PressScale> createState() => _PressScaleState();
+}
+
+class _PressScaleState extends State<_PressScale> {
+  var pressed = false;
+
+  void release() {
+    if(pressed) {
+      setState(() {
+        pressed = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return Listener(
+      onPointerDown: (_) {
+        if(!reduceMotion) {
+          setState(() {
+            pressed = true;
+          });
+        }
+      },
+      onPointerUp: (_) {
+        release();
+      },
+      onPointerCancel: (_) {
+        release();
+      },
+      child: AnimatedScale(
+        scale: !reduceMotion && pressed ? 0.97 : 1,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+class _GroupedLink {
+  const _GroupedLink(this.label, this.onPressed);
+
+  final String label;
+  final VoidCallback onPressed;
+}
+
+class _GroupedLinks extends StatelessWidget {
+  const _GroupedLinks({required this.links});
+
+  final List<_GroupedLink> links;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          for(var index = 0; index < links.length; index++) ...[
+            _PressScale(
+              child: SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: links[index].onPressed,
+                  child: Text(links[index].label),
+                ),
+              ),
+            ),
+            if(index != links.length - 1)
+              const Divider(height: 1, thickness: 1, color: AppColors.line),
+          ],
+        ],
+      ),
     );
   }
 }
