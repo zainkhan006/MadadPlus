@@ -454,9 +454,10 @@ void main() {
     );
     await tester.pump();
     await tapText(tester, 'Continue');
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Address'),
-      'Clifton Block 5',
+    session.state.setDomesticPin(
+      latitude: 24.8138,
+      longitude: 67.0300,
+      address: 'Clifton Block 5',
     );
     await tester.pump();
     await tapText(tester, 'Continue');
@@ -494,9 +495,16 @@ void main() {
     );
     await tester.pump();
     await tapText(tester, 'Continue');
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Address'),
-      'Clifton Block 5',
+    expect(find.text('Where should we send the provider?'), findsOneWidget);
+    expect(find.text('Find my location'), findsOneWidget);
+    expect(find.text('Show on map'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Address'), findsOneWidget);
+    await tapText(tester, 'Continue');
+    expect(find.text('Where should we send the provider?'), findsOneWidget);
+    session.state.setDomesticPin(
+      latitude: 24.8138,
+      longitude: 67.0300,
+      address: 'Clifton Block 5',
     );
     await tester.pump();
     await tapText(tester, 'Continue');
@@ -595,12 +603,10 @@ void main() {
     await tapText(tester, 'VERIFY');
     await pumpAsync(tester);
 
-    expect(find.text('What work do you do?'), findsOneWidget);
+    expect(find.text('Which provider do you want to test as?'), findsOneWidget);
+    expect(find.text('What work do you do?'), findsNothing);
     expect(find.textContaining('Rs.'), findsNothing);
-    await tapText(tester, 'Plumber');
-    expect(find.text('Is this you?'), findsOneWidget);
-    expect(find.text('Rs. 500'), findsNothing);
-    await tapText(tester, 'Yes, continue');
+    await tapText(tester, 'Karachi Plumbers · Plumber');
     await pumpAsync(tester);
 
     expect(find.text('Provider dashboard'), findsOneWidget);
@@ -716,7 +722,13 @@ void main() {
   testWidgets('the demo provider list hides fees', (WidgetTester tester) async {
     final session = testSession();
     await reachSignIn(tester, session.state);
-    await tapText(tester, 'Demo: act as a provider');
+    expect(find.text('Demo: act as a provider'), findsNothing);
+    expect(find.text('CONTINUE'), findsOneWidget);
+    expect(find.text('Sign in as driver'), findsOneWidget);
+    expect(find.text('Sign in as provider'), findsOneWidget);
+    expect(find.text('Create account'), findsOneWidget);
+    await tapText(tester, 'Sign in as provider');
+    await tapText(tester, 'VERIFY');
     await pumpAsync(tester);
 
     expect(find.text('Which provider do you want to test as?'), findsOneWidget);

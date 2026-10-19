@@ -114,43 +114,49 @@ class _SplashScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return _FlowFrame(
       plainChrome: true,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const _MarkPlate(
-            icon: Icons.health_and_safety_rounded,
-            color: AppColors.red,
-            alignment: Alignment.center,
-          ),
-          const SizedBox(height: AppSpacing.space5),
-          Text(
-            'Madad+',
-            textAlign: TextAlign.center,
-            style: _largeTitle(context),
-          ),
-          const SizedBox(height: AppSpacing.space2),
-          Text(
-            'Emergency help and trusted local services.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: AppColors.muted,
-              height: 1.45,
+      fill: true,
+      child: _SoftArrive(
+        child: Transform.translate(
+          offset: const Offset(0, -70),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _MarkPlate(
+              icon: Icons.health_and_safety_rounded,
+              color: AppColors.red,
+              alignment: Alignment.center,
             ),
-          ),
-          const SizedBox(height: AppSpacing.space6),
-          _PressScale(
-            child: _ActionButton(
-              label: 'GET STARTED',
-              onPressed: () {
-                context.read<EmergencyRequestState>().goTo(
-                  EmergencyScreen.onboarding,
-                );
-              },
+            const SizedBox(height: AppSpacing.space5),
+            Text(
+              'Madad+',
+              textAlign: TextAlign.center,
+              style: _largeTitle(context),
             ),
-          ),
-        ],
+            const SizedBox(height: AppSpacing.space2),
+            Text(
+              'Emergency help and trusted local services.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: AppColors.muted,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.space6),
+            _PressScale(
+              child: _ActionButton(
+                label: 'GET STARTED',
+                onPressed: () {
+                  context.read<EmergencyRequestState>().goTo(
+                    EmergencyScreen.onboarding,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
+    )
     );
   }
 }
@@ -162,41 +168,47 @@ class _OnboardingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return _FlowFrame(
       plainChrome: true,
+      fill: true,
       title: 'Welcome',
       onBack: () {
         context.read<EmergencyRequestState>().goTo(EmergencyScreen.splash);
       },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: AppSpacing.space6),
-          const _MarkPlate(
-            icon: Icons.support_agent_rounded,
-            color: AppColors.green,
-          ),
-          const SizedBox(height: AppSpacing.space5),
-          Text('Help when you need it', style: _largeTitle(context)),
-          const SizedBox(height: AppSpacing.space3),
-          Text(
-            'Request emergency help or find a trusted local service provider.',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: AppColors.muted,
-              height: 1.45,
+      child: _SoftArrive(
+        child: Transform.translate(
+          offset: const Offset(0, -90),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _MarkPlate(
+              icon: Icons.support_agent_rounded,
+              color: AppColors.ink,
             ),
-          ),
-          const SizedBox(height: AppSpacing.space6),
-          _PressScale(
-            child: _ActionButton(
-              label: 'CONTINUE',
-              onPressed: () {
-                context.read<EmergencyRequestState>().goTo(
-                  EmergencyScreen.login,
-                );
-              },
+            const SizedBox(height: AppSpacing.space5),
+            Text('Help when you need it', style: _largeTitle(context)),
+            const SizedBox(height: AppSpacing.space3),
+            Text(
+              'Request emergency help or find a trusted local service provider.',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: AppColors.muted,
+                height: 1.45,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: AppSpacing.space6),
+            _PressScale(
+              child: _ActionButton(
+                label: 'CONTINUE',
+                onPressed: () {
+                  context.read<EmergencyRequestState>().goTo(
+                    EmergencyScreen.login,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
+      )
     );
   }
 }
@@ -213,7 +225,8 @@ class _LoginScreen extends StatelessWidget {
       onBack: () {
         state.goTo(EmergencyScreen.onboarding);
       },
-      child: Column(
+      child: _SoftArrive(
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('Existing account', style: _sectionTitle(context)),
@@ -263,7 +276,6 @@ class _LoginScreen extends StatelessWidget {
             links: [
               _GroupedLink('Sign in as driver', state.continueDriverSignIn),
               _GroupedLink('Sign in as provider', state.continueProviderSignIn),
-              _GroupedLink('Demo: act as a provider', state.openProviderDemo),
               _GroupedLink(
                 'Create account',
                 () {
@@ -273,6 +285,7 @@ class _LoginScreen extends StatelessWidget {
             ],
           ),
         ],
+        ),
       ),
     );
   }
@@ -289,7 +302,8 @@ class _OtpScreen extends StatelessWidget {
       onBack: () {
         context.read<EmergencyRequestState>().backFromOtp();
       },
-      child: Column(
+      child: _SoftArrive(
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('Enter verification code', style: _sectionTitle(context)),
@@ -316,6 +330,7 @@ class _OtpScreen extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -798,7 +813,8 @@ class _HomeScreen extends StatelessWidget {
       plainChrome: true,
       title: 'Karachi, DHA Phase 5',
       tab: _UserTab.home,
-      child: Column(
+      child: _SoftArrive(
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('How can we help?', style: _largeTitle(context)),
@@ -806,6 +822,7 @@ class _HomeScreen extends StatelessWidget {
           _PressScale(
             child: _ChoiceCard(
               quiet: true,
+              emphasis: true,
               icon: Icons.emergency_rounded,
               title: 'Emergency help',
               subtitle: 'Request an ambulance for a medical emergency.',
@@ -815,7 +832,7 @@ class _HomeScreen extends StatelessWidget {
               },
             ),
           ),
-          const SizedBox(height: AppSpacing.space3),
+          const SizedBox(height: AppSpacing.space5),
           _PressScale(
             child: _ChoiceCard(
               quiet: true,
@@ -838,6 +855,7 @@ class _HomeScreen extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -2367,12 +2385,150 @@ class _ServiceDescriptionScreen extends StatelessWidget {
   }
 }
 
-class _ServiceLocationScreen extends StatelessWidget {
+class _ServiceLocationScreen extends StatefulWidget {
   const _ServiceLocationScreen();
+
+  @override
+  State<_ServiceLocationScreen> createState() => _ServiceLocationScreenState();
+}
+
+class _ServiceLocationScreenState extends State<_ServiceLocationScreen> {
+  static const _openCenter = LatLng(24.8600, 67.0100);
+  final _mapController = MapController();
+  final _addressController = TextEditingController();
+  var _busy = false;
+  String? _message;
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    _addressController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _useDeviceLocation() async {
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if(!serviceEnabled) {
+        setState(() {
+          _message = 'Location is turned off. Type the address instead.';
+        });
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if(permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if(permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        setState(() {
+          _message = 'Location permission is off. Type the address instead.';
+        });
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition();
+      if(!mounted) {
+        return;
+      }
+      final state = context.read<EmergencyRequestState>();
+      final address = await state.labelForCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+      if(!mounted) {
+        return;
+      }
+      _dropPin(
+        state,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        address: address,
+      );
+    } catch (_) {
+      if(!mounted) {
+        return;
+      }
+      setState(() {
+        _message = 'Your location could not be read. Type the address instead.';
+      });
+    } finally {
+      if(mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _lookupAddress() async {
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final state = context.read<EmergencyRequestState>();
+      final place = await state.lookupAddress(_addressController.text);
+      if(!mounted) {
+        return;
+      }
+      if(place == null) {
+        setState(() {
+          _message = 'That address was not found.';
+        });
+        return;
+      }
+      _dropPin(
+        state,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        address: place.address,
+      );
+    } catch (_) {
+      if(!mounted) {
+        return;
+      }
+      setState(() {
+        _message = 'The address lookup did not finish. Try again.';
+      });
+    } finally {
+      if(mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  void _dropPin(
+    EmergencyRequestState state, {
+    required double latitude,
+    required double longitude,
+    required String address,
+  }) {
+    state.setDomesticPin(
+      latitude: latitude,
+      longitude: longitude,
+      address: address,
+    );
+    _mapController.move(LatLng(latitude, longitude), 16);
+    setState(() {
+      _message = null;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
+    final pin = state.domesticPinLatitude == null ||
+            state.domesticPinLongitude == null
+        ? null
+        : LatLng(state.domesticPinLatitude!, state.domesticPinLongitude!);
 
     return _FlowFrame(
       title: 'Location',
@@ -2388,19 +2544,72 @@ class _ServiceLocationScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineLarge,
           ),
           const SizedBox(height: AppSpacing.space4),
-          TextFormField(
-            initialValue: state.domesticAddress,
-            onChanged: state.setDomesticAddress,
-            decoration: const InputDecoration(
-              labelText: 'Address',
-              hintText: 'House, street, and area',
-              border: OutlineInputBorder(),
+          SizedBox(
+            height: 220,
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: pin ?? _openCenter,
+                initialZoom: pin == null ? 12 : 16,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.madadplus.madad_plus_mobile',
+                  tileProvider: Platform.environment['FLUTTER_TEST'] == 'true'
+                      ? _TestTileProvider()
+                      : NetworkTileProvider(),
+                ),
+                if(pin != null)
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: pin,
+                        width: 40,
+                        height: 40,
+                        child: const Icon(
+                          Icons.location_on,
+                          color: AppColors.red,
+                          size: 40,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
             ),
           ),
+          const SizedBox(height: AppSpacing.space4),
+          _ActionButton(
+            label: 'Find my location',
+            onPressed: _busy ? null : _useDeviceLocation,
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          TextField(
+            controller: _addressController,
+            decoration: const InputDecoration(
+              labelText: 'Address',
+              border: OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) {
+              if(!_busy) {
+                _lookupAddress();
+              }
+            },
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _ActionButton(
+            label: 'Show on map',
+            onPressed: _busy ? null : _lookupAddress,
+          ),
+          if(_message != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            _ErrorNotice(message: _message!),
+          ],
           const SizedBox(height: AppSpacing.space5),
           _ActionButton(
             label: 'Continue',
-            onPressed: state.domesticAddress.trim().isEmpty
+            onPressed: pin == null
                 ? null
                 : () {
                     state.goTo(EmergencyScreen.serviceSchedule);
@@ -3840,6 +4049,7 @@ class _FlowFrame extends StatelessWidget {
     this.emergency = false,
     this.tab,
     this.plainChrome = false,
+    this.fill = false,
   });
 
   final Widget child;
@@ -3848,6 +4058,7 @@ class _FlowFrame extends StatelessWidget {
   final bool emergency;
   final _UserTab? tab;
   final bool plainChrome;
+  final bool fill;
 
   @override
   Widget build(BuildContext context) {
@@ -3906,13 +4117,25 @@ class _FlowFrame extends StatelessWidget {
                 ),
               ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.space4),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 620),
-                  child: child,
-                ),
-              ),
+              child: fill
+                  ? CustomScrollView(
+                      slivers: [
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Padding(
+                            padding: const EdgeInsets.all(AppSpacing.space4),
+                            child: child,
+                          ),
+                        ),
+                      ],
+                    )
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(AppSpacing.space4),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 620),
+                        child: child,
+                      ),
+                    ),
             ),
           ],
         ),
@@ -3964,6 +4187,7 @@ class _ChoiceCard extends StatelessWidget {
     required this.color,
     required this.onTap,
     this.quiet = false,
+    this.emphasis = false,
   });
 
   final IconData icon;
@@ -3972,6 +4196,7 @@ class _ChoiceCard extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
   final bool quiet;
+  final bool emphasis;
 
   @override
   Widget build(BuildContext context) {
@@ -3983,7 +4208,7 @@ class _ChoiceCard extends StatelessWidget {
         borderRadius: radius,
         onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 88),
+          constraints: BoxConstraints(minHeight: emphasis ? 104 : 88),
           padding: const EdgeInsets.all(AppSpacing.space4),
           decoration: BoxDecoration(
             border: quiet ? null : Border.all(color: color, width: 2),
@@ -3997,7 +4222,7 @@ class _ChoiceCard extends StatelessWidget {
                   height: 44,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
+                    color: color.withValues(alpha: emphasis ? 0.2 : 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(icon, color: color, size: 24),
@@ -4357,6 +4582,63 @@ class _MarkPlate extends StatelessWidget {
         ),
         child: Icon(icon, color: color, size: 44),
       ),
+    );
+  }
+}
+
+class _SoftArrive extends StatefulWidget {
+  const _SoftArrive({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_SoftArrive> createState() => _SoftArriveState();
+}
+
+class _SoftArriveState extends State<_SoftArrive>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController motion;
+
+  @override
+  void initState() {
+    super.initState();
+    motion = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if(!mounted) {
+        return;
+      }
+      if(MediaQuery.disableAnimationsOf(context)) {
+        motion.duration = const Duration(milliseconds: 200);
+      }
+      motion.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    motion.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return AnimatedBuilder(
+      animation: motion,
+      builder: (context, child) {
+        final t = Curves.easeOutCubic.transform(motion.value);
+        return Opacity(
+          opacity: t,
+          child: Transform.translate(
+            offset: Offset(0, reduceMotion ? 0 : (1 - t) * 8),
+            child: child,
+          ),
+        );
+      },
+      child: widget.child,
     );
   }
 }
