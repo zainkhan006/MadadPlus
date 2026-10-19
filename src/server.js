@@ -89,6 +89,8 @@ function emitRequest(request, event) {
 }
 
 function money(value) {
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  if (typeof value === "string" && !value.trim()) return null;
   const amount = Number(value);
   return Number.isFinite(amount) && amount >= 0 ? amount : null;
 }
@@ -115,7 +117,13 @@ function domesticRequestPayload(request) {
           rating: Number(request.provider_rating),
           inspectionFee: Number(request.provider_inspection_fee)
         }
-      : null
+      : null,
+    quotedTotal: request.quoted_total == null ? null : Number(request.quoted_total),
+    inspectionFee: request.receipt_inspection_fee == null
+      ? null
+      : Number(request.receipt_inspection_fee),
+    finalTotal: request.final_total == null ? null : Number(request.final_total),
+    receiptStatus: request.receipt_status || null
   };
 }
 
@@ -140,8 +148,13 @@ async function getDomesticRequest(requestId) {
       "p.name as provider_name",
       "p.phone as provider_phone",
       "p.rating as provider_rating",
-      "p.inspection_fee as provider_inspection_fee"
+      "p.inspection_fee as provider_inspection_fee",
+      "receipt.quoted_total",
+      "receipt.inspection_fee as receipt_inspection_fee",
+      "receipt.final_total",
+      "receipt.status as receipt_status"
     )
+    .leftJoin("receipts as receipt", "receipt.request_id", "r.id")
     .where("r.id", requestId)
     .first();
 
@@ -1277,8 +1290,13 @@ app.get("/api/v1/providers/:providerId/requests", async (req, res) => {
         "p.name as provider_name",
         "p.phone as provider_phone",
         "p.rating as provider_rating",
-        "p.inspection_fee as provider_inspection_fee"
+        "p.inspection_fee as provider_inspection_fee",
+        "receipt.quoted_total",
+        "receipt.inspection_fee as receipt_inspection_fee",
+        "receipt.final_total",
+        "receipt.status as receipt_status"
       )
+      .leftJoin("receipts as receipt", "receipt.request_id", "r.id")
       .where("r.provider_id", req.params.providerId)
       .orderBy("r.created_at", "desc");
     res.json(requests.map(domesticRequestPayload));
@@ -1302,6 +1320,109 @@ app.patch("/api/v1/providers/:providerId/requests/:requestId/accept", async (req
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Unable to accept domestic request" });
+  }
+});
+
+app.post("/api/v1/providers/:providerId/requests/:requestId/cost", async (req, res) => {
+  const quotedTotal = req.body?.quotedTotal;
+  const parsedQuotedTotal = quotedTotal == null ? null : money(quotedTotal);
+  if (parsedQuotedTotal == null) {
+    return res.status(400).json({ error: "quotedTotal must be a non-negative number" });
+  }
+
+  try {
+    const result = await db.transaction(async (trx) => {
+      const request = await trx("domestic_requests")
+        .select("id", "status", "provider_id", "user_id")
+        .where({ id: req.params.requestId, provider_id: req.params.providerId })
+        .forUpdate()
+        .first();
+      if (!request) return { statusCode: 404, error: "Request not found for this provider" };
+      if (request.status !== "ACCEPTED") {
+        return { statusCode: 409, error: "Cost can only be submitted for an ACCEPTED request" };
+      }
+
+      const existingReceipt = await trx("receipts")
+        .select("id")
+        .where("request_id", request.id)
+        .first();
+      if (existingReceipt) {
+        return { statusCode: 409, error: "A cost has already been submitted for this request" };
+      }
+
+      const provider = await trx("providers")
+        .select("inspection_fee")
+        .where("id", request.provider_id)
+        .first();
+      if (!provider) return { statusCode: 404, error: "Provider not found" };
+
+      await trx("receipts").insert({
+        request_id: request.id,
+        provider_id: request.provider_id,
+        user_id: request.user_id,
+        inspection_fee: provider.inspection_fee,
+        quoted_total: parsedQuotedTotal,
+        final_total: null,
+        status: "NEGOTIABLE"
+      });
+      return { statusCode: 200 };
+    });
+
+    if (result.error) return res.status(result.statusCode).json({ error: result.error });
+    const payload = await getDomesticRequest(req.params.requestId);
+    emitDomesticRequest(payload, "domestic.cost_submitted");
+    res.json(payload);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to submit domestic cost" });
+  }
+});
+
+app.post("/api/v1/domestic-requests/:requestId/cost-decision", async (req, res) => {
+  const decision = String(req.body?.decision || "").toUpperCase();
+  if (!["ACCEPT", "REFUSE"].includes(decision)) {
+    return res.status(400).json({ error: "decision must be ACCEPT or REFUSE" });
+  }
+
+  try {
+    const result = await db.transaction(async (trx) => {
+      const request = await trx("domestic_requests")
+        .select("id")
+        .where("id", req.params.requestId)
+        .forUpdate()
+        .first();
+      if (!request) return { statusCode: 404, error: "Domestic request not found" };
+
+      const receipt = await trx("receipts")
+        .select("id", "inspection_fee", "quoted_total", "status")
+        .where({ request_id: request.id, status: "NEGOTIABLE" })
+        .forUpdate()
+        .first();
+      if (!receipt) {
+        return { statusCode: 409, error: "No negotiable cost exists for this request" };
+      }
+
+      const accepted = decision === "ACCEPT";
+      await trx("receipts")
+        .where({ id: receipt.id, status: "NEGOTIABLE" })
+        .update({
+          final_total: accepted
+            ? trx.raw("inspection_fee + quoted_total")
+            : receipt.inspection_fee,
+          status: accepted ? "ACCEPTED" : "DECLINED",
+          responded_at: trx.fn.now(),
+          updated_at: trx.fn.now()
+        });
+      return { statusCode: 200 };
+    });
+
+    if (result.error) return res.status(result.statusCode).json({ error: result.error });
+    const payload = await getDomesticRequest(req.params.requestId);
+    emitDomesticRequest(payload, "domestic.cost_decided");
+    res.json(payload);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to save domestic cost decision" });
   }
 });
 
