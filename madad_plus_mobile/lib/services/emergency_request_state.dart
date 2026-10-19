@@ -94,6 +94,8 @@ class EmergencyRequestState extends ChangeNotifier {
   bool domesticPhotoAttached = false;
   String domesticDescription = '';
   String domesticAddress = '';
+  double? domesticPinLatitude;
+  double? domesticPinLongitude;
   DateTime? domesticScheduledAt;
   DomesticJob domesticJob = DomesticJob.idle;
   bool costFromProvider = false;
@@ -329,7 +331,12 @@ class EmergencyRequestState extends ChangeNotifier {
     }
 
     if(accountPath == AccountPath.provider) {
-      startProviderMode(fromProfile: false);
+      if(otpFromRegistration) {
+        startProviderMode(fromProfile: false);
+      }
+      else {
+        openProviderDemo();
+      }
       return;
     }
 
@@ -430,8 +437,14 @@ class EmergencyRequestState extends ChangeNotifier {
     domesticDescription = value;
   }
 
-  void setDomesticAddress(String value) {
-    domesticAddress = value;
+  void setDomesticPin({
+    required double latitude,
+    required double longitude,
+    required String address,
+  }) {
+    domesticPinLatitude = latitude;
+    domesticPinLongitude = longitude;
+    domesticAddress = address;
     notifyListeners();
   }
 
