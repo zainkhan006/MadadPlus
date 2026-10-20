@@ -174,52 +174,21 @@ function initMap() {
   }).addTo(map);
 }
 
-// Inline SVG ambulance, drawn as an actual ambulance: box body + cab,
-// red cross, windscreen, two wheels, red/blue light bar, sitting on a
-// status-colored road strip inside a status-colored chip. The point of
-// the literal shape (supervisor's requirement) is that a first-time
-// user reads "ambulance" off the icon alone, without the legend — the
-// status is carried by the chip border + road strip (green / amber /
-// red), not by the vehicle itself.
-function ambulanceIconHtml(status) {
-  const color = STATUS_COLOR[status] || STATUS_COLOR.UNAVAILABLE;
-  return `
-    <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2.5" y="2.5" width="35" height="35" rx="9" fill="#ffffff" stroke="${color}" stroke-width="3" />
-      <rect x="8" y="30.6" width="24" height="2.4" rx="1.2" fill="${color}" />
-      <rect x="7.5" y="16" width="13.5" height="10.5" rx="1.6" fill="#f8fafc" stroke="#1f2937" stroke-width="1.5" />
-      <path d="M21 18.5 h3.9 l4.6 5.2 V26.5 H21 Z" fill="#f8fafc" stroke="#1f2937" stroke-width="1.5" stroke-linejoin="round" />
-      <path d="M22.6 19.8 h2.2 l3 3.4 h-5.2 Z" fill="#38bdf8" stroke="#1f2937" stroke-width="1" stroke-linejoin="round" />
-      <g class="amb-lightbar">
-        <rect x="21.4" y="15.9" width="3.2" height="2.6" rx="1.1" fill="#ef4444" />
-        <rect x="24.6" y="15.9" width="3.2" height="2.6" rx="1.1" fill="#2563eb" />
-      </g>
-      <rect x="12.7" y="16.8" width="3" height="7" rx="0.6" fill="#dc2626" />
-      <rect x="10.7" y="18.8" width="7" height="3" rx="0.6" fill="#dc2626" />
-      <circle cx="12.5" cy="27.4" r="3.2" fill="#1f2937" />
-      <circle cx="12.5" cy="27.4" r="1.3" fill="#e2e8f0" />
-      <circle cx="26.4" cy="27.4" r="3.2" fill="#1f2937" />
-      <circle cx="26.4" cy="27.4" r="1.3" fill="#e2e8f0" />
-    </svg>`;
+function ambulanceIconHtml() {
+  return `<img src="ambulance.png" width="41" height="41" alt="" draggable="false" style="display:block" />`;
 }
 
 function ambulanceIcon(status) {
   return L.divIcon({
     className: "ambulance-marker",
-    html: ambulanceIconHtml(status),
-    iconSize: [40, 40],
-    iconAnchor: [20, 20]
+    html: ambulanceIconHtml(),
+    iconSize: [41, 41],
+    iconAnchor: [20.5, 20.5]
   });
 }
 
-// Small inline SVG hospital (H-in-a-cross) icon for per-booking
-// hospital markers.
 function hospitalIconHtml() {
-  return `
-    <svg width="26" height="26" viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="13" cy="13" r="12" fill="#2563eb" stroke="#ffffff" stroke-width="2.25" />
-      <text x="13" y="18" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#ffffff">H</text>
-    </svg>`;
+  return `<img src="hospital.png" width="26" height="26" alt="" draggable="false" style="display:block" />`;
 }
 
 function hospitalIcon() {

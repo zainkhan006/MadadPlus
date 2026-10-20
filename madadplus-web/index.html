@@ -4,9 +4,6 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Madad+ &middot; Dispatcher</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 <link rel="stylesheet" href="style.css" />
 </head>
@@ -16,14 +13,17 @@
      Swap this for a real check once Ibad's backend has dispatcher auth. -->
 <div class="login-screen" id="loginScreen">
   <div class="login-card">
-    <div class="login-card__brand">Madad+</div>
-    <p class="login-card__sub">Dispatcher sign in</p>
+    <div class="login-card__head">
+      <div class="login-card__brand">Madad+</div>
+      <p class="login-card__sub">Dispatcher sign in</p>
+    </div>
+    <div class="login-card__body">
 
     <label for="loginOrg">Organization / branch</label>
     <select id="loginOrg">
-      <option>City Emergency Services — Karachi</option>
-      <option>Edhi Foundation — Karachi</option>
-      <option>Al-Khidmat Ambulance — Karachi</option>
+      <option>City Emergency Services, Karachi</option>
+      <option>Edhi Foundation, Karachi</option>
+      <option>Al-Khidmat Ambulance, Karachi</option>
     </select>
 
     <label for="loginUser">Username</label>
@@ -33,7 +33,8 @@
     <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password" />
 
     <button class="btn btn--primary btn--full" id="loginSubmit">Log in</button>
-    <p class="login-card__note">Not checking real credentials yet — any input works. This will verify against real accounts once backend auth is ready.</p>
+    <p class="login-card__note">Any username and password will sign you in. Account checks start once sign-in is connected.</p>
+    </div>
   </div>
 </div>
 
