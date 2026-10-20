@@ -7,8 +7,74 @@ import 'package:madad_plus_mobile/services/emergency_service.dart';
 import 'package:madad_plus_mobile/services/emergency_socket_service.dart';
 import 'package:madad_plus_mobile/theme/app_theme.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets('with no home location, use my current location asks for one', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    await reachHome(tester, session.state);
+
+    expect(find.text('Karachi, DHA Phase 5'), findsOneWidget);
+    await tapText(tester, 'Karachi, DHA Phase 5');
+    expect(find.text('Where are you?'), findsOneWidget);
+    expect(find.text('No saved locations yet.'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Address'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pump();
+    await tapText(tester, 'Emergency help');
+    await tapText(tester, 'Ambulance');
+
+    final findMine = tester.getTopLeft(find.text('Find my location')).dy;
+    final useMine = tester.getTopLeft(find.text('Use my current location')).dy;
+    final address = tester
+        .getTopLeft(find.widgetWithText(TextField, 'Address'))
+        .dy;
+    expect(findMine < useMine, isTrue);
+    expect(useMine < address, isTrue);
+
+    await tapText(tester, 'Use my current location');
+    expect(
+      find.text('Set a location from the home address first.'),
+      findsOneWidget,
+    );
+    expect(session.state.pinLatitude, isNull);
+  });
+
+  testWidgets('a saved home location shows in the title and drops the pin', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'homePlaces':
+          '[{"address":"Clifton Block 5","latitude":24.8138,"longitude":67.03}]',
+      'homeChosen': 'Clifton Block 5',
+    });
+    final session = testSession();
+    await reachHome(tester, session.state);
+    await pumpAsync(tester);
+
+    expect(find.text('Clifton Block 5'), findsOneWidget);
+    expect(find.text('Karachi, DHA Phase 5'), findsNothing);
+
+    await tapText(tester, 'Emergency help');
+    await tapText(tester, 'Ambulance');
+    await tapText(tester, 'Use my current location');
+
+    expect(session.state.pinLatitude, 24.8138);
+    expect(session.state.pinLongitude, 67.03);
+    expect(session.state.resolvedAddress, 'Clifton Block 5');
+    expect(
+      find.text('Set a location from the home address first.'),
+      findsNothing,
+    );
+  });
+
   testWidgets('customer can reach the ambulance confirmation screen', (
     WidgetTester tester,
   ) async {
@@ -525,7 +591,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     final providerSession = EmergencyRequestState(
       emergencyService: session.api,
-      socketService: SilentSocketService(),
+      socketService: SilentSocketService(relay: session.api),
       demoUserId: 'user-1',
     );
     await reachHome(tester, providerSession);
@@ -551,29 +617,60 @@ void main() {
     expect(find.text('Accept'), findsNothing);
     expect(find.text('Refuse'), findsNothing);
 
-    await tapText(tester, 'Save repair total');
+    await tapText(tester, 'Submit');
+    await pumpAsync(tester);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Accept'), findsNothing);
+    expect(find.text('Refuse'), findsNothing);
+    expect(find.byType(TextField), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(MyApp(requestState: session.state));
+    await tester.pump();
+    expect(find.text('Review before payment'), findsOneWidget);
     expect(find.text('Repair total: 2000'), findsOneWidget);
-    expect(find.text('Accept'), findsOneWidget);
-    expect(find.text('Refuse'), findsOneWidget);
+    expect(find.text('Total: Rs. 2500'), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
 
     await tapText(tester, 'Accept');
+    await pumpAsync(tester);
 
     expect(find.text('How was Karachi Plumbers?'), findsOneWidget);
-
-    final requestState = tester
-        .element(find.text('How was Karachi Plumbers?'))
-        .read<EmergencyRequestState>();
-    expect(requestState.amountOwed, 'Amount owed: Rs. 500 + 2000');
-    expect(requestState.requestId, isNull);
-    expect(requestState.isRequesting, isFalse);
+    expect(session.state.amountOwed, 'Amount owed: Rs. 2500');
+    expect(session.state.requestId, isNull);
+    expect(session.state.isRequesting, isFalse);
 
     await tapText(tester, 'Submit rating');
     expect(find.text('How can we help?'), findsOneWidget);
 
     await tapText(tester, 'Requests');
     await tapText(tester, 'Plumber · Completed');
-    expect(find.text('Amount owed: Rs. 500 + 2000'), findsOneWidget);
+    expect(find.text('Amount owed: Rs. 2500'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(MyApp(requestState: providerSession));
+    await tester.pump();
+    expect(find.text('Provider dashboard'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('Amount owed: Rs. 2500'), findsOneWidget);
+    expect(find.text('Accept'), findsNothing);
+    expect(find.text('FINISHED'), findsOneWidget);
+    expect(
+      find.text('Accepted · Pipe leak · Water leak · Kitchen sink leak'),
+      findsNothing,
+    );
+
+    await tapText(tester, 'Finished · Pipe leak · Water leak · Kitchen sink leak');
+    expect(find.text('Finished job'), findsOneWidget);
+    expect(find.text('Pipe leak · Water leak · Kitchen sink leak'), findsOneWidget);
+    expect(find.text('Price: Rs. 2500'), findsOneWidget);
+    expect(find.text('Start job'), findsNothing);
+    expect(find.text('Navigate to customer'), findsNothing);
+    expect(find.text('Upload photos'), findsNothing);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pump();
+    expect(find.text('Provider dashboard'), findsOneWidget);
   });
 
   testWidgets('a busy provider cannot take a second job until the first is done', (
@@ -642,21 +739,43 @@ void main() {
     WidgetTester tester,
   ) async {
     final session = testSession();
-    session.api.seedJobs([
-      session.api.booking(
-        requestId: 'job-1',
-        description: 'Pipe leak',
-        address: 'Clifton',
-      ),
-    ]);
     await reachHome(tester, session.state);
+    await tapText(tester, 'Services');
+    await tapText(tester, 'Plumber');
+    await pumpAsync(tester);
+    await tapText(tester, 'Karachi Plumbers');
+    await tapText(tester, 'Book plumber');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Describe your service problem'),
+      'Kitchen sink leak',
+    );
+    await tester.pump();
+    await tapText(tester, 'Continue');
+    session.state.setDomesticPin(
+      latitude: 24.8138,
+      longitude: 67.0300,
+      address: 'Clifton Block 5',
+    );
+    await tester.pump();
+    await tapText(tester, 'Continue');
+    await tapText(tester, 'Continue');
+    await tapText(tester, 'Confirm');
+    await pumpAsync(tester);
+
+    await tester.pumpWidget(const SizedBox());
+    final providerSession = EmergencyRequestState(
+      emergencyService: session.api,
+      socketService: SilentSocketService(relay: session.api),
+      demoUserId: 'user-1',
+    );
+    await reachHome(tester, providerSession);
     await tapText(tester, 'Profile');
     await tapText(tester, 'Switch to provider mode');
     await pumpAsync(tester);
     await tapText(tester, 'Plumber');
     await tapText(tester, 'Yes, continue');
     await pumpAsync(tester);
-    await tapText(tester, 'Pipe leak');
+    await tapText(tester, 'Pipe leak · Water leak · Kitchen sink leak');
     await tapText(tester, 'Accept job');
     await pumpAsync(tester);
     await tapText(tester, 'Navigate to customer');
@@ -667,8 +786,17 @@ void main() {
     await tapText(tester, 'Complete job');
     await tester.enterText(find.byType(TextField), '1500');
     await tester.pump();
-    await tapText(tester, 'Save repair total');
+    await tapText(tester, 'Submit');
+    await pumpAsync(tester);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Refuse'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(MyApp(requestState: session.state));
+    await tester.pump();
+    expect(find.text('Total: Rs. 2000'), findsOneWidget);
     await tapText(tester, 'Refuse');
+    await pumpAsync(tester);
 
     expect(find.text('Amount owed: Rs. 500'), findsOneWidget);
     expect(find.text('Cash'), findsNothing);
@@ -678,14 +806,21 @@ void main() {
     await tapText(tester, 'Back to services');
     expect(find.text('What do you need fixed?'), findsOneWidget);
 
-    await tapText(tester, 'Profile');
-    await tapText(tester, 'Switch to provider mode');
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(MyApp(requestState: providerSession));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.text('Amount owed: Rs. 500'), findsOneWidget);
-    expect(find.text('Accepted · Pipe leak'), findsOneWidget);
+    expect(find.text('Inspection fee: Rs. 500'), findsOneWidget);
+    expect(find.text('Inspection fee: x'), findsNothing);
 
     await tester.tap(find.byTooltip('Back'));
     await tester.pump();
-    expect(find.text('How can we help?'), findsOneWidget);
+    expect(find.text('Amount owed: Rs. 500'), findsOneWidget);
+    expect(
+      find.text('Accepted · Pipe leak · Water leak · Kitchen sink leak'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a new provider registers with a trade and confirms that business', (
@@ -747,6 +882,10 @@ void main() {
 }
 
 class SilentSocketService extends EmergencySocketService {
+  SilentSocketService({this.relay});
+
+  final FakeEmergencyService? relay;
+
   @override
   void connectDriver({
     required String driverId,
@@ -760,7 +899,9 @@ class SilentSocketService extends EmergencySocketService {
   void connectProvider({
     required String providerId,
     required void Function(DomesticBooking booking) onBooking,
-  }) {}
+  }) {
+    relay?.listeners.add(onBooking);
+  }
 
   @override
   void disconnectProvider() {}
@@ -769,7 +910,9 @@ class SilentSocketService extends EmergencySocketService {
   void connectDomestic({
     required String requestId,
     required void Function(DomesticBooking booking) onBooking,
-  }) {}
+  }) {
+    relay?.listeners.add(onBooking);
+  }
 
   @override
   void disconnectDomestic() {}
@@ -801,6 +944,7 @@ class FakeEmergencyService extends EmergencyService {
   EmergencyCall? portalCall;
   String? portalStatus;
   final jobs = <DomesticBooking>[];
+  final listeners = <void Function(DomesticBooking booking)>[];
 
   final ambulances = [
     const AmbulanceRow(
@@ -1011,6 +1155,63 @@ class FakeEmergencyService extends EmergencyService {
     jobs[index] = accepted;
     return accepted;
   }
+
+  DomesticBooking withReceipt(
+    String requestId, {
+    required String receiptStatus,
+    double? quotedTotal,
+    double? finalTotal,
+  }) {
+    final index = jobs.indexWhere((job) => job.requestId == requestId);
+    final current = jobs[index];
+    final updated = DomesticBooking(
+      requestId: current.requestId,
+      status: current.status,
+      description: current.description,
+      address: current.address,
+      userName: current.userName,
+      providerName: current.providerName,
+      providerRating: current.providerRating,
+      inspectionFee: current.inspectionFee,
+      specialisationName: current.specialisationName,
+      quotedTotal: quotedTotal ?? current.quotedTotal,
+      receiptInspectionFee: current.inspectionFee,
+      finalTotal: finalTotal,
+      receiptStatus: receiptStatus,
+    );
+    jobs[index] = updated;
+    for(final listener in List.of(listeners)) {
+      listener(updated);
+    }
+    return updated;
+  }
+
+  @override
+  Future<DomesticBooking> submitRepairCost({
+    required String providerId,
+    required String requestId,
+    required double quotedTotal,
+  }) async {
+    return withReceipt(
+      requestId,
+      receiptStatus: 'NEGOTIABLE',
+      quotedTotal: quotedTotal,
+    );
+  }
+
+  @override
+  Future<DomesticBooking> decideRepairCost({
+    required String requestId,
+    required bool accept,
+  }) async {
+    final current = jobs.firstWhere((job) => job.requestId == requestId);
+    final fee = current.receiptInspectionFee ?? 0;
+    return withReceipt(
+      requestId,
+      receiptStatus: accept ? 'ACCEPTED' : 'DECLINED',
+      finalTotal: accept ? fee + (current.quotedTotal ?? 0) : fee,
+    );
+  }
 }
 
 class TestSession {
@@ -1044,7 +1245,7 @@ TestSession testSession({
     api: api,
     state: EmergencyRequestState(
       emergencyService: api,
-      socketService: SilentSocketService(),
+      socketService: SilentSocketService(relay: api),
       demoUserId: demoUserId,
     ),
   );

@@ -323,6 +323,10 @@ class DomesticBooking {
     required this.providerRating,
     required this.inspectionFee,
     required this.specialisationName,
+    this.quotedTotal,
+    this.receiptInspectionFee,
+    this.finalTotal,
+    this.receiptStatus,
   });
 
   final String requestId;
@@ -334,6 +338,10 @@ class DomesticBooking {
   final double? providerRating;
   final double? inspectionFee;
   final String? specialisationName;
+  final double? quotedTotal;
+  final double? receiptInspectionFee;
+  final double? finalTotal;
+  final String? receiptStatus;
 
   factory DomesticBooking.fromJson(Map<String, dynamic> json) {
     final user = json['user'];
@@ -355,6 +363,10 @@ class DomesticBooking {
       specialisationName: specialisation is Map
           ? specialisation['name'] as String?
           : null,
+      quotedTotal: (json['quotedTotal'] as num?)?.toDouble(),
+      receiptInspectionFee: (json['inspectionFee'] as num?)?.toDouble(),
+      finalTotal: (json['finalTotal'] as num?)?.toDouble(),
+      receiptStatus: json['receiptStatus'] as String?,
     );
   }
 }
@@ -568,6 +580,39 @@ class EmergencyService {
         headers: _headers,
       ),
       'The job could not be accepted.',
+    );
+    return DomesticBooking.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<DomesticBooking> submitRepairCost({
+    required String providerId,
+    required String requestId,
+    required double quotedTotal,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse(
+          '$baseUrl/api/v1/providers/$providerId/requests/$requestId/cost',
+        ),
+        headers: _headers,
+        body: jsonEncode({'quotedTotal': quotedTotal}),
+      ),
+      'The repair total could not be sent.',
+    );
+    return DomesticBooking.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<DomesticBooking> decideRepairCost({
+    required String requestId,
+    required bool accept,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse('$baseUrl/api/v1/domestic-requests/$requestId/cost-decision'),
+        headers: _headers,
+        body: jsonEncode({'decision': accept ? 'ACCEPT' : 'REFUSE'}),
+      ),
+      'The decision could not be sent.',
     );
     return DomesticBooking.fromJson(Map<String, dynamic>.from(decoded as Map));
   }
