@@ -61,11 +61,6 @@ const BACKEND_URL = "https://madadplus.onrender.com";
 // DHA Phase 5, Karachi — matches the seed coordinates.
 const DEFAULT_CENTER = { lat: 24.8000, lng: 67.0500 };
 
-const organizationBases = [
-  { name: "Edhi Foundation", lat: 24.84870, lng: 66.99575 },
-  { name: "Al Khidmat Hospital", lat: 24.81281, lng: 67.00897 },
-];
-
 const STATUS = { FREE: "FREE", BUSY: "BUSY", UNAVAILABLE: "UNAVAILABLE" };
 
 const STATUS_COLOR = {
@@ -177,19 +172,6 @@ function initMap() {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     maxZoom: 19
   }).addTo(map);
-
-  organizationBases.forEach((base) => {
-    L.marker([base.lat, base.lng], {
-      icon: L.divIcon({
-        className: "organization-marker",
-        html: "+",
-        iconSize: [22, 22],
-        iconAnchor: [11, 11]
-      })
-    })
-      .bindTooltip(base.name)
-      .addTo(map);
-  });
 }
 
 function ambulanceIconHtml() {
@@ -206,15 +188,15 @@ function ambulanceIcon(status) {
 }
 
 function hospitalIconHtml() {
-  return `<img src="hospital.png" width="26" height="26" alt="" draggable="false" style="display:block" />`;
+  return `<img src="hospital.png" width="40" height="40" alt="" draggable="false" style="display:block" />`;
 }
 
 function hospitalIcon() {
   return L.divIcon({
     className: "hospital-marker",
     html: hospitalIconHtml(),
-    iconSize: [26, 26],
-    iconAnchor: [13, 13]
+    iconSize: [40, 40],
+    iconAnchor: [20, 20]
   });
 }
 
