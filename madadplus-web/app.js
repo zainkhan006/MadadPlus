@@ -174,14 +174,21 @@ function initMap() {
   }).addTo(map);
 }
 
-function ambulanceIconHtml() {
-  return `<img src="ambulance.png" width="41" height="41" alt="" draggable="false" style="display:block" />`;
+function ambulanceIconHtml(status) {
+  let src = "ambulance.png";
+  if(status === STATUS.BUSY) {
+    src = "ambulance-busy.png";
+  }
+  else if(status === STATUS.UNAVAILABLE) {
+    src = "ambulance-unavailable.png";
+  }
+  return `<img src="${src}" width="41" height="41" alt="" draggable="false" style="display:block" />`;
 }
 
 function ambulanceIcon(status) {
   return L.divIcon({
     className: "ambulance-marker",
-    html: ambulanceIconHtml(),
+    html: ambulanceIconHtml(status),
     iconSize: [41, 41],
     iconAnchor: [20.5, 20.5]
   });
