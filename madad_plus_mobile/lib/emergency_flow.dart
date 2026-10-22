@@ -4850,6 +4850,56 @@ class _TripMap extends StatelessWidget {
     final toLat = state.routeToLat;
     final toLng = state.routeToLng;
     if(fromLat == null || fromLng == null || toLat == null || toLng == null) {
+      final hereLat = state.driverAmbulanceLat;
+      final hereLng = state.driverAmbulanceLng;
+      if(hereLat != null && hereLng != null) {
+        final here = LatLng(hereLat, hereLng);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              child: Container(
+                height: 190,
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.line, width: 2),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+                child: FlutterMap(
+                  options: MapOptions(initialCenter: here, initialZoom: 16),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.madadplus.madad_plus_mobile',
+                      tileProvider: Platform.environment['FLUTTER_TEST'] == 'true'
+                          ? _TestTileProvider()
+                          : NetworkTileProvider(),
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: here,
+                          width: 41,
+                          height: 41,
+                          child: Image.asset(
+                            'assets/ambulance.png',
+                            width: 41,
+                            height: 41,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if(state.routeError != null) ...[
+              const SizedBox(height: AppSpacing.space3),
+              _ErrorNotice(message: state.routeError!),
+            ],
+          ],
+        );
+      }
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -4923,12 +4973,12 @@ class _TripMap extends StatelessWidget {
               markers: [
                 Marker(
                   point: ambulance,
-                  width: 36,
-                  height: 36,
-                  child: const Icon(
-                    Icons.local_shipping,
-                    color: AppColors.red,
-                    size: 32,
+                  width: 41,
+                  height: 41,
+                  child: Image.asset(
+                    'assets/ambulance.png',
+                    width: 41,
+                    height: 41,
                   ),
                 ),
                 Marker(

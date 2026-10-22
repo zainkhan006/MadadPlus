@@ -459,6 +459,29 @@ class EmergencyService {
         .toList();
   }
 
+  Future<String> setDriverAvailability({
+    required String driverId,
+    required bool available,
+  }) async {
+    final action = available ? 'available' : 'unavailable';
+    final decoded = await _send(
+      http.patch(
+        Uri.parse('$baseUrl/api/v1/drivers/$driverId/$action'),
+        headers: _headers,
+        body: available
+            ? null
+            : jsonEncode({'reason': 'Marked unavailable by driver'}),
+      ),
+      available
+          ? 'The ambulance could not be marked available.'
+          : 'The ambulance could not be marked unavailable.',
+    );
+    if(decoded is Map && decoded['status'] is String) {
+      return decoded['status'] as String;
+    }
+    return available ? 'FREE' : 'UNAVAILABLE';
+  }
+
   Future<DriverPortal> loadDriverPortal(String driverId) async {
     final decoded = await _send(
       http.get(

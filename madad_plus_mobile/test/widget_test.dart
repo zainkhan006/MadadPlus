@@ -6,7 +6,6 @@ import 'package:madad_plus_mobile/services/emergency_request_state.dart';
 import 'package:madad_plus_mobile/services/emergency_service.dart';
 import 'package:madad_plus_mobile/services/emergency_socket_service.dart';
 import 'package:madad_plus_mobile/theme/app_theme.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -1032,6 +1031,14 @@ class FakeEmergencyService extends EmergencyService {
 
   @override
   Future<List<AmbulanceRow>> listAmbulances() async => ambulances;
+
+  @override
+  Future<String> setDriverAvailability({
+    required String driverId,
+    required bool available,
+  }) async {
+    return available ? 'FREE' : 'UNAVAILABLE';
+  }
 
   @override
   Future<DriverPortal> loadDriverPortal(String driverId) async {

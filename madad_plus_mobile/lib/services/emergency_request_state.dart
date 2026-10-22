@@ -990,22 +990,41 @@ class EmergencyRequestState extends ChangeNotifier {
     loadDriverAmbulances();
   }
 
-  void markDriverUnavailable() {
-    if(driverCall != null || driverAmbulanceStatus != 'FREE') {
-      return;
-    }
-
-    driverAmbulanceStatus = 'UNAVAILABLE';
-    notifyListeners();
+  Future<void> markDriverUnavailable() {
+    return _setDriverAvailability(available: false);
   }
 
-  void markDriverAvailable() {
-    if(driverCall != null || driverAmbulanceStatus != 'UNAVAILABLE') {
+  Future<void> markDriverAvailable() {
+    return _setDriverAvailability(available: true);
+  }
+
+  Future<void> _setDriverAvailability({required bool available}) async {
+    final id = driverId;
+    final requiredStatus = available ? 'UNAVAILABLE' : 'FREE';
+    if(id == null || driverCall != null || driverAmbulanceStatus != requiredStatus || driverLoading) {
       return;
     }
 
-    driverAmbulanceStatus = 'FREE';
+    driverLoading = true;
+    driverError = null;
     notifyListeners();
+    try {
+      driverAmbulanceStatus = await _emergencyService.setDriverAvailability(
+        driverId: id,
+        available: available,
+      );
+    } on ApiException catch (error) {
+      driverError = error.message;
+    } on TimeoutException {
+      driverError = 'The server did not answer in time. Try again.';
+    } catch (_) {
+      driverError = available
+          ? 'The ambulance could not be marked available. Try again.'
+          : 'The ambulance could not be marked unavailable. Try again.';
+    } finally {
+      driverLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> loadDriverPortal() async {
