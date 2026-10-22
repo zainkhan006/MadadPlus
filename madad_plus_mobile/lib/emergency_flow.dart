@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/gestures.dart' show VelocityTracker;
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -65,6 +67,8 @@ class EmergencyFlow extends StatelessWidget {
         return const _ProviderJobScreen();
       case EmergencyScreen.home:
         return const _HomeScreen();
+      case EmergencyScreen.homeLocation:
+        return const _HomeLocationScreen();
       case EmergencyScreen.emergencyType:
         return const _EmergencyTypeScreen();
       case EmergencyScreen.emergencyLocation:
@@ -93,6 +97,18 @@ class EmergencyFlow extends StatelessWidget {
   }
 }
 
+final _pressSpring = SpringDescription.withDampingRatio(
+  mass: 1,
+  stiffness: 1000,
+  ratio: 1,
+);
+
+final _settleSpring = SpringDescription.withDampingRatio(
+  mass: 1,
+  stiffness: 440,
+  ratio: 1,
+);
+
 TextStyle? _largeTitle(BuildContext context) {
   return Theme.of(context).textTheme.headlineLarge?.copyWith(
     height: 1.08,
@@ -100,10 +116,40 @@ TextStyle? _largeTitle(BuildContext context) {
   );
 }
 
+InputDecoration _emergencyField({required String label, String? hint}) {
+  const radius = BorderRadius.all(Radius.circular(12));
+  const border = OutlineInputBorder(
+    borderRadius: radius,
+    borderSide: BorderSide(color: AppColors.line),
+  );
+  return InputDecoration(
+    labelText: label,
+    hintText: hint,
+    filled: true,
+    fillColor: Color(0xFFFFF1F2),
+    border: border,
+    enabledBorder: border,
+    focusedBorder: const OutlineInputBorder(
+      borderRadius: radius,
+      borderSide: BorderSide(color: AppColors.red, width: 2),
+    ),
+  );
+}
+
 TextStyle? _sectionTitle(BuildContext context) {
   return Theme.of(context).textTheme.headlineMedium?.copyWith(
     height: 1.15,
     letterSpacing: -0.4,
+  );
+}
+
+Text _providerSectionLabel(BuildContext context, String label) {
+  return Text(
+    label,
+    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+      letterSpacing: 0.6,
+      fontWeight: FontWeight.w600,
+    ),
   );
 }
 
@@ -469,6 +515,16 @@ class _RegisterScreen extends StatelessWidget {
 const _pickupStatuses = {'ASSIGNED', 'EN_ROUTE', 'TRANSFER_EN_ROUTE'};
 const _hospitalStatuses = {'PICKED_UP', 'EN_ROUTE_HOSPITAL'};
 
+String _requestStatusLabel(String status) {
+  if(status == 'QUEUED') {
+    return 'WAITING';
+  }
+  if(status == 'COMPLETED') {
+    return 'FINISHED';
+  }
+  return 'ASSIGNED';
+}
+
 String _peopleLabel(int? count) {
   if(count == null) {
     return 'people count not sent';
@@ -479,6 +535,44 @@ String _peopleLabel(int? count) {
   return count == 1 ? '1 person' : '$count people';
 }
 
+List<String> _driverDetailLines(EmergencyCall call, {required bool atHospital}) {
+  final lines = <String>[];
+  if(atHospital) {
+    final name = call.hospitalName?.trim() ?? '';
+    final address = call.hospitalAddress?.trim() ?? '';
+    if(name.isEmpty && address.isEmpty) {
+      lines.add('No hospital address came with this call.');
+    }
+    else if(address.isEmpty) {
+      lines.add(name);
+    }
+    else if(name.isEmpty || address.contains(name)) {
+      lines.add(address);
+    }
+    else {
+      lines.add('$name, $address');
+    }
+    lines.add('Patient is on board');
+  }
+  else {
+    lines.add(call.pickupAddress ?? 'The caller didn\'t share an address.');
+    lines.add('${_peopleLabel(call.peopleCount)} still waiting');
+  }
+  lines.add(call.emergencyDescription ?? 'Emergency');
+  final extra = call.additionalDetails?.trim() ?? '';
+  if(extra.isNotEmpty) {
+    lines.add(extra);
+  }
+  if(!atHospital) {
+    lines.add(
+      call.callerPhone == null
+          ? 'The caller didn\'t share a phone number.'
+          : 'Caller ${call.callerPhone}',
+    );
+  }
+  return lines;
+}
+
 class _DriverJobScreen extends StatefulWidget {
   const _DriverJobScreen();
 
@@ -486,11 +580,46 @@ class _DriverJobScreen extends StatefulWidget {
   State<_DriverJobScreen> createState() => _DriverJobScreenState();
 }
 
-class _DriverJobScreenState extends State<_DriverJobScreen> {
+class _DriverJobScreenState extends State<_DriverJobScreen>
+    with SingleTickerProviderStateMixin {
   double slide = 0;
   bool dropoffSending = false;
+  double slideWidth = 1;
+  VelocityTracker? slideTracker;
+  late final AnimationController slideBack = AnimationController.unbounded(
+    vsync: this,
+  )..addListener(() {
+      setState(() {
+        slide = slideBack.value.clamp(0.0, 1.0);
+      });
+    });
+
+  @override
+  void dispose() {
+    slideBack.dispose();
+    super.dispose();
+  }
+
+  void releaseSlide(double value) {
+    if(value >= 1 || dropoffSending) {
+      return;
+    }
+    if(MediaQuery.disableAnimationsOf(context)) {
+      setState(() {
+        slide = 0;
+      });
+      return;
+    }
+    final fingerSpeed =
+        (slideTracker?.getVelocity().pixelsPerSecond.dx ?? 0) / slideWidth;
+    slideBack.value = value;
+    slideBack.animateWith(
+      SpringSimulation(_settleSpring, value, 0, fingerSpeed),
+    );
+  }
 
   Future<void> slideTo(EmergencyRequestState state, double value) async {
+    slideBack.stop();
     setState(() {
       slide = value;
     });
@@ -679,7 +808,7 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
           ),
           const SizedBox(height: AppSpacing.space3),
           Text(
-            'Location details',
+            'Details',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: AppSpacing.space2),
@@ -688,41 +817,15 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
               'No call on this ambulance.',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
-          if(call != null && !toHospital && !atDropoff) ...[
-            Text(
-              call.pickupAddress ?? 'The caller did not send an address.',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            Text(
-              '${call.emergencyDescription ?? 'Emergency'} · ${_peopleLabel(call.peopleCount)}',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            if((call.additionalDetails?.trim() ?? '').isNotEmpty)
+          if(call != null)
+            for(final line in _driverDetailLines(
+              call,
+              atHospital: toHospital || atDropoff,
+            ))
               Text(
-                call.additionalDetails!.trim(),
+                line,
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
-            Text(
-              call.callerPhone == null
-                  ? 'No caller phone was sent.'
-                  : 'Caller ${call.callerPhone}',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-          ],
-          if(call != null && (toHospital || atDropoff)) ...[
-            Text(
-              call.hospitalName ?? 'Hospital',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            Text(
-              call.hospitalAddress ?? 'The server did not attach a hospital address.',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            Text(
-              'Patient is on board · ${call.emergencyDescription ?? 'Emergency'}',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-          ],
           if(state.driverError != null) ...[
             const SizedBox(height: AppSpacing.space4),
             _ErrorNotice(message: state.driverError!),
@@ -751,14 +854,34 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
               'Dropped off',
               style: Theme.of(context).textTheme.labelSmall,
             ),
-            Slider(
-              value: slide,
-              label: 'Dropped off',
-              onChanged: busy
-                  ? null
-                  : (value) {
-                      slideTo(state, value);
-                    },
+            LayoutBuilder(
+              builder: (context, constraints) {
+                slideWidth = (constraints.maxWidth - 48).clamp(1.0, double.infinity);
+                return Listener(
+                  onPointerDown: (event) {
+                    slideBack.stop();
+                    slideTracker = VelocityTracker.withKind(event.kind)
+                      ..addPosition(event.timeStamp, event.position);
+                  },
+                  onPointerMove: (event) {
+                    slideTracker?.addPosition(event.timeStamp, event.position);
+                  },
+                  child: Slider(
+                    value: slide,
+                    label: 'Dropped off',
+                    onChanged: busy
+                        ? null
+                        : (value) {
+                            slideTo(state, value);
+                          },
+                    onChangeEnd: busy
+                        ? null
+                        : (value) {
+                            releaseSlide(value);
+                          },
+                  ),
+                );
+              },
             ),
             Text(
               'Slide to the end to confirm.',
@@ -808,10 +931,13 @@ class _HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.read<EmergencyRequestState>();
+    final state = context.watch<EmergencyRequestState>();
     return _FlowFrame(
       plainChrome: true,
-      title: 'Karachi, DHA Phase 5',
+      title: state.homeTitle,
+      onTitle: () {
+        state.goTo(EmergencyScreen.homeLocation);
+      },
       tab: _UserTab.home,
       child: _SoftArrive(
         child: Column(
@@ -861,6 +987,173 @@ class _HomeScreen extends StatelessWidget {
   }
 }
 
+class _HomeLocationScreen extends StatefulWidget {
+  const _HomeLocationScreen();
+
+  @override
+  State<_HomeLocationScreen> createState() => _HomeLocationScreenState();
+}
+
+class _HomeLocationScreenState extends State<_HomeLocationScreen> {
+  final _addressController = TextEditingController();
+  var _busy = false;
+  String? _message;
+
+  @override
+  void dispose() {
+    _addressController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveTyped() async {
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final state = context.read<EmergencyRequestState>();
+      final place = await state.lookupAddress(_addressController.text);
+      if(!mounted) {
+        return;
+      }
+      if(place == null) {
+        setState(() {
+          _message = 'That address was not found.';
+        });
+        return;
+      }
+      await state.saveHomePlace(
+        address: place.address,
+        latitude: place.latitude,
+        longitude: place.longitude,
+      );
+      state.goTo(EmergencyScreen.home);
+    } catch (_) {
+      if(!mounted) {
+        return;
+      }
+      setState(() {
+        _message = 'The address lookup did not finish. Try again.';
+      });
+    } finally {
+      if(mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveDevice() async {
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final state = context.read<EmergencyRequestState>();
+      final place = await state.locateDevice();
+      if(!mounted) {
+        return;
+      }
+      if(place == null) {
+        setState(() {
+          _message = state.locationProblem;
+        });
+        return;
+      }
+      await state.saveHomePlace(
+        address: place.address,
+        latitude: place.latitude,
+        longitude: place.longitude,
+      );
+      state.goTo(EmergencyScreen.home);
+    } catch (_) {
+      if(!mounted) {
+        return;
+      }
+      setState(() {
+        _message = 'Your location could not be read. Type the address instead.';
+      });
+    } finally {
+      if(mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    return _FlowFrame(
+      plainChrome: true,
+      title: 'Your location',
+      onBack: () {
+        state.goTo(EmergencyScreen.home);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Where are you?', style: _sectionTitle(context)),
+          const SizedBox(height: AppSpacing.space4),
+          _ActionButton(
+            label: 'Find my location',
+            onPressed: _busy ? null : _saveDevice,
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          TextField(
+            controller: _addressController,
+            decoration: const InputDecoration(
+              labelText: 'Address',
+              border: OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) {
+              if(!_busy) {
+                _saveTyped();
+              }
+            },
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _SecondaryButton(
+            label: 'Use this address',
+            onPressed: _busy ? null : _saveTyped,
+          ),
+          if(_message != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            _ErrorNotice(message: _message!),
+          ],
+          const SizedBox(height: AppSpacing.space5),
+          _providerSectionLabel(context, 'SAVED LOCATIONS'),
+          const SizedBox(height: AppSpacing.space2),
+          if(state.homePlaces.isEmpty)
+            Text(
+              'No saved locations yet.',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: AppColors.muted,
+                height: 1.4,
+              ),
+            )
+          else
+            _InsetGroup(
+              children: [
+                for(final place in state.homePlaces)
+                  _InsetRow(
+                    label: place.address,
+                    onPressed: () {
+                      state.selectHomePlace(place);
+                      state.goTo(EmergencyScreen.home);
+                    },
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _EmergencyTypeScreen extends StatelessWidget {
   const _EmergencyTypeScreen();
 
@@ -868,39 +1161,52 @@ class _EmergencyTypeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return _FlowFrame(
       emergency: true,
+      plainChrome: true,
       title: 'Emergency help',
       tab: _UserTab.emergency,
       onBack: () {
         context.read<EmergencyRequestState>().goTo(EmergencyScreen.home);
       },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'What do you need?',
-            style: Theme.of(context).textTheme.headlineLarge,
-          ),
-          const SizedBox(height: AppSpacing.space2),
-          Text(
-            'Ambulance requests are available in this demo.',
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: AppColors.muted),
-          ),
-          const SizedBox(height: AppSpacing.space4),
-          _ChoiceCard(
-            icon: Icons.local_hospital_rounded,
-            title: 'Ambulance',
-            subtitle: 'Medical emergency, accident, or injury.',
-            color: AppColors.red,
-            onTap: () {
-              context.read<EmergencyRequestState>().goTo(
-                EmergencyScreen.emergencyLocation,
-              );
-            },
-          ),
-          const SizedBox(height: AppSpacing.space5),
-          const _DemoNotice(),
-        ],
+      child: _SoftArrive(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('What do you need?', style: _largeTitle(context)),
+            const SizedBox(height: AppSpacing.space2),
+            Text(
+              'Ambulance requests are available in this demo.',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: AppColors.muted,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.space4),
+            _PressScale(
+              child: _ChoiceCard(
+                quiet: true,
+                emphasis: true,
+                icon: Icons.local_hospital_rounded,
+                title: 'Ambulance',
+                subtitle: 'Medical emergency, accident, or injury.',
+                color: AppColors.red,
+                onTap: () {
+                  context.read<EmergencyRequestState>().goTo(
+                    EmergencyScreen.emergencyLocation,
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: AppSpacing.space5),
+            Text(
+              'Simulation mode only. For a real emergency, call 1122.',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: AppColors.red,
+                height: 1.45,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -928,49 +1234,42 @@ class _EmergencyLocationScreenState extends State<_EmergencyLocationScreen> {
     super.dispose();
   }
 
+  void _useHomeLocation() {
+    final state = context.read<EmergencyRequestState>();
+    final latitude = state.homeLatitude;
+    final longitude = state.homeLongitude;
+    final address = state.homeAddress;
+    if(latitude == null || longitude == null || address == null) {
+      setState(() {
+        _message = 'Set a location from the home address first.';
+      });
+      return;
+    }
+    _dropPin(state, latitude: latitude, longitude: longitude, address: address);
+  }
+
   Future<void> _useDeviceLocation() async {
     setState(() {
       _busy = true;
       _message = null;
     });
     try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if(!serviceEnabled) {
-        setState(() {
-          _message = 'Location is turned off. Type the address instead.';
-        });
-        return;
-      }
-
-      var permission = await Geolocator.checkPermission();
-      if(permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if(permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        setState(() {
-          _message = 'Location permission is off. Type the address instead.';
-        });
-        return;
-      }
-
-      final position = await Geolocator.getCurrentPosition();
-      if(!mounted) {
-        return;
-      }
       final state = context.read<EmergencyRequestState>();
-      final address = await state.labelForCoordinates(
-        position.latitude,
-        position.longitude,
-      );
+      final place = await state.locateDevice();
       if(!mounted) {
+        return;
+      }
+      if(place == null) {
+        setState(() {
+          _message = state.locationProblem;
+        });
         return;
       }
       _dropPin(
         state,
-        latitude: position.latitude,
-        longitude: position.longitude,
-        address: address,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        address: place.address,
       );
     } catch (_) {
       if(!mounted) {
@@ -1064,12 +1363,18 @@ class _EmergencyLocationScreenState extends State<_EmergencyLocationScreen> {
         children: [
           Text(
             'Where is the emergency?',
-            style: Theme.of(context).textTheme.headlineLarge,
+            style: _largeTitle(context),
           ),
           const SizedBox(height: AppSpacing.space4),
-          SizedBox(
+          Container(
             height: 220,
-            child: FlutterMap(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.red, width: 2),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: FlutterMap(
               mapController: _mapController,
               options: MapOptions(
                 initialCenter: pin ?? _openCenter,
@@ -1100,20 +1405,27 @@ class _EmergencyLocationScreenState extends State<_EmergencyLocationScreen> {
                   ),
               ],
             ),
+            ),
           ),
           const SizedBox(height: AppSpacing.space4),
-          _ActionButton(
-            label: 'Find my location',
-            emergency: true,
-            onPressed: _busy ? null : _useDeviceLocation,
+          _PressScale(
+            child: _ActionButton(
+              label: 'Find my location',
+              emergency: true,
+              onPressed: _busy ? null : _useDeviceLocation,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _PressScale(
+            child: _SecondaryButton(
+              label: 'Use my current location',
+              onPressed: _busy ? null : _useHomeLocation,
+            ),
           ),
           const SizedBox(height: AppSpacing.space4),
           TextField(
             controller: _addressController,
-            decoration: const InputDecoration(
-              labelText: 'Address',
-              border: OutlineInputBorder(),
-            ),
+            decoration: _emergencyField(label: 'Address'),
             textInputAction: TextInputAction.search,
             onSubmitted: (_) {
               if(!_busy) {
@@ -1122,23 +1434,27 @@ class _EmergencyLocationScreenState extends State<_EmergencyLocationScreen> {
             },
           ),
           const SizedBox(height: AppSpacing.space3),
-          _ActionButton(
-            label: 'Show on map',
-            onPressed: _busy ? null : _lookupAddress,
+          _PressScale(
+            child: _ActionButton(
+              label: 'Show on map',
+              onPressed: _busy ? null : _lookupAddress,
+            ),
           ),
           if(_message != null) ...[
             const SizedBox(height: AppSpacing.space4),
             _ErrorNotice(message: _message!),
           ],
           const SizedBox(height: AppSpacing.space5),
-          _ActionButton(
-            label: 'CONTINUE',
-            emergency: true,
-            onPressed: pin == null
-                ? null
-                : () {
-                    state.goTo(EmergencyScreen.emergencySpeak);
-                  },
+          _PressScale(
+            child: _ActionButton(
+              label: 'CONTINUE',
+              emergency: true,
+              onPressed: pin == null
+                  ? null
+                  : () {
+                      state.goTo(EmergencyScreen.emergencySpeak);
+                    },
+            ),
           ),
         ],
       ),
@@ -1252,7 +1568,7 @@ class _EmergencySpeakScreenState extends State<_EmergencySpeakScreen> {
         children: [
           Text(
             'Speak in English or Urdu',
-            style: Theme.of(context).textTheme.headlineLarge,
+            style: _largeTitle(context),
           ),
           const SizedBox(height: AppSpacing.space2),
           Text(
@@ -1262,9 +1578,11 @@ class _EmergencySpeakScreenState extends State<_EmergencySpeakScreen> {
           ),
           const SizedBox(height: AppSpacing.space6),
           Center(
-            child: _RecordCircle(
-              recording: _recording,
-              onPressed: _sending ? null : _toggleRecording,
+            child: _PressScale(
+              child: _RecordCircle(
+                recording: _recording,
+                onPressed: _sending ? null : _toggleRecording,
+              ),
             ),
           ),
           if(_sending) ...[
@@ -1277,13 +1595,15 @@ class _EmergencySpeakScreenState extends State<_EmergencySpeakScreen> {
             ),
           ],
           const SizedBox(height: AppSpacing.space6),
-          _ActionButton(
-            label: 'Type the details instead',
-            onPressed: _sending
-                ? null
-                : () {
-                    context.read<EmergencyRequestState>().typeDetailsInstead();
-                  },
+          _PressScale(
+            child: _ActionButton(
+              label: 'Type the details instead',
+              onPressed: _sending
+                  ? null
+                  : () {
+                      context.read<EmergencyRequestState>().typeDetailsInstead();
+                    },
+            ),
           ),
         ],
       ),
@@ -1316,6 +1636,13 @@ class _RecordCircle extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(color: color, width: 8),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.28),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
           child: DecoratedBox(
             decoration: BoxDecoration(shape: BoxShape.circle, color: color),
@@ -1410,7 +1737,7 @@ class _EmergencyDetailsScreenState extends State<_EmergencyDetailsScreen> {
         children: [
           Text(
             'Tell us only if you can',
-            style: Theme.of(context).textTheme.headlineLarge,
+            style: _largeTitle(context),
           ),
           const SizedBox(height: AppSpacing.space2),
           Text(
@@ -1419,19 +1746,28 @@ class _EmergencyDetailsScreenState extends State<_EmergencyDetailsScreen> {
                 ?.copyWith(color: AppColors.muted),
           ),
           const SizedBox(height: AppSpacing.space4),
-          Text('WHAT HAPPENED?', style: Theme.of(context).textTheme.labelSmall),
+          Text(
+            'WHAT HAPPENED?',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              letterSpacing: 0.6,
+              fontWeight: FontWeight.w700,
+              color: AppColors.red,
+            ),
+          ),
           const SizedBox(height: AppSpacing.space2),
           Wrap(
             spacing: AppSpacing.space2,
             runSpacing: AppSpacing.space2,
             children: ['Cardiac', 'Accident', 'Injury', 'Medical']
                 .map(
-                  (detail) => _SelectionChip(
-                    label: detail,
-                    selected: state.selectedDetail == detail,
-                    onPressed: () {
-                      state.selectDetail(detail);
-                    },
+                  (detail) => _PressScale(
+                    child: _SelectionChip(
+                      label: detail,
+                      selected: state.selectedDetail == detail,
+                      onPressed: () {
+                        state.selectDetail(detail);
+                      },
+                    ),
                   ),
                 )
                 .toList(),
@@ -1439,7 +1775,11 @@ class _EmergencyDetailsScreenState extends State<_EmergencyDetailsScreen> {
           const SizedBox(height: AppSpacing.space4),
           Text(
             'PEOPLE NEEDING HELP',
-            style: Theme.of(context).textTheme.labelSmall,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              letterSpacing: 0.6,
+              fontWeight: FontWeight.w700,
+              color: AppColors.red,
+            ),
           ),
           const SizedBox(height: AppSpacing.space2),
           Wrap(
@@ -1447,12 +1787,14 @@ class _EmergencyDetailsScreenState extends State<_EmergencyDetailsScreen> {
             runSpacing: AppSpacing.space2,
             children: [1, 2, 3, 4]
                 .map(
-                  (count) => _SelectionChip(
-                    label: count == 4 ? '4+' : '$count',
-                    selected: state.peopleNeedingHelp == count,
-                    onPressed: () {
-                      state.selectPeopleNeedingHelp(count);
-                    },
+                  (count) => _PressScale(
+                    child: _SelectionChip(
+                      label: count == 4 ? '4+' : '$count',
+                      selected: state.peopleNeedingHelp == count,
+                      onPressed: () {
+                        state.selectPeopleNeedingHelp(count);
+                      },
+                    ),
                   ),
                 )
                 .toList(),
@@ -1462,23 +1804,24 @@ class _EmergencyDetailsScreenState extends State<_EmergencyDetailsScreen> {
             controller: _detailsController,
             minLines: 3,
             maxLines: 4,
-            decoration: const InputDecoration(
-              labelText: 'Additional details',
-              hintText: 'Extra information, if you have time',
-              border: OutlineInputBorder(),
+            decoration: _emergencyField(
+              label: 'Additional details',
+              hint: 'Extra information, if you have time',
             ),
             onChanged: state.setAdditionalDetails,
           ),
           const SizedBox(height: AppSpacing.space5),
-          _ActionButton(
-            label: 'CONTINUE NOW',
-            emergency: true,
-            onPressed: ready
-                ? () {
-                    state.setAdditionalDetails(_detailsController.text);
-                    state.goTo(EmergencyScreen.emergencyConfirm);
-                  }
-                : null,
+          _PressScale(
+            child: _ActionButton(
+              label: 'CONTINUE NOW',
+              emergency: true,
+              onPressed: ready
+                  ? () {
+                      state.setAdditionalDetails(_detailsController.text);
+                      state.goTo(EmergencyScreen.emergencyConfirm);
+                    }
+                  : null,
+            ),
           ),
         ],
       ),
@@ -1504,13 +1847,14 @@ class _EmergencyConfirmScreen extends StatelessWidget {
         children: [
           Text(
             'Request ambulance',
-            style: Theme.of(context).textTheme.headlineLarge,
+            style: _largeTitle(context),
           ),
           const SizedBox(height: AppSpacing.space4),
           _InfoCard(
             title: state.resolvedAddress ?? 'Location',
             subtitle: 'Pinned on the map.',
             icon: Icons.location_on_rounded,
+            highlighted: true,
           ),
           const SizedBox(height: AppSpacing.space3),
           _InfoCard(
@@ -1518,14 +1862,14 @@ class _EmergencyConfirmScreen extends StatelessWidget {
                 '${state.selectedDetail} · ${state.peopleNeedingHelp == 4 ? '4+' : state.peopleNeedingHelp} person${state.peopleNeedingHelp == 1 ? '' : 's'}',
             subtitle: state.additionalDetails == null ||
                     state.additionalDetails!.isEmpty
-                ? 'Included with this request.'
+                ? 'This goes with your request.'
                 : state.additionalDetails!,
             icon: Icons.medical_information_rounded,
           ),
           const SizedBox(height: AppSpacing.space3),
           _InfoCard(
-            title: '15-second simulated arrival',
-            subtitle: 'The backend receives a real request.',
+            title: 'Simulated arrival',
+            subtitle: 'Dispatch gets a real request. Only the drive is simulated.',
             icon: Icons.timer_outlined,
           ),
           if(state.errorMessage != null) ...[
@@ -1533,10 +1877,12 @@ class _EmergencyConfirmScreen extends StatelessWidget {
             _ErrorNotice(message: state.errorMessage!),
           ],
           const SizedBox(height: AppSpacing.space6),
-          _ActionButton(
-            label: 'REQUEST NOW',
-            emergency: true,
-            onPressed: state.requestAmbulance,
+          _PressScale(
+            child: _ActionButton(
+              label: 'REQUEST NOW',
+              emergency: true,
+              onPressed: state.requestAmbulance,
+            ),
           ),
         ],
       ),
@@ -1570,13 +1916,13 @@ class _EmergencySearchScreen extends StatelessWidget {
             Text(
               'FINDING HELP NOW',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineLarge,
+              style: _largeTitle(context),
             ),
             const SizedBox(height: AppSpacing.space3),
             Text(
               state.isRequesting
-                  ? 'Looking for the nearest available ambulance.'
-                  : 'Waiting for the request result.',
+                  ? 'Looking for the nearest free ambulance.'
+                  : 'Waiting to hear back from dispatch.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyLarge
                   ?.copyWith(color: AppColors.muted),
@@ -1737,8 +2083,7 @@ class _EmergencyEnRouteScreen extends StatelessWidget {
           Text(
             '${state.remainingSeconds} seconds until arrival',
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.headlineMedium
-                ?.copyWith(color: AppColors.red),
+            style: _sectionTitle(context)?.copyWith(color: AppColors.red),
           ),
           if(state.hospitalError != null) ...[
             const SizedBox(height: AppSpacing.space4),
@@ -1781,12 +2126,11 @@ class _EmergencyApproachingScreen extends StatelessWidget {
                 const SizedBox(height: AppSpacing.space2),
                 Text(
                   'ARRIVING NOW',
-                  style: Theme.of(context).textTheme.headlineLarge
-                      ?.copyWith(color: AppColors.surface),
+                  style: _largeTitle(context)?.copyWith(color: AppColors.surface),
                 ),
                 const SizedBox(height: AppSpacing.space2),
                 Text(
-                  '${state.remainingSeconds} seconds remaining · be ready at your entrance',
+                  'Here in ${state.remainingSeconds} seconds. Wait at your entrance.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium
                       ?.copyWith(color: AppColors.surface),
@@ -1946,7 +2290,7 @@ class _EmergencyArrivedScreen extends StatelessWidget {
             Text(
               'Ambulance has arrived',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineLarge,
+              style: _largeTitle(context),
             ),
             const SizedBox(height: AppSpacing.space2),
             Text(
@@ -2007,7 +2351,7 @@ class _EmergencyCompleteScreen extends StatelessWidget {
             Text(
               'Request complete',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineLarge,
+              style: _largeTitle(context),
             ),
             const SizedBox(height: AppSpacing.space2),
             Text(
@@ -2157,52 +2501,66 @@ class _ServicesScreen extends StatelessWidget {
     final state = context.watch<EmergencyRequestState>();
 
     return _FlowFrame(
+      plainChrome: true,
       title: 'Services',
       tab: _UserTab.services,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'What do you need fixed?',
-            style: Theme.of(context).textTheme.headlineLarge,
-          ),
-          const SizedBox(height: AppSpacing.space2),
-          Text(
-            'Take your time. Compare the right person for the job.',
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: AppColors.muted),
-          ),
-          const SizedBox(height: AppSpacing.space4),
-          _ChoiceCard(
-            icon: Icons.plumbing,
-            title: 'Plumber',
-            subtitle: 'View options',
-            color: AppColors.green,
-            onTap: () {
-              state.openTrade('Plumber');
-            },
-          ),
-          const SizedBox(height: AppSpacing.space3),
-          _ChoiceCard(
-            icon: Icons.electrical_services,
-            title: 'Electrician',
-            subtitle: 'View options',
-            color: AppColors.green,
-            onTap: () {
-              state.openTrade('Electrician');
-            },
-          ),
-          const SizedBox(height: AppSpacing.space3),
-          _ChoiceCard(
-            icon: Icons.carpenter,
-            title: 'Carpenter',
-            subtitle: 'View options',
-            color: AppColors.green,
-            onTap: () {
-              state.openTrade('Carpenter');
-            },
-          ),
-        ],
+      child: _SoftArrive(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('What do you need fixed?', style: _largeTitle(context)),
+            const SizedBox(height: AppSpacing.space2),
+            Text(
+              'Take your time. Compare the right person for the job.',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: AppColors.muted,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.space4),
+            _PressScale(
+              child: _ChoiceCard(
+                quiet: true,
+                emphasis: true,
+                icon: Icons.plumbing,
+                title: 'Plumber',
+                subtitle: 'View options',
+                color: AppColors.green,
+                onTap: () {
+                  state.openTrade('Plumber');
+                },
+              ),
+            ),
+            const SizedBox(height: AppSpacing.space3),
+            _PressScale(
+              child: _ChoiceCard(
+                quiet: true,
+                emphasis: true,
+                icon: Icons.electrical_services,
+                title: 'Electrician',
+                subtitle: 'View options',
+                color: AppColors.green,
+                onTap: () {
+                  state.openTrade('Electrician');
+                },
+              ),
+            ),
+            const SizedBox(height: AppSpacing.space3),
+            _PressScale(
+              child: _ChoiceCard(
+                quiet: true,
+                emphasis: true,
+                icon: Icons.carpenter,
+                title: 'Carpenter',
+                subtitle: 'View options',
+                color: AppColors.green,
+                onTap: () {
+                  state.openTrade('Carpenter');
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2406,6 +2764,20 @@ class _ServiceLocationScreenState extends State<_ServiceLocationScreen> {
     super.dispose();
   }
 
+  void _useHomeLocation() {
+    final state = context.read<EmergencyRequestState>();
+    final latitude = state.homeLatitude;
+    final longitude = state.homeLongitude;
+    final address = state.homeAddress;
+    if(latitude == null || longitude == null || address == null) {
+      setState(() {
+        _message = 'Set a location from the home address first.';
+      });
+      return;
+    }
+    _dropPin(state, latitude: latitude, longitude: longitude, address: address);
+  }
+
   Future<void> _useDeviceLocation() async {
     setState(() {
       _busy = true;
@@ -2582,6 +2954,11 @@ class _ServiceLocationScreenState extends State<_ServiceLocationScreen> {
           _ActionButton(
             label: 'Find my location',
             onPressed: _busy ? null : _useDeviceLocation,
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _SecondaryButton(
+            label: 'Use my current location',
+            onPressed: _busy ? null : _useHomeLocation,
           ),
           const SizedBox(height: AppSpacing.space4),
           TextField(
@@ -3207,7 +3584,27 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
     final typedTotal = repairTotal.text.trim();
-    final savedTotal = state.savedRepairTotal;
+    final provider = state.costFromProvider;
+    final decided = provider && state.amountOwed != null;
+    final showField = provider && !state.costWaiting && !decided;
+    final booking = state.domesticBooking;
+    final quoted = provider ? null : booking?.quotedTotal;
+    final receiptFee = booking?.receiptInspectionFee;
+    double? decidedFee;
+    if(provider) {
+      for(final job in state.providerJobs) {
+        if(job.finalTotal != null && job.receiptInspectionFee != null) {
+          decidedFee = job.receiptInspectionFee;
+        }
+      }
+    }
+    final feeNumber = receiptFee ?? decidedFee;
+    final feeText = feeNumber != null
+        ? 'Rs. ${feeNumber.toStringAsFixed(0)}'
+        : state.inspectionFeeText;
+    final shownTotal = provider
+        ? (typedTotal.isEmpty ? null : typedTotal)
+        : quoted?.toStringAsFixed(0);
 
     return _FlowFrame(
       title: 'Confirm final cost',
@@ -3221,7 +3618,7 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
             style: Theme.of(context).textTheme.headlineLarge,
           ),
           const SizedBox(height: AppSpacing.space4),
-          if(savedTotal == null)
+          if(showField)
             TextField(
               controller: repairTotal,
               keyboardType: TextInputType.number,
@@ -3235,22 +3632,36 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
                 border: OutlineInputBorder(),
               ),
             ),
-          if(savedTotal != null)
+          if(!showField && shownTotal != null)
             Text(
-              'Repair total: $savedTotal',
+              'Repair total: $shownTotal',
               style: Theme.of(context).textTheme.labelLarge,
             ),
           const SizedBox(height: AppSpacing.space3),
           Text(
-            'Inspection fee: ${state.inspectionFeeText}',
+            'Inspection fee: $feeText',
             style: Theme.of(context).textTheme.labelLarge,
           ),
-          if(savedTotal == null && typedTotal.isEmpty) ...[
+          if(!provider && quoted != null && receiptFee != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            Text(
+              'Total: Rs. ${(quoted + receiptFee).toStringAsFixed(0)}',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+          ],
+          if(showField && typedTotal.isEmpty) ...[
             const SizedBox(height: AppSpacing.space2),
             Text(
               'Waiting for the repair total.',
               style: Theme.of(context).textTheme.bodyLarge
                   ?.copyWith(color: AppColors.muted),
+            ),
+          ],
+          if(decided) ...[
+            const SizedBox(height: AppSpacing.space3),
+            Text(
+              state.amountOwed!,
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
           ],
           if(state.domesticNotice != null) ...[
@@ -3261,31 +3672,35 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
             ),
           ],
           const SizedBox(height: AppSpacing.space5),
-          if(savedTotal == null && typedTotal.isNotEmpty) ...[
+          if(provider && state.costWaiting)
+            const Center(child: CircularProgressIndicator()),
+          if(showField && typedTotal.isNotEmpty) ...[
             _ActionButton(
-              label: 'Save repair total',
+              label: 'Submit',
               color: AppColors.green,
               onPressed: () {
-                state.saveRepairTotal(typedTotal);
+                state.submitRepairTotal(typedTotal);
               },
             ),
             const SizedBox(height: AppSpacing.space3),
           ],
-          if(savedTotal != null) ...[
+          if(!provider) ...[
             _ActionButton(
               label: 'Accept',
               color: AppColors.green,
               onPressed: () {
-                state.acceptRepairTotal(savedTotal);
+                state.decideRepairTotal(accept: true);
               },
             ),
             const SizedBox(height: AppSpacing.space3),
             _SecondaryButton(
               label: 'Refuse',
-              onPressed: state.refuseRepairTotal,
+              onPressed: () {
+                state.decideRepairTotal(accept: false);
+              },
             ),
           ],
-          if(savedTotal == null)
+          if(showField)
             _SecondaryButton(
               label: 'Report an issue',
               onPressed: () {
@@ -3305,12 +3720,105 @@ class _RequestsScreen extends StatefulWidget {
   State<_RequestsScreen> createState() => _RequestsScreenState();
 }
 
-class _RequestsScreenState extends State<_RequestsScreen> {
-  int? openedEntry;
+class _RequestsScreenState extends State<_RequestsScreen>
+    with SingleTickerProviderStateMixin {
+  bool showEmergency = true;
+  late final AnimationController swap = AnimationController.unbounded(
+    vsync: this,
+    value: 1,
+  );
+
+  @override
+  void dispose() {
+    swap.dispose();
+    super.dispose();
+  }
+
+  void choose(bool emergency) {
+    if(emergency == showEmergency) {
+      return;
+    }
+    setState(() {
+      showEmergency = emergency;
+    });
+    swap.value = 0;
+    swap.animateWith(SpringSimulation(_settleSpring, 0, 1, 0));
+  }
+
+  Widget half(BuildContext context, String label, bool emergency) {
+    final selected = showEmergency == emergency;
+    return Expanded(
+      child: _PressScale(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            choose(emergency);
+          },
+          child: Container(
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: selected ? AppColors.blue : AppColors.surface,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              border: Border.all(
+                color: selected ? AppColors.blue : AppColors.line,
+              ),
+            ),
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: selected ? AppColors.surface : AppColors.ink,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> emergencyCards(EmergencyRequestState state) {
+    return [
+      for(final request in state.emergencyRequests)
+        _InfoCard(
+          title: request.address ?? 'Emergency request',
+          subtitle: [
+            [
+              if(request.happened != null) request.happened!,
+              if(request.people != null) _peopleLabel(request.people),
+            ].join(' · '),
+            'Status: ${_requestStatusLabel(request.status)}',
+          ].where((line) => line.isNotEmpty).join('\n'),
+          icon: Icons.local_hospital_rounded,
+        ),
+    ];
+  }
+
+  List<Widget> domesticCards(EmergencyRequestState state) {
+    final booking = state.domesticBooking;
+    return [
+      if(booking != null && booking.finalTotal == null)
+        _InfoCard(
+          title: booking.specialisationName ?? state.domesticTrade,
+          subtitle: [
+            'Status: ${booking.status}',
+            if(booking.address.trim().isNotEmpty) booking.address.trim(),
+          ].join('\n'),
+          icon: Icons.handyman_rounded,
+        ),
+      for(final entry in state.domesticHistory)
+        _InfoCard(
+          title: entry.label,
+          subtitle: entry.owed,
+          icon: Icons.handyman_rounded,
+        ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
-    final history = context.watch<EmergencyRequestState>().domesticHistory;
+    final state = context.watch<EmergencyRequestState>();
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final cards = showEmergency ? emergencyCards(state) : domesticCards(state);
 
     return _FlowFrame(
       title: 'Requests',
@@ -3318,28 +3826,46 @@ class _RequestsScreenState extends State<_RequestsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if(history.isNotEmpty) ...[
-            Text('HISTORY', style: Theme.of(context).textTheme.labelSmall),
-            const SizedBox(height: AppSpacing.space2),
-          ],
-          for(var index = 0; index < history.length; index++) ...[
-            _ProfileRow(
-              label: history[index].label,
-              onPressed: () {
-                setState(() {
-                  openedEntry = index;
-                });
-              },
+          Row(
+            children: [
+              half(context, 'Emergency', true),
+              const SizedBox(width: AppSpacing.space2),
+              half(context, 'Domestic', false),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          AnimatedBuilder(
+            animation: swap,
+            builder: (context, child) {
+              if(reduceMotion) {
+                return Opacity(
+                  opacity: swap.value.clamp(0.0, 1.0),
+                  child: child,
+                );
+              }
+              return Transform.translate(
+                offset: Offset((1 - swap.value) * (showEmergency ? -24 : 24), 0),
+                child: child,
+              );
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if(cards.isEmpty)
+                  Text(
+                    showEmergency
+                        ? 'No emergency request yet.'
+                        : 'No domestic request yet.',
+                    style: Theme.of(context).textTheme.bodyLarge
+                        ?.copyWith(color: AppColors.muted),
+                  ),
+                for(final card in cards) ...[
+                  card,
+                  const SizedBox(height: AppSpacing.space3),
+                ],
+              ],
             ),
-            const SizedBox(height: AppSpacing.space2),
-          ],
-          if(openedEntry != null) ...[
-            const SizedBox(height: AppSpacing.space2),
-            Text(
-              history[openedEntry!].owed,
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-          ],
+          ),
         ],
       ),
     );
@@ -3515,78 +4041,175 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
     final savedFee = provider.inspectionFee.toStringAsFixed(0);
     final incoming = state.incomingJobs;
     final accepted = state.acceptedJobs;
+    final finished = [
+      for(final job in accepted)
+        if(job.requestId != state.activeJobId && job.receiptStatus == 'ACCEPTED')
+          job,
+    ];
+
+    final plateColor = switch(state.providerDuty) {
+      ProviderDuty.available => AppColors.green,
+      ProviderDuty.offline => AppColors.muted,
+      ProviderDuty.onJob => AppColors.blue,
+    };
+    final upcoming = [
+      for(final job in accepted)
+        if(job.requestId == state.activeJobId || job.receiptStatus != 'ACCEPTED')
+          job,
+    ];
 
     return _FlowFrame(
       title: 'Provider dashboard',
+      plainChrome: true,
       onBack: state.leaveProviderMode,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const CircleAvatar(
-                radius: 26,
-                backgroundColor: AppColors.green,
-                child: Icon(Icons.person, color: AppColors.surface, size: 24),
+              Container(
+                width: 64,
+                height: 64,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: plateColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Icon(Icons.person_outline, color: plateColor, size: 30),
               ),
-              const SizedBox(width: AppSpacing.space3),
+              const SizedBox(width: AppSpacing.space4),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      provider.name,
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
+                    Text(provider.name, style: _sectionTitle(context)),
+                    const SizedBox(height: AppSpacing.space1),
                     Text(
                       '${provider.specialisationName ?? 'Provider'} · ${provider.rating.toStringAsFixed(1)} rating',
-                      style: Theme.of(context).textTheme.bodyLarge
-                          ?.copyWith(color: AppColors.muted),
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: AppColors.muted,
+                        height: 1.35,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.space4),
-          _StatusPill(label: dutyLabel, color: dutyColor),
-          if(!onJob) ...[
-            const SizedBox(height: AppSpacing.space3),
-            _SecondaryButton(
-              label: offline ? 'Tap to go online' : 'Tap to go offline',
-              onPressed: () {
-                state.setProviderOnline(offline);
-              },
+          const SizedBox(height: AppSpacing.space3),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.space3,
+                vertical: AppSpacing.space1,
+              ),
+              decoration: BoxDecoration(
+                color: dutyColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: dutyColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.space2),
+                  Text(
+                    dutyLabel,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: dutyColor,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
+              ),
             ),
+          ),
+          if(!onJob) ...[
+            const SizedBox(height: AppSpacing.space4),
+            if(offline)
+              _PressScale(
+                child: _ActionButton(
+                  label: 'Tap to go online',
+                  onPressed: () {
+                    state.setProviderOnline(true);
+                  },
+                ),
+              )
+            else
+              _InsetGroup(
+                children: [
+                  _InsetRow(
+                    label: 'Tap to go offline',
+                    showChevron: false,
+                    onPressed: () {
+                      state.setProviderOnline(false);
+                    },
+                  ),
+                ],
+              ),
           ],
           if(state.amountOwed != null) ...[
             const SizedBox(height: AppSpacing.space3),
             Text(
               state.amountOwed!,
-              style: Theme.of(context).textTheme.bodyLarge,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ],
-          const SizedBox(height: AppSpacing.space4),
-          TextFormField(
-            key: ValueKey('fee-${provider.id}'),
-            initialValue: savedFee,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onChanged: (value) {
-              typedFee = value;
-            },
-            decoration: const InputDecoration(
-              labelText: 'Inspection fee (Rs.)',
-              helperText: 'Customers see this next to your rating.',
-              border: OutlineInputBorder(),
-            ),
-          ),
+          const SizedBox(height: AppSpacing.space5),
+          _providerSectionLabel(context, 'INSPECTION FEE'),
           const SizedBox(height: AppSpacing.space2),
-          _SecondaryButton(
-            label: 'Save fee',
-            onPressed: () {
-              state.saveInspectionFee(typedFee ?? savedFee);
-            },
+          _InsetGroup(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.space4,
+                  AppSpacing.space2,
+                  AppSpacing.space4,
+                  AppSpacing.space2,
+                ),
+                child: TextFormField(
+                  key: ValueKey('fee-${provider.id}'),
+                  initialValue: savedFee,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                  onChanged: (value) {
+                    typedFee = value;
+                  },
+                  decoration: const InputDecoration(
+                    labelText: 'Inspection fee (Rs.)',
+                    helperText: 'Customers see this next to your rating.',
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: AppColors.focus, width: 1.5),
+                    ),
+                    filled: false,
+                    isDense: true,
+                  ),
+                ),
+              ),
+              _InsetRow(
+                label: 'Save fee',
+                showChevron: false,
+                onPressed: () {
+                  state.saveInspectionFee(typedFee ?? savedFee);
+                },
+              ),
+            ],
           ),
           if(state.domesticNotice != null) ...[
             const SizedBox(height: AppSpacing.space3),
@@ -3596,67 +4219,89 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
             ),
           ],
           const SizedBox(height: AppSpacing.space5),
-          Text(
-            'INCOMING REQUEST',
-            style: Theme.of(context).textTheme.labelSmall,
-          ),
+          _providerSectionLabel(context, 'INCOMING REQUEST'),
           const SizedBox(height: AppSpacing.space2),
           if(offline)
             Text(
               'You are offline.',
-              style: Theme.of(context).textTheme.bodyLarge
-                  ?.copyWith(color: AppColors.muted),
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: AppColors.muted,
+                height: 1.4,
+              ),
             )
           else if(state.providerJobsLoading && state.providerJobs.isEmpty)
             const Center(child: CircularProgressIndicator())
           else if(incoming.isEmpty)
             Text(
               'No new requests.',
-              style: Theme.of(context).textTheme.bodyLarge
-                  ?.copyWith(color: AppColors.muted),
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: AppColors.muted,
+                height: 1.4,
+              ),
             )
           else
             for(final job in incoming) ...[
-              _ChoiceCard(
-                icon: Icons.handyman_rounded,
-                title: job.description,
-                subtitle:
-                    '${job.address} · ${job.userName ?? 'Customer'} · Inspection fee Rs. ${(job.inspectionFee ?? provider.inspectionFee).toStringAsFixed(0)}',
-                color: AppColors.green,
-                onTap: () {
-                  state.openJob(job.requestId);
-                },
+              _PressScale(
+                child: _ChoiceCard(
+                  quiet: true,
+                  icon: Icons.handyman_outlined,
+                  title: job.description,
+                  subtitle:
+                      '${job.address} · ${job.userName ?? 'Customer'} · Inspection fee Rs. ${(job.inspectionFee ?? provider.inspectionFee).toStringAsFixed(0)}',
+                  color: AppColors.green,
+                  onTap: () {
+                    state.openJob(job.requestId);
+                  },
+                ),
               ),
               const SizedBox(height: AppSpacing.space3),
             ],
-          const SizedBox(height: AppSpacing.space4),
-          Text("TODAY'S JOBS", style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: AppSpacing.space5),
+          _providerSectionLabel(context, "TODAY'S JOBS"),
           const SizedBox(height: AppSpacing.space2),
-          for(final job in accepted) ...[
-            _ProfileRow(
-              label:
-                  '${job.requestId == state.activeJobId ? 'Active job' : 'Accepted'} · ${job.description}',
-              onPressed: () {
-                state.openActiveJob(job.requestId);
-              },
-            ),
-            const SizedBox(height: AppSpacing.space2),
-          ],
-          if(accepted.isEmpty)
+          if(upcoming.isNotEmpty)
+            _InsetGroup(
+              children: [
+                for(final job in upcoming)
+                  _InsetRow(
+                    label:
+                        '${job.requestId == state.activeJobId ? 'Active job' : 'Accepted'} · ${job.description}',
+                    onPressed: () {
+                      state.openActiveJob(job.requestId);
+                    },
+                  ),
+              ],
+            )
+          else
             Text(
               'No upcoming jobs.',
-              style: Theme.of(context).textTheme.bodyLarge
-                  ?.copyWith(color: AppColors.muted),
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: AppColors.muted,
+                height: 1.4,
+              ),
             ),
-          const SizedBox(height: AppSpacing.space4),
-          _SecondaryButton(
-            label: 'Refresh jobs',
-            onPressed: state.loadProviderJobs,
-          ),
-          const SizedBox(height: AppSpacing.space3),
-          _SecondaryButton(
-            label: 'Change provider',
-            onPressed: state.changeProviderProfile,
+          if(finished.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.space5),
+            _providerSectionLabel(context, 'FINISHED'),
+            const SizedBox(height: AppSpacing.space2),
+            _InsetGroup(
+              children: [
+                for(final job in finished)
+                  _InsetRow(
+                    label: 'Finished · ${job.description}',
+                    onPressed: () {
+                      state.openFinishedJob(job.requestId);
+                    },
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: AppSpacing.space5),
+          _GroupedLinks(
+            links: [
+              _GroupedLink('Refresh jobs', state.loadProviderJobs),
+              _GroupedLink('Change provider', state.changeProviderProfile),
+            ],
           ),
         ],
       ),
@@ -3827,6 +4472,40 @@ class _ProviderJobScreenState extends State<_ProviderJobScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
+    final finishedJob = state.finishedJob;
+    if(state.finishedJobId != null) {
+      return _FlowFrame(
+        title: 'Finished job',
+        onBack: state.closeFinishedJob,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _InfoCard(
+              title: finishedJob?.specialisationName ?? 'Job',
+              subtitle: finishedJob == null
+                  ? 'This job is no longer on this phone.'
+                  : '${finishedJob.userName ?? 'Customer'} · ${finishedJob.address}',
+              icon: Icons.handyman_rounded,
+            ),
+            if(finishedJob != null) ...[
+              const SizedBox(height: AppSpacing.space3),
+              _InfoCard(
+                title: 'Problem',
+                subtitle: finishedJob.description,
+                icon: Icons.description_outlined,
+              ),
+              if(finishedJob.finalTotal != null) ...[
+                const SizedBox(height: AppSpacing.space3),
+                Text(
+                  'Price: Rs. ${finishedJob.finalTotal!.toStringAsFixed(0)}',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+              ],
+            ],
+          ],
+        ),
+      );
+    }
     final job = state.activeJob;
     final started = state.domesticJob == DomesticJob.inProgress;
 
@@ -4046,6 +4725,7 @@ class _FlowFrame extends StatelessWidget {
     required this.child,
     this.title,
     this.onBack,
+    this.onTitle,
     this.emergency = false,
     this.tab,
     this.plainChrome = false,
@@ -4055,10 +4735,19 @@ class _FlowFrame extends StatelessWidget {
   final Widget child;
   final String? title;
   final VoidCallback? onBack;
+  final VoidCallback? onTitle;
   final bool emergency;
   final _UserTab? tab;
   final bool plainChrome;
   final bool fill;
+
+  TextStyle? titleStyle(BuildContext context) {
+    return Theme.of(context).textTheme.labelLarge?.copyWith(
+      color: plainChrome ? AppColors.ink : AppColors.blue,
+      fontWeight: plainChrome ? FontWeight.w600 : FontWeight.w700,
+      letterSpacing: plainChrome ? -0.2 : 0,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4098,19 +4787,39 @@ class _FlowFrame extends StatelessWidget {
                     else
                       const SizedBox(width: 48),
                     Expanded(
-                      child: Text(
-                        title!,
-                        textAlign: onBack == null
-                            ? TextAlign.center
-                            : TextAlign.left,
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: plainChrome ? AppColors.ink : AppColors.blue,
-                          fontWeight: plainChrome
-                              ? FontWeight.w600
-                              : FontWeight.w700,
-                          letterSpacing: plainChrome ? -0.2 : 0,
-                        ),
-                      ),
+                      child: onTitle == null
+                          ? Text(
+                              title!,
+                              textAlign: onBack == null
+                                  ? TextAlign.center
+                                  : TextAlign.left,
+                              style: titleStyle(context),
+                            )
+                          : InkWell(
+                              onTap: onTitle,
+                              borderRadius: BorderRadius.circular(AppRadius.sm),
+                              child: SizedBox(
+                                height: 44,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        title!,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: titleStyle(context),
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.expand_more_rounded,
+                                      size: 20,
+                                      color: AppColors.muted,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                     ),
                     const SizedBox(width: 48),
                   ],
@@ -4161,7 +4870,7 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final backgroundColor = color ?? (emergency ? AppColors.red : AppColors.blue);
 
-    return SizedBox(
+    final button = SizedBox(
       height: emergency ? 56 : 48,
       child: ElevatedButton(
         onPressed: onPressed,
@@ -4176,6 +4885,10 @@ class _ActionButton extends StatelessWidget {
         child: Text(label),
       ),
     );
+    if(onPressed == null) {
+      return button;
+    }
+    return _PressScale(child: button);
   }
 }
 
@@ -4292,9 +5005,22 @@ class _InfoCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.space4),
       decoration: BoxDecoration(
-        color: highlighted ? AppColors.soft : AppColors.surface,
-        border: Border.all(color: highlighted ? AppColors.red : AppColors.line),
+        color: highlighted
+            ? AppColors.soft
+            : AppColors.surface.withValues(alpha: 0.88),
+        border: Border.all(
+          color: highlighted
+              ? AppColors.red
+              : AppColors.line.withValues(alpha: 0.6),
+        ),
         borderRadius: BorderRadius.circular(AppRadius.md),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1417212F),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -4349,8 +5075,50 @@ class _SelectionChip extends StatelessWidget {
   }
 }
 
-class _TripMap extends StatelessWidget {
+LatLng _pointAlongRoute(List<LatLng> points, double fraction) {
+  const distance = Distance(roundResult: false);
+  final segments = <double>[];
+  var total = 0.0;
+  for(var i = 0; i < points.length - 1; i++) {
+    final length = distance(points[i], points[i + 1]).toDouble();
+    segments.add(length);
+    total += length;
+  }
+  if(points.length == 1 || total == 0) {
+    return points.first;
+  }
+  var target = fraction * total;
+  for(var i = 0; i < segments.length; i++) {
+    if(target <= segments[i] || i == segments.length - 1) {
+      final t = segments[i] == 0 ? 0.0 : (target / segments[i]).clamp(0.0, 1.0);
+      final a = points[i];
+      final b = points[i + 1];
+      return LatLng(
+        a.latitude + ((b.latitude - a.latitude) * t),
+        a.longitude + ((b.longitude - a.longitude) * t),
+      );
+    }
+    target -= segments[i];
+  }
+  return points.last;
+}
+
+class _TripMap extends StatefulWidget {
   const _TripMap();
+
+  @override
+  State<_TripMap> createState() => _TripMapState();
+}
+
+class _TripMapState extends State<_TripMap> {
+  final _mapController = MapController();
+  bool _mapReady = false;
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4360,6 +5128,57 @@ class _TripMap extends StatelessWidget {
     final toLat = state.routeToLat;
     final toLng = state.routeToLng;
     if(fromLat == null || fromLng == null || toLat == null || toLng == null) {
+      _mapReady = false;
+      final hereLat = state.driverAmbulanceLat;
+      final hereLng = state.driverAmbulanceLng;
+      if(hereLat != null && hereLng != null) {
+        final here = LatLng(hereLat, hereLng);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              child: Container(
+                height: 190,
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.line, width: 2),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+                child: FlutterMap(
+                  options: MapOptions(initialCenter: here, initialZoom: 16),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.madadplus.madad_plus_mobile',
+                      tileProvider: Platform.environment['FLUTTER_TEST'] == 'true'
+                          ? _TestTileProvider()
+                          : NetworkTileProvider(),
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: here,
+                          width: 41,
+                          height: 41,
+                          child: Image.asset(
+                            'assets/ambulance.png',
+                            width: 41,
+                            height: 41,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if(state.routeError != null) ...[
+              const SizedBox(height: AppSpacing.space3),
+              _ErrorNotice(message: state.routeError!),
+            ],
+          ],
+        );
+      }
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -4385,15 +5204,17 @@ class _TripMap extends StatelessWidget {
       );
     }
 
-    final progress = state.routeProgress();
-    final ambulance = LatLng(
-      fromLat + ((toLat - fromLat) * progress),
-      fromLng + ((toLng - fromLng) * progress),
-    );
     final start = LatLng(fromLat, fromLng);
     final destination = LatLng(toLat, toLng);
-    final samePoint = (fromLat - toLat).abs() < 0.00001 &&
-        (fromLng - toLng).abs() < 0.00001;
+    final points = state.routePoints ?? [start, destination];
+    final ambulance = _pointAlongRoute(points, state.routeProgress());
+    if(_mapReady) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if(mounted && _mapReady) {
+          _mapController.move(ambulance, 15);
+        }
+      });
+    }
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadius.md),
@@ -4404,14 +5225,14 @@ class _TripMap extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
         child: FlutterMap(
-          options: samePoint
-              ? MapOptions(initialCenter: start, initialZoom: 16)
-              : MapOptions(
-                  initialCameraFit: CameraFit.bounds(
-                    bounds: LatLngBounds.fromPoints([start, destination]),
-                    padding: const EdgeInsets.all(36),
-                  ),
-                ),
+          mapController: _mapController,
+          options: MapOptions(
+            initialCenter: ambulance,
+            initialZoom: 15,
+            onMapReady: () {
+              _mapReady = true;
+            },
+          ),
           children: [
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -4423,7 +5244,7 @@ class _TripMap extends StatelessWidget {
             PolylineLayer(
               polylines: [
                 Polyline(
-                  points: [start, destination],
+                  points: points,
                   strokeWidth: 4,
                   color: AppColors.blue,
                 ),
@@ -4433,12 +5254,12 @@ class _TripMap extends StatelessWidget {
               markers: [
                 Marker(
                   point: ambulance,
-                  width: 36,
-                  height: 36,
-                  child: const Icon(
-                    Icons.local_shipping,
-                    color: AppColors.red,
-                    size: 32,
+                  width: 41,
+                  height: 41,
+                  child: Image.asset(
+                    'assets/ambulance.png',
+                    width: 41,
+                    height: 41,
                   ),
                 ),
                 Marker(
@@ -4501,7 +5322,7 @@ class _DemoNotice extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Text(
-        'Simulation mode only. For a real emergency, call 1122.',
+        'This is a simulation. In a real emergency, call 1122.',
         style: Theme.of(context).textTheme.bodyMedium
             ?.copyWith(color: AppColors.red, fontWeight: FontWeight.w700),
       ),
@@ -4652,38 +5473,49 @@ class _PressScale extends StatefulWidget {
   State<_PressScale> createState() => _PressScaleState();
 }
 
-class _PressScaleState extends State<_PressScale> {
-  var pressed = false;
+class _PressScaleState extends State<_PressScale>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController press = AnimationController.unbounded(
+    vsync: this,
+  );
 
-  void release() {
-    if(pressed) {
-      setState(() {
-        pressed = false;
-      });
-    }
+  void settle(double target) {
+    press.animateWith(
+      SpringSimulation(_pressSpring, press.value, target, press.velocity),
+    );
+  }
+
+  @override
+  void dispose() {
+    press.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if(context.findAncestorStateOfType<_PressScaleState>() != null) {
+      return widget.child;
+    }
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return Listener(
       onPointerDown: (_) {
-        if(!reduceMotion) {
-          setState(() {
-            pressed = true;
-          });
-        }
+        settle(1);
       },
       onPointerUp: (_) {
-        release();
+        settle(0);
       },
       onPointerCancel: (_) {
-        release();
+        settle(0);
       },
-      child: AnimatedScale(
-        scale: !reduceMotion && pressed ? 0.97 : 1,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
+      child: AnimatedBuilder(
+        animation: press,
+        builder: (context, child) {
+          final pressed = press.value.clamp(0.0, 1.0);
+          if(reduceMotion) {
+            return Opacity(opacity: 1 - (0.2 * pressed), child: child);
+          }
+          return Transform.scale(scale: 1 - (0.03 * pressed), child: child);
+        },
         child: widget.child,
       ),
     );
@@ -4728,3 +5560,74 @@ class _GroupedLinks extends StatelessWidget {
     );
   }
 }
+
+class _InsetGroup extends StatelessWidget {
+  const _InsetGroup({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for(var index = 0; index < children.length; index++) ...[
+            children[index],
+            if(index != children.length - 1)
+              const Divider(height: 1, thickness: 1, color: AppColors.line),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _InsetRow extends StatelessWidget {
+  const _InsetRow({
+    required this.label,
+    required this.onPressed,
+    this.showChevron = true,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+  final bool showChevron;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Text(
+      label,
+      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+        color: showChevron ? AppColors.ink : AppColors.blue,
+        fontWeight: FontWeight.w600,
+        height: 1.3,
+      ),
+    );
+    return InkWell(
+      onTap: onPressed,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 52),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space4),
+          child: showChevron
+              ? Row(
+                  children: [
+                    Expanded(child: text),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: AppColors.muted,
+                      size: 22,
+                    ),
+                  ],
+                )
+              : Center(child: text),
+        ),
+      ),
+    );
+  }
+}
+

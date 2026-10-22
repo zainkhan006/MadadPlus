@@ -146,7 +146,12 @@ class EmergencySocketService {
   }) {
     disconnectProvider();
     final providerSocket = _joinRoom('join:provider', providerId);
-    for(final eventName in ['domestic.requested', 'domestic.accepted']) {
+    for(final eventName in [
+      'domestic.requested',
+      'domestic.accepted',
+      'domestic.cost_submitted',
+      'domestic.cost_decided',
+    ]) {
       providerSocket.on(eventName, (data) {
         onBooking(
           DomesticBooking.fromJson(Map<String, dynamic>.from(data as Map)),
@@ -168,11 +173,17 @@ class EmergencySocketService {
   }) {
     disconnectDomestic();
     final domesticSocket = _joinRoom('join:domestic-request', requestId);
-    domesticSocket.on('domestic.accepted', (data) {
-      onBooking(
-        DomesticBooking.fromJson(Map<String, dynamic>.from(data as Map)),
-      );
-    });
+    for(final eventName in [
+      'domestic.accepted',
+      'domestic.cost_submitted',
+      'domestic.cost_decided',
+    ]) {
+      domesticSocket.on(eventName, (data) {
+        onBooking(
+          DomesticBooking.fromJson(Map<String, dynamic>.from(data as Map)),
+        );
+      });
+    }
     domesticSocket.connect();
     _domesticSocket = domesticSocket;
   }

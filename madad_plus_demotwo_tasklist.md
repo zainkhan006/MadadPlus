@@ -13,9 +13,9 @@ Ahmed's `origin/Web` already has hospital pins, the pulsing pin, OSRM road route
 - [x] Hospital pins on the map.
 - [x] Ambulance driving on roads to the user, then to the hospital. It animates on the dispatcher only, since the backend never moves a unit.
 - [x] Mark free.
-- [ ] Pulsing pin where a request came from. It is in the code, and it has not been ticked.
-- [ ] Ambulance icons colored for free, busy, and unavailable. The screenshots only show busy units.
-- [ ] Five ambulances free on the live server. Mark free works, so this can be done from the dispatcher. The last check had only A-04 free.
+- [x] Pulsing pin where a request came from. It is in the code, and it has not been ticked.
+- [x] Ambulance icons colored for free, busy, and unavailable. The screenshots only show busy units.
+- [x] Five ambulances free on the live server. Mark free works, so this can be done from the dispatcher. The last check had only A-04 free.
 
 ## Driver
 
