@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
+import 'dart:math' as math;
 
-import 'package:flutter/animation.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'emergency_outcome.dart';
@@ -169,6 +171,8 @@ class EmergencyRequestState extends ChangeNotifier {
   double? routeToLat;
   double? routeToLng;
   DateTime? routeStartedAt;
+  List<LatLng>? routePoints;
+  double routeDurationMs = 15000;
   String? routeError;
   double? driverAmbulanceLat;
   double? driverAmbulanceLng;
@@ -191,8 +195,20 @@ class EmergencyRequestState extends ChangeNotifier {
     if(started == null) {
       return 0;
     }
-    final raw = DateTime.now().difference(started).inMilliseconds / 15000;
-    return Curves.easeInOut.transform(raw.clamp(0.0, 1.0));
+    final raw = DateTime.now().difference(started).inMilliseconds / routeDurationMs;
+    return raw.clamp(0.0, 1.0);
+  }
+
+  double driveDurationMs(double fromLat, double fromLng, double toLat, double toLng) {
+    const earthRadiusKm = 6371.0;
+    final dLat = (toLat - fromLat) * math.pi / 180;
+    final dLng = (toLng - fromLng) * math.pi / 180;
+    final lat1 = fromLat * math.pi / 180;
+    final lat2 = toLat * math.pi / 180;
+    final x = math.pow(math.sin(dLat / 2), 2) +
+        math.cos(lat1) * math.cos(lat2) * math.pow(math.sin(dLng / 2), 2);
+    final km = 2 * earthRadiusKm * math.asin(math.sqrt(x));
+    return math.min(45000.0, math.max(8000.0, (km / 55) * 3600000));
   }
 
   void clearRoute() {
@@ -204,6 +220,8 @@ class EmergencyRequestState extends ChangeNotifier {
     routeToLat = null;
     routeToLng = null;
     routeStartedAt = null;
+    routePoints = null;
+    routeDurationMs = 15000;
     routeError = null;
   }
 
@@ -230,7 +248,10 @@ class EmergencyRequestState extends ChangeNotifier {
     routeFromLng = fromLng;
     routeToLat = toLat;
     routeToLng = toLng;
-    routeStartedAt = DateTime.now();
+    routePoints = [LatLng(fromLat, fromLng), LatLng(toLat, toLng)];
+    routeDurationMs = driveDurationMs(fromLat, fromLng, toLat, toLng);
+    final startedAt = DateTime.now();
+    routeStartedAt = startedAt;
     routeError = null;
     _routeTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
       if(routeProgress() >= 1) {
@@ -239,6 +260,44 @@ class EmergencyRequestState extends ChangeNotifier {
       notifyListeners();
     });
     notifyListeners();
+    _loadRoadRoute(startedAt, fromLat, fromLng, toLat, toLng);
+  }
+
+  Future<void> _loadRoadRoute(
+    DateTime startedAt,
+    double fromLat,
+    double fromLng,
+    double toLat,
+    double toLng,
+  ) async {
+    if(Platform.environment['FLUTTER_TEST'] == 'true') {
+      return;
+    }
+    try {
+      final response = await http
+          .get(Uri.parse(
+            'https://router.project-osrm.org/route/v1/driving/$fromLng,$fromLat;$toLng,$toLat?overview=full&geometries=geojson',
+          ))
+          .timeout(const Duration(seconds: 5));
+      if(response.statusCode != 200) {
+        throw Exception('OSRM request failed: ${response.statusCode}');
+      }
+      final routes = (jsonDecode(response.body) as Map<String, dynamic>)['routes'] as List;
+      if(routes.isEmpty) {
+        throw Exception('No route found');
+      }
+      if(!identical(routeStartedAt, startedAt)) {
+        return;
+      }
+      final coordinates = routes.first['geometry']['coordinates'] as List;
+      routePoints = [
+        for(final point in coordinates)
+          LatLng((point[1] as num).toDouble(), (point[0] as num).toDouble()),
+      ];
+      notifyListeners();
+    } catch (error) {
+      debugPrint('could not get a road route, so the ambulance will drive in a straight line: $error');
+    }
   }
 
   void beginCallerLeg(EmergencyRequestResult incoming) {
@@ -1845,25 +1904,36 @@ class EmergencyRequestState extends ChangeNotifier {
 
   void _startArrivalSimulation() {
     _arrivalTimer?.cancel();
-    remainingSeconds = 15;
-    _arrivalTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      remainingSeconds = 15 - timer.tick;
+    final durationMs = routeDurationMs;
+    remainingSeconds = (durationMs / 1000).ceil();
+    var lastElapsedMs = 0;
+    _arrivalTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      final elapsedMs = timer.tick * 100;
+      final leftMs = durationMs - elapsedMs;
+      final enRouteAtMs = durationMs * 3 / 15;
+      final reachedEnRoute = lastElapsedMs < enRouteAtMs && elapsedMs >= enRouteAtMs;
+      lastElapsedMs = elapsedMs;
+      final screenBefore = currentScreen;
+      final secondsBefore = remainingSeconds;
 
-      if (remainingSeconds == 12) {
-        currentScreen = EmergencyScreen.emergencyEnRoute;
-      }
-      else if(remainingSeconds <= 4 && remainingSeconds > 0) {
-        currentScreen = EmergencyScreen.emergencyApproaching;
-      }
-      else if(remainingSeconds <= 0) {
+      if(leftMs <= 0) {
         remainingSeconds = 0;
         timer.cancel();
         currentScreen = EmergencyScreen.emergencyApproaching;
         notifyListeners();
         return;
       }
+      else if(leftMs <= durationMs * 4 / 15) {
+        currentScreen = EmergencyScreen.emergencyApproaching;
+      }
+      else if(reachedEnRoute) {
+        currentScreen = EmergencyScreen.emergencyEnRoute;
+      }
+      remainingSeconds = (leftMs / 1000).ceil();
 
-      notifyListeners();
+      if(currentScreen != screenBefore || remainingSeconds != secondsBefore) {
+        notifyListeners();
+      }
     });
   }
 

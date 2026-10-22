@@ -1777,7 +1777,7 @@ class _EmergencyConfirmScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.space3),
           _InfoCard(
-            title: '15-second simulated arrival',
+            title: 'Simulated arrival',
             subtitle: 'The backend receives a real request.',
             icon: Icons.timer_outlined,
           ),
@@ -4839,8 +4839,50 @@ class _SelectionChip extends StatelessWidget {
   }
 }
 
-class _TripMap extends StatelessWidget {
+LatLng _pointAlongRoute(List<LatLng> points, double fraction) {
+  const distance = Distance(roundResult: false);
+  final segments = <double>[];
+  var total = 0.0;
+  for(var i = 0; i < points.length - 1; i++) {
+    final length = distance(points[i], points[i + 1]).toDouble();
+    segments.add(length);
+    total += length;
+  }
+  if(points.length == 1 || total == 0) {
+    return points.first;
+  }
+  var target = fraction * total;
+  for(var i = 0; i < segments.length; i++) {
+    if(target <= segments[i] || i == segments.length - 1) {
+      final t = segments[i] == 0 ? 0.0 : (target / segments[i]).clamp(0.0, 1.0);
+      final a = points[i];
+      final b = points[i + 1];
+      return LatLng(
+        a.latitude + ((b.latitude - a.latitude) * t),
+        a.longitude + ((b.longitude - a.longitude) * t),
+      );
+    }
+    target -= segments[i];
+  }
+  return points.last;
+}
+
+class _TripMap extends StatefulWidget {
   const _TripMap();
+
+  @override
+  State<_TripMap> createState() => _TripMapState();
+}
+
+class _TripMapState extends State<_TripMap> {
+  final _mapController = MapController();
+  bool _mapReady = false;
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4850,6 +4892,7 @@ class _TripMap extends StatelessWidget {
     final toLat = state.routeToLat;
     final toLng = state.routeToLng;
     if(fromLat == null || fromLng == null || toLat == null || toLng == null) {
+      _mapReady = false;
       final hereLat = state.driverAmbulanceLat;
       final hereLng = state.driverAmbulanceLng;
       if(hereLat != null && hereLng != null) {
@@ -4925,15 +4968,17 @@ class _TripMap extends StatelessWidget {
       );
     }
 
-    final progress = state.routeProgress();
-    final ambulance = LatLng(
-      fromLat + ((toLat - fromLat) * progress),
-      fromLng + ((toLng - fromLng) * progress),
-    );
     final start = LatLng(fromLat, fromLng);
     final destination = LatLng(toLat, toLng);
-    final samePoint = (fromLat - toLat).abs() < 0.00001 &&
-        (fromLng - toLng).abs() < 0.00001;
+    final points = state.routePoints ?? [start, destination];
+    final ambulance = _pointAlongRoute(points, state.routeProgress());
+    if(_mapReady) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if(mounted && _mapReady) {
+          _mapController.move(ambulance, 15);
+        }
+      });
+    }
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadius.md),
@@ -4944,14 +4989,14 @@ class _TripMap extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
         child: FlutterMap(
-          options: samePoint
-              ? MapOptions(initialCenter: start, initialZoom: 16)
-              : MapOptions(
-                  initialCameraFit: CameraFit.bounds(
-                    bounds: LatLngBounds.fromPoints([start, destination]),
-                    padding: const EdgeInsets.all(36),
-                  ),
-                ),
+          mapController: _mapController,
+          options: MapOptions(
+            initialCenter: ambulance,
+            initialZoom: 15,
+            onMapReady: () {
+              _mapReady = true;
+            },
+          ),
           children: [
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -4963,7 +5008,7 @@ class _TripMap extends StatelessWidget {
             PolylineLayer(
               polylines: [
                 Polyline(
-                  points: [start, destination],
+                  points: points,
                   strokeWidth: 4,
                   color: AppColors.blue,
                 ),
