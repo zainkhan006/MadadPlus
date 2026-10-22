@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/gestures.dart' show VelocityTracker;
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -94,6 +96,18 @@ class EmergencyFlow extends StatelessWidget {
     }
   }
 }
+
+final _pressSpring = SpringDescription.withDampingRatio(
+  mass: 1,
+  stiffness: 1000,
+  ratio: 1,
+);
+
+final _settleSpring = SpringDescription.withDampingRatio(
+  mass: 1,
+  stiffness: 440,
+  ratio: 1,
+);
 
 TextStyle? _largeTitle(BuildContext context) {
   return Theme.of(context).textTheme.headlineLarge?.copyWith(
@@ -501,6 +515,16 @@ class _RegisterScreen extends StatelessWidget {
 const _pickupStatuses = {'ASSIGNED', 'EN_ROUTE', 'TRANSFER_EN_ROUTE'};
 const _hospitalStatuses = {'PICKED_UP', 'EN_ROUTE_HOSPITAL'};
 
+String _requestStatusLabel(String status) {
+  if(status == 'QUEUED') {
+    return 'WAITING';
+  }
+  if(status == 'COMPLETED') {
+    return 'FINISHED';
+  }
+  return 'ASSIGNED';
+}
+
 String _peopleLabel(int? count) {
   if(count == null) {
     return 'people count not sent';
@@ -511,6 +535,44 @@ String _peopleLabel(int? count) {
   return count == 1 ? '1 person' : '$count people';
 }
 
+List<String> _driverDetailLines(EmergencyCall call, {required bool atHospital}) {
+  final lines = <String>[];
+  if(atHospital) {
+    final name = call.hospitalName?.trim() ?? '';
+    final address = call.hospitalAddress?.trim() ?? '';
+    if(name.isEmpty && address.isEmpty) {
+      lines.add('No hospital address came with this call.');
+    }
+    else if(address.isEmpty) {
+      lines.add(name);
+    }
+    else if(name.isEmpty || address.contains(name)) {
+      lines.add(address);
+    }
+    else {
+      lines.add('$name, $address');
+    }
+    lines.add('Patient is on board');
+  }
+  else {
+    lines.add(call.pickupAddress ?? 'The caller didn\'t share an address.');
+    lines.add('${_peopleLabel(call.peopleCount)} still waiting');
+  }
+  lines.add(call.emergencyDescription ?? 'Emergency');
+  final extra = call.additionalDetails?.trim() ?? '';
+  if(extra.isNotEmpty) {
+    lines.add(extra);
+  }
+  if(!atHospital) {
+    lines.add(
+      call.callerPhone == null
+          ? 'The caller didn\'t share a phone number.'
+          : 'Caller ${call.callerPhone}',
+    );
+  }
+  return lines;
+}
+
 class _DriverJobScreen extends StatefulWidget {
   const _DriverJobScreen();
 
@@ -518,11 +580,46 @@ class _DriverJobScreen extends StatefulWidget {
   State<_DriverJobScreen> createState() => _DriverJobScreenState();
 }
 
-class _DriverJobScreenState extends State<_DriverJobScreen> {
+class _DriverJobScreenState extends State<_DriverJobScreen>
+    with SingleTickerProviderStateMixin {
   double slide = 0;
   bool dropoffSending = false;
+  double slideWidth = 1;
+  VelocityTracker? slideTracker;
+  late final AnimationController slideBack = AnimationController.unbounded(
+    vsync: this,
+  )..addListener(() {
+      setState(() {
+        slide = slideBack.value.clamp(0.0, 1.0);
+      });
+    });
+
+  @override
+  void dispose() {
+    slideBack.dispose();
+    super.dispose();
+  }
+
+  void releaseSlide(double value) {
+    if(value >= 1 || dropoffSending) {
+      return;
+    }
+    if(MediaQuery.disableAnimationsOf(context)) {
+      setState(() {
+        slide = 0;
+      });
+      return;
+    }
+    final fingerSpeed =
+        (slideTracker?.getVelocity().pixelsPerSecond.dx ?? 0) / slideWidth;
+    slideBack.value = value;
+    slideBack.animateWith(
+      SpringSimulation(_settleSpring, value, 0, fingerSpeed),
+    );
+  }
 
   Future<void> slideTo(EmergencyRequestState state, double value) async {
+    slideBack.stop();
     setState(() {
       slide = value;
     });
@@ -711,7 +808,7 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
           ),
           const SizedBox(height: AppSpacing.space3),
           Text(
-            'Location details',
+            'Details',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: AppSpacing.space2),
@@ -720,41 +817,15 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
               'No call on this ambulance.',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
-          if(call != null && !toHospital && !atDropoff) ...[
-            Text(
-              call.pickupAddress ?? 'The caller did not send an address.',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            Text(
-              '${call.emergencyDescription ?? 'Emergency'} · ${_peopleLabel(call.peopleCount)}',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            if((call.additionalDetails?.trim() ?? '').isNotEmpty)
+          if(call != null)
+            for(final line in _driverDetailLines(
+              call,
+              atHospital: toHospital || atDropoff,
+            ))
               Text(
-                call.additionalDetails!.trim(),
+                line,
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
-            Text(
-              call.callerPhone == null
-                  ? 'No caller phone was sent.'
-                  : 'Caller ${call.callerPhone}',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-          ],
-          if(call != null && (toHospital || atDropoff)) ...[
-            Text(
-              call.hospitalName ?? 'Hospital',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            Text(
-              call.hospitalAddress ?? 'The server did not attach a hospital address.',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            Text(
-              'Patient is on board · ${call.emergencyDescription ?? 'Emergency'}',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-          ],
           if(state.driverError != null) ...[
             const SizedBox(height: AppSpacing.space4),
             _ErrorNotice(message: state.driverError!),
@@ -783,14 +854,34 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
               'Dropped off',
               style: Theme.of(context).textTheme.labelSmall,
             ),
-            Slider(
-              value: slide,
-              label: 'Dropped off',
-              onChanged: busy
-                  ? null
-                  : (value) {
-                      slideTo(state, value);
-                    },
+            LayoutBuilder(
+              builder: (context, constraints) {
+                slideWidth = (constraints.maxWidth - 48).clamp(1.0, double.infinity);
+                return Listener(
+                  onPointerDown: (event) {
+                    slideBack.stop();
+                    slideTracker = VelocityTracker.withKind(event.kind)
+                      ..addPosition(event.timeStamp, event.position);
+                  },
+                  onPointerMove: (event) {
+                    slideTracker?.addPosition(event.timeStamp, event.position);
+                  },
+                  child: Slider(
+                    value: slide,
+                    label: 'Dropped off',
+                    onChanged: busy
+                        ? null
+                        : (value) {
+                            slideTo(state, value);
+                          },
+                    onChangeEnd: busy
+                        ? null
+                        : (value) {
+                            releaseSlide(value);
+                          },
+                  ),
+                );
+              },
             ),
             Text(
               'Slide to the end to confirm.',
@@ -1771,14 +1862,14 @@ class _EmergencyConfirmScreen extends StatelessWidget {
                 '${state.selectedDetail} · ${state.peopleNeedingHelp == 4 ? '4+' : state.peopleNeedingHelp} person${state.peopleNeedingHelp == 1 ? '' : 's'}',
             subtitle: state.additionalDetails == null ||
                     state.additionalDetails!.isEmpty
-                ? 'Included with this request.'
+                ? 'This goes with your request.'
                 : state.additionalDetails!,
             icon: Icons.medical_information_rounded,
           ),
           const SizedBox(height: AppSpacing.space3),
           _InfoCard(
             title: 'Simulated arrival',
-            subtitle: 'The backend receives a real request.',
+            subtitle: 'Dispatch gets a real request. Only the drive is simulated.',
             icon: Icons.timer_outlined,
           ),
           if(state.errorMessage != null) ...[
@@ -1825,13 +1916,13 @@ class _EmergencySearchScreen extends StatelessWidget {
             Text(
               'FINDING HELP NOW',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineLarge,
+              style: _largeTitle(context),
             ),
             const SizedBox(height: AppSpacing.space3),
             Text(
               state.isRequesting
-                  ? 'Looking for the nearest available ambulance.'
-                  : 'Waiting for the request result.',
+                  ? 'Looking for the nearest free ambulance.'
+                  : 'Waiting to hear back from dispatch.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyLarge
                   ?.copyWith(color: AppColors.muted),
@@ -1992,8 +2083,7 @@ class _EmergencyEnRouteScreen extends StatelessWidget {
           Text(
             '${state.remainingSeconds} seconds until arrival',
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.headlineMedium
-                ?.copyWith(color: AppColors.red),
+            style: _sectionTitle(context)?.copyWith(color: AppColors.red),
           ),
           if(state.hospitalError != null) ...[
             const SizedBox(height: AppSpacing.space4),
@@ -2036,12 +2126,11 @@ class _EmergencyApproachingScreen extends StatelessWidget {
                 const SizedBox(height: AppSpacing.space2),
                 Text(
                   'ARRIVING NOW',
-                  style: Theme.of(context).textTheme.headlineLarge
-                      ?.copyWith(color: AppColors.surface),
+                  style: _largeTitle(context)?.copyWith(color: AppColors.surface),
                 ),
                 const SizedBox(height: AppSpacing.space2),
                 Text(
-                  '${state.remainingSeconds} seconds remaining · be ready at your entrance',
+                  'Here in ${state.remainingSeconds} seconds. Wait at your entrance.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium
                       ?.copyWith(color: AppColors.surface),
@@ -2201,7 +2290,7 @@ class _EmergencyArrivedScreen extends StatelessWidget {
             Text(
               'Ambulance has arrived',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineLarge,
+              style: _largeTitle(context),
             ),
             const SizedBox(height: AppSpacing.space2),
             Text(
@@ -2262,7 +2351,7 @@ class _EmergencyCompleteScreen extends StatelessWidget {
             Text(
               'Request complete',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineLarge,
+              style: _largeTitle(context),
             ),
             const SizedBox(height: AppSpacing.space2),
             Text(
@@ -2675,6 +2764,20 @@ class _ServiceLocationScreenState extends State<_ServiceLocationScreen> {
     super.dispose();
   }
 
+  void _useHomeLocation() {
+    final state = context.read<EmergencyRequestState>();
+    final latitude = state.homeLatitude;
+    final longitude = state.homeLongitude;
+    final address = state.homeAddress;
+    if(latitude == null || longitude == null || address == null) {
+      setState(() {
+        _message = 'Set a location from the home address first.';
+      });
+      return;
+    }
+    _dropPin(state, latitude: latitude, longitude: longitude, address: address);
+  }
+
   Future<void> _useDeviceLocation() async {
     setState(() {
       _busy = true;
@@ -2851,6 +2954,11 @@ class _ServiceLocationScreenState extends State<_ServiceLocationScreen> {
           _ActionButton(
             label: 'Find my location',
             onPressed: _busy ? null : _useDeviceLocation,
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _SecondaryButton(
+            label: 'Use my current location',
+            onPressed: _busy ? null : _useHomeLocation,
           ),
           const SizedBox(height: AppSpacing.space4),
           TextField(
@@ -3612,12 +3720,105 @@ class _RequestsScreen extends StatefulWidget {
   State<_RequestsScreen> createState() => _RequestsScreenState();
 }
 
-class _RequestsScreenState extends State<_RequestsScreen> {
-  int? openedEntry;
+class _RequestsScreenState extends State<_RequestsScreen>
+    with SingleTickerProviderStateMixin {
+  bool showEmergency = true;
+  late final AnimationController swap = AnimationController.unbounded(
+    vsync: this,
+    value: 1,
+  );
+
+  @override
+  void dispose() {
+    swap.dispose();
+    super.dispose();
+  }
+
+  void choose(bool emergency) {
+    if(emergency == showEmergency) {
+      return;
+    }
+    setState(() {
+      showEmergency = emergency;
+    });
+    swap.value = 0;
+    swap.animateWith(SpringSimulation(_settleSpring, 0, 1, 0));
+  }
+
+  Widget half(BuildContext context, String label, bool emergency) {
+    final selected = showEmergency == emergency;
+    return Expanded(
+      child: _PressScale(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            choose(emergency);
+          },
+          child: Container(
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: selected ? AppColors.blue : AppColors.surface,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              border: Border.all(
+                color: selected ? AppColors.blue : AppColors.line,
+              ),
+            ),
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: selected ? AppColors.surface : AppColors.ink,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> emergencyCards(EmergencyRequestState state) {
+    return [
+      for(final request in state.emergencyRequests)
+        _InfoCard(
+          title: request.address ?? 'Emergency request',
+          subtitle: [
+            [
+              if(request.happened != null) request.happened!,
+              if(request.people != null) _peopleLabel(request.people),
+            ].join(' · '),
+            'Status: ${_requestStatusLabel(request.status)}',
+          ].where((line) => line.isNotEmpty).join('\n'),
+          icon: Icons.local_hospital_rounded,
+        ),
+    ];
+  }
+
+  List<Widget> domesticCards(EmergencyRequestState state) {
+    final booking = state.domesticBooking;
+    return [
+      if(booking != null && booking.finalTotal == null)
+        _InfoCard(
+          title: booking.specialisationName ?? state.domesticTrade,
+          subtitle: [
+            'Status: ${booking.status}',
+            if(booking.address.trim().isNotEmpty) booking.address.trim(),
+          ].join('\n'),
+          icon: Icons.handyman_rounded,
+        ),
+      for(final entry in state.domesticHistory)
+        _InfoCard(
+          title: entry.label,
+          subtitle: entry.owed,
+          icon: Icons.handyman_rounded,
+        ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
-    final history = context.watch<EmergencyRequestState>().domesticHistory;
+    final state = context.watch<EmergencyRequestState>();
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final cards = showEmergency ? emergencyCards(state) : domesticCards(state);
 
     return _FlowFrame(
       title: 'Requests',
@@ -3625,28 +3826,46 @@ class _RequestsScreenState extends State<_RequestsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if(history.isNotEmpty) ...[
-            Text('HISTORY', style: Theme.of(context).textTheme.labelSmall),
-            const SizedBox(height: AppSpacing.space2),
-          ],
-          for(var index = 0; index < history.length; index++) ...[
-            _ProfileRow(
-              label: history[index].label,
-              onPressed: () {
-                setState(() {
-                  openedEntry = index;
-                });
-              },
+          Row(
+            children: [
+              half(context, 'Emergency', true),
+              const SizedBox(width: AppSpacing.space2),
+              half(context, 'Domestic', false),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          AnimatedBuilder(
+            animation: swap,
+            builder: (context, child) {
+              if(reduceMotion) {
+                return Opacity(
+                  opacity: swap.value.clamp(0.0, 1.0),
+                  child: child,
+                );
+              }
+              return Transform.translate(
+                offset: Offset((1 - swap.value) * (showEmergency ? -24 : 24), 0),
+                child: child,
+              );
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if(cards.isEmpty)
+                  Text(
+                    showEmergency
+                        ? 'No emergency request yet.'
+                        : 'No domestic request yet.',
+                    style: Theme.of(context).textTheme.bodyLarge
+                        ?.copyWith(color: AppColors.muted),
+                  ),
+                for(final card in cards) ...[
+                  card,
+                  const SizedBox(height: AppSpacing.space3),
+                ],
+              ],
             ),
-            const SizedBox(height: AppSpacing.space2),
-          ],
-          if(openedEntry != null) ...[
-            const SizedBox(height: AppSpacing.space2),
-            Text(
-              history[openedEntry!].owed,
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-          ],
+          ),
         ],
       ),
     );
@@ -4651,7 +4870,7 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final backgroundColor = color ?? (emergency ? AppColors.red : AppColors.blue);
 
-    return SizedBox(
+    final button = SizedBox(
       height: emergency ? 56 : 48,
       child: ElevatedButton(
         onPressed: onPressed,
@@ -4666,6 +4885,10 @@ class _ActionButton extends StatelessWidget {
         child: Text(label),
       ),
     );
+    if(onPressed == null) {
+      return button;
+    }
+    return _PressScale(child: button);
   }
 }
 
@@ -4782,9 +5005,22 @@ class _InfoCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.space4),
       decoration: BoxDecoration(
-        color: highlighted ? AppColors.soft : AppColors.surface,
-        border: Border.all(color: highlighted ? AppColors.red : AppColors.line),
+        color: highlighted
+            ? AppColors.soft
+            : AppColors.surface.withValues(alpha: 0.88),
+        border: Border.all(
+          color: highlighted
+              ? AppColors.red
+              : AppColors.line.withValues(alpha: 0.6),
+        ),
         borderRadius: BorderRadius.circular(AppRadius.md),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1417212F),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -5086,7 +5322,7 @@ class _DemoNotice extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Text(
-        'Simulation mode only. For a real emergency, call 1122.',
+        'This is a simulation. In a real emergency, call 1122.',
         style: Theme.of(context).textTheme.bodyMedium
             ?.copyWith(color: AppColors.red, fontWeight: FontWeight.w700),
       ),
@@ -5237,38 +5473,49 @@ class _PressScale extends StatefulWidget {
   State<_PressScale> createState() => _PressScaleState();
 }
 
-class _PressScaleState extends State<_PressScale> {
-  var pressed = false;
+class _PressScaleState extends State<_PressScale>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController press = AnimationController.unbounded(
+    vsync: this,
+  );
 
-  void release() {
-    if(pressed) {
-      setState(() {
-        pressed = false;
-      });
-    }
+  void settle(double target) {
+    press.animateWith(
+      SpringSimulation(_pressSpring, press.value, target, press.velocity),
+    );
+  }
+
+  @override
+  void dispose() {
+    press.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if(context.findAncestorStateOfType<_PressScaleState>() != null) {
+      return widget.child;
+    }
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return Listener(
       onPointerDown: (_) {
-        if(!reduceMotion) {
-          setState(() {
-            pressed = true;
-          });
-        }
+        settle(1);
       },
       onPointerUp: (_) {
-        release();
+        settle(0);
       },
       onPointerCancel: (_) {
-        release();
+        settle(0);
       },
-      child: AnimatedScale(
-        scale: !reduceMotion && pressed ? 0.97 : 1,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
+      child: AnimatedBuilder(
+        animation: press,
+        builder: (context, child) {
+          final pressed = press.value.clamp(0.0, 1.0);
+          if(reduceMotion) {
+            return Opacity(opacity: 1 - (0.2 * pressed), child: child);
+          }
+          return Transform.scale(scale: 1 - (0.03 * pressed), child: child);
+        },
         child: widget.child,
       ),
     );

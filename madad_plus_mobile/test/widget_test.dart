@@ -74,6 +74,31 @@ void main() {
     );
   });
 
+  testWidgets('saved requests show after the app restarts', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'emergencyRequests':
+          '[{"id":"req-9","address":"Clifton Block 5","happened":"Accident",'
+          '"people":3,"status":"COMPLETED"}]',
+      'domesticHistory':
+          '[{"label":"Plumber · Completed","owed":"Amount owed: Rs. 2500"}]',
+    });
+    final session = testSession();
+    await reachHome(tester, session.state);
+    await pumpAsync(tester);
+
+    await tapText(tester, 'Requests');
+    expect(find.text('Clifton Block 5'), findsOneWidget);
+    expect(find.textContaining('Status: FINISHED'), findsOneWidget);
+    expect(find.text('No emergency request yet.'), findsNothing);
+
+    await tapText(tester, 'Domestic');
+    await tester.pumpAndSettle();
+    expect(find.text('Plumber · Completed'), findsOneWidget);
+    expect(find.text('Amount owed: Rs. 2500'), findsOneWidget);
+  });
+
   testWidgets('customer can reach the ambulance confirmation screen', (
     WidgetTester tester,
   ) async {
@@ -145,7 +170,8 @@ void main() {
     expect(find.text('Pickup'), findsOneWidget);
     expect(find.text('BUSY'), findsOneWidget);
     expect(find.text('Clifton Block 5'), findsOneWidget);
-    expect(find.text('Accident · 2 people'), findsOneWidget);
+    expect(find.text('2 people still waiting'), findsOneWidget);
+    expect(find.text('Accident'), findsOneWidget);
     expect(find.text('I am burnt'), findsOneWidget);
     expect(find.text('Caller +92 300 0000000'), findsOneWidget);
     expect(find.text('Chest pain, caller +92 300 1234567'), findsNothing);
@@ -158,7 +184,8 @@ void main() {
     await pumpAsync(tester);
 
     expect(find.text('To hospital'), findsOneWidget);
-    expect(find.text('Parklane Hospital'), findsOneWidget);
+    expect(find.text('Parklane Hospital, Clifton, Karachi'), findsOneWidget);
+    expect(find.text('Patient is on board'), findsOneWidget);
     expect(find.text('Reached the hospital'), findsOneWidget);
     expect(find.text('Mark as unavailable'), findsOneWidget);
     expect(find.text('Mark as available'), findsNothing);
@@ -538,6 +565,37 @@ void main() {
     expect(find.text('Finding a plumber'), findsNothing);
   });
 
+  testWidgets('a saved home drops the provider pin', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    await openProviderLocation(tester, session.state);
+    await tapText(tester, 'Use my current location');
+    expect(
+      find.text('Set a location from the home address first.'),
+      findsOneWidget,
+    );
+    expect(find.text('Where should we send the provider?'), findsOneWidget);
+    expect(session.state.domesticPinLatitude, isNull);
+
+    SharedPreferences.setMockInitialValues({
+      'homePlaces':
+          '[{"address":"Clifton Block 5","latitude":24.8138,"longitude":67.03}]',
+      'homeChosen': 'Clifton Block 5',
+    });
+    final saved = testSession();
+    await openProviderLocation(tester, saved.state);
+    await pumpAsync(tester);
+    await tapText(tester, 'Use my current location');
+    expect(saved.state.domesticPinLatitude, 24.8138);
+    expect(saved.state.domesticPinLongitude, 67.03);
+    expect(saved.state.domesticAddress, 'Clifton Block 5');
+    expect(
+      find.text('Set a location from the home address first.'),
+      findsNothing,
+    );
+  });
+
   testWidgets('a user books a plumber and accepts the repair total', (
     WidgetTester tester,
   ) async {
@@ -643,8 +701,12 @@ void main() {
     expect(find.text('How can we help?'), findsOneWidget);
 
     await tapText(tester, 'Requests');
-    await tapText(tester, 'Plumber · Completed');
+    expect(find.text('No emergency request yet.'), findsOneWidget);
+    await tapText(tester, 'Domestic');
+    await tester.pumpAndSettle();
+    expect(find.text('Plumber · Completed'), findsOneWidget);
     expect(find.text('Amount owed: Rs. 2500'), findsOneWidget);
+    expect(find.text('No domestic request yet.'), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(MyApp(requestState: providerSession));
@@ -1289,6 +1351,24 @@ Future<void> reachDriverCall(
   await pumpAsync(tester);
   await tester.tap(find.text('A-01 · Sara Khan'));
   await pumpAsync(tester);
+}
+
+Future<void> openProviderLocation(
+  WidgetTester tester,
+  EmergencyRequestState state,
+) async {
+  await reachHome(tester, state);
+  await tapText(tester, 'Services');
+  await tapText(tester, 'Plumber');
+  await pumpAsync(tester);
+  await tapText(tester, 'Karachi Plumbers');
+  await tapText(tester, 'Book plumber');
+  await tester.enterText(
+    find.widgetWithText(TextFormField, 'Describe your service problem'),
+    'Kitchen sink leak',
+  );
+  await tester.pump();
+  await tapText(tester, 'Continue');
 }
 
 Future<void> reachHome(
