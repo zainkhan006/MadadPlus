@@ -394,6 +394,10 @@ async function driveAmbulanceTo(ambulanceId, destination, durationMs, onComplete
 // request; called again after each leg lands, and no-ops when there is
 // nothing left to drive or no coordinates in the payload (a request
 // booked without a hospital simply ends at the pickup).
+function patientAboard(req) {
+  return req.phase === "TRANSFER" || req.status === "PICKED_UP" || req.status === "EN_ROUTE_HOSPITAL";
+}
+
 function syncRequestAnimation(req) {
   if (!req || !req.anim || req.anim.running) return;
   if (!req.ambulanceId || !ambulances[req.ambulanceId]) return;
@@ -402,7 +406,7 @@ function syncRequestAnimation(req) {
   let leg = null;
   let target = null;
 
-  if (req.phase === "TRANSFER" && req.hospital && !anim.hospitalDone) {
+  if (patientAboard(req) && req.hospital && !anim.hospitalDone) {
     anim.pickupDone = true; // patient is already aboard — don't drive back to the pickup
     leg = "hospital";
     target = req.hospital;
@@ -436,6 +440,12 @@ function syncRequestAnimation(req) {
   });
 }
 
+function serverPositionApplies(ambulanceId) {
+  if(animations[ambulanceId]) return false;
+  const amb = ambulances[ambulanceId];
+  return !(amb && amb.currentRequestId && requests[amb.currentRequestId]);
+}
+
 function driverLabel(amb) {
   return amb.driverName || "No driver assigned";
 }
@@ -445,13 +455,16 @@ function upsertAmbulanceMarker(amb) {
   const latlng = [amb.lat, amb.lng];
   const tooltip = `${driverLabel(amb)} — ${amb.label} — ${amb.status}`;
   if (ambulanceMarkers[amb.id]) {
-    ambulanceMarkers[amb.id].setLatLng(latlng);
-    ambulanceMarkers[amb.id].setIcon(ambulanceIcon(amb.status));
+    if (!animations[amb.id]) ambulanceMarkers[amb.id].setLatLng(latlng);
+    if (ambulanceMarkers[amb.id].iconStatus !== amb.status) {
+      ambulanceMarkers[amb.id].setIcon(ambulanceIcon(amb.status));
+    }
   } else {
     ambulanceMarkers[amb.id] = L.marker(latlng, { icon: ambulanceIcon(amb.status) })
       .bindTooltip(tooltip)
       .addTo(map);
   }
+  ambulanceMarkers[amb.id].iconStatus = amb.status;
   ambulanceMarkers[amb.id].setTooltipContent(tooltip);
 }
 
@@ -506,8 +519,8 @@ async function loadAmbulances() {
 // Periodic reconciliation for live tracking: driver phones push
 // ambulance.updated (position ticks while free AND on a call), but a
 // dropped socket would freeze the map. This re-reads the snapshot and
-// updates positions/status — never touching a unit mid-drive, where the
-// animation owns the marker until it lands.
+// updates positions/status. A unit on a booking keeps the animated
+// position until that booking ends, including the pause at the pickup.
 async function syncAmbulanceSnapshot() {
   try {
     const res = await fetch(`${BACKEND_URL}/api/v1/ambulances`);
@@ -516,7 +529,7 @@ async function syncAmbulanceSnapshot() {
     list.forEach((a) => {
       const amb = ambulances[a.id];
       if (!amb) return;
-      if (!animations[a.id]) {
+      if(serverPositionApplies(a.id)) {
         if (a.lat != null) amb.lat = Number(a.lat);
         if (a.lng != null) amb.lng = Number(a.lng);
       }
@@ -978,11 +991,12 @@ function trackRequest(payload) {
   const ambulanceId = payload.assignedAmbulance?.id || payload.ambulanceId || null;
   const previous = requests[payload.requestId];
 
-  // The payload carries the unit's authoritative position at assignment
-  // time — take it, unless a drive is already underway (that animation
-  // owns the position until it lands).
+  // The payload carries the unit's position at assignment time. Take it
+  // only when this unit first gets the request; later updates repeat the
+  // same depot point and would undo the drive already shown.
   const ambLocation = toPoint(payload.assignedAmbulance?.location);
-  if (ambulanceId && ambulances[ambulanceId] && ambLocation && !animations[ambulanceId]) {
+  const alreadyOnRequest = previous && previous.ambulanceId === ambulanceId;
+  if (ambulanceId && ambulances[ambulanceId] && ambLocation && !alreadyOnRequest && !animations[ambulanceId]) {
     ambulances[ambulanceId].lat = ambLocation.lat;
     ambulances[ambulanceId].lng = ambLocation.lng;
   }
@@ -1028,7 +1042,7 @@ function trackRequest(payload) {
     previous.anim.running = false;
     previous.anim.leg = null;
   }
-  if (req.anim.running && req.anim.leg === "pickup" && req.phase === "TRANSFER") {
+  if (req.anim.running && req.anim.leg === "pickup" && patientAboard(req)) {
     // The driver confirmed pickup while we were still driving there —
     // drop the pickup leg and send the unit on to the hospital instead.
     cancelAnimation(ambulanceId);
@@ -1103,8 +1117,10 @@ socket.on("ambulance.updated", (payload) => {
   const wasBusy = amb.status === STATUS.BUSY;
   const lastPosition = { lat: amb.lat, lng: amb.lng };
   if (payload.status) amb.status = normalizeStatus(payload.status);
-  if (payload.lat != null) amb.lat = Number(payload.lat);
-  if (payload.lng != null) amb.lng = Number(payload.lng);
+  if(serverPositionApplies(payload.id)) {
+    if (payload.lat != null) amb.lat = Number(payload.lat);
+    if (payload.lng != null) amb.lng = Number(payload.lng);
+  }
   if (payload.unavailableReason !== undefined) amb.reason = payload.unavailableReason;
   if (payload.driver !== undefined) {
     amb.driverId = payload.driver ? payload.driver.id : null;
