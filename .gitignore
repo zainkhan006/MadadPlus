@@ -50,3 +50,4 @@ node_modules/
 .env
 madad_plus_mobile/build/
 madad_plus_mobile/.dart_tool/
+madadplus-web/
