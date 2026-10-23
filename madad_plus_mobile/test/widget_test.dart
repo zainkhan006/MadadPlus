@@ -90,13 +90,17 @@ void main() {
 
     await tapText(tester, 'Requests');
     expect(find.text('Clifton Block 5'), findsOneWidget);
-    expect(find.textContaining('Status: FINISHED'), findsOneWidget);
+    expect(find.text('Accident'), findsOneWidget);
+    expect(find.text('3 people'), findsOneWidget);
+    expect(find.text('Finished'), findsOneWidget);
     expect(find.text('No emergency request yet.'), findsNothing);
 
     await tapText(tester, 'Domestic');
     await tester.pumpAndSettle();
-    expect(find.text('Plumber · Completed'), findsOneWidget);
+    expect(find.text('Plumber'), findsOneWidget);
+    expect(find.text('Completed'), findsOneWidget);
     expect(find.text('Amount owed: Rs. 2500'), findsOneWidget);
+    expect(find.text('Problem'), findsNothing);
   });
 
   testWidgets('customer can reach the ambulance confirmation screen', (
@@ -702,7 +706,12 @@ void main() {
     expect(find.text('No emergency request yet.'), findsOneWidget);
     await tapText(tester, 'Domestic');
     await tester.pumpAndSettle();
-    expect(find.text('Plumber · Completed'), findsOneWidget);
+    expect(find.text('Plumber'), findsOneWidget);
+    expect(find.text('Completed'), findsOneWidget);
+    expect(find.text('Pipe leak'), findsOneWidget);
+    expect(find.text('Water leak'), findsOneWidget);
+    expect(find.text('Kitchen sink leak'), findsOneWidget);
+    expect(find.text('Clifton Block 5'), findsOneWidget);
     expect(find.text('Amount owed: Rs. 2500'), findsOneWidget);
     expect(find.text('No domestic request yet.'), findsNothing);
 

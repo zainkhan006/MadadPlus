@@ -117,7 +117,14 @@ class EmergencyRequestState extends ChangeNotifier {
   String? settledCostRequestId;
   String? domesticNotice;
   String? amountOwed;
-  final List<({String label, String owed})> domesticHistory = [];
+  final List<({
+    String id,
+    String trade,
+    String status,
+    String issue,
+    String address,
+    String owed,
+  })> domesticHistory = [];
   final List<({
     String id,
     String? address,
@@ -606,6 +613,24 @@ class EmergencyRequestState extends ChangeNotifier {
         address: domesticAddress.trim(),
       );
       domesticBooking = booking;
+      final existing = domesticHistory.indexWhere(
+        (item) => item.id.isNotEmpty && item.id == booking.requestId,
+      );
+      final ongoing = (
+        id: booking.requestId,
+        trade: domesticTrade,
+        status: 'Ongoing',
+        issue: domesticRequestText,
+        address: domesticAddress.trim(),
+        owed: '',
+      );
+      if(existing >= 0) {
+        domesticHistory[existing] = ongoing;
+      }
+      else {
+        domesticHistory.add(ongoing);
+      }
+      saveDomesticHistory();
       domesticJob = DomesticJob.searching;
       _emergencySocketService.connectDomestic(
         requestId: booking.requestId,
@@ -653,10 +678,31 @@ class EmergencyRequestState extends ChangeNotifier {
     settledCostRequestId = booking.requestId;
     final accepted = booking.receiptStatus == 'ACCEPTED';
     amountOwed = 'Amount owed: Rs. ${booking.finalTotal!.toStringAsFixed(0)}';
-    domesticHistory.add((
-      label: '$domesticTrade · ${accepted ? 'Completed' : 'Inspection fee only'}',
-      owed: amountOwed!,
-    ));
+    final status = accepted ? 'Completed' : 'Inspection fee only';
+    final index = domesticHistory.indexWhere(
+      (item) => item.id.isNotEmpty && item.id == booking.requestId,
+    );
+    if(index >= 0) {
+      final current = domesticHistory[index];
+      domesticHistory[index] = (
+        id: current.id,
+        trade: current.trade,
+        status: status,
+        issue: current.issue,
+        address: current.address,
+        owed: amountOwed!,
+      );
+    }
+    else {
+      domesticHistory.add((
+        id: booking.requestId,
+        trade: domesticTrade,
+        status: status,
+        issue: domesticRequestText,
+        address: domesticAddress.trim(),
+        owed: amountOwed!,
+      ));
+    }
     saveDomesticHistory();
     domesticJob = accepted ? DomesticJob.complete : DomesticJob.refused;
     goTo(EmergencyScreen.domesticJob);
@@ -1622,6 +1668,45 @@ class EmergencyRequestState extends ChangeNotifier {
     saveEmergencyRequests();
   }
 
+  ({
+    String id,
+    String trade,
+    String status,
+    String issue,
+    String address,
+    String owed,
+  })? _domesticHistoryEntry(Object? item) {
+    if(item is! Map) {
+      return null;
+    }
+    final trade = item['trade'];
+    final status = item['status'];
+    if(trade is String && status is String) {
+      return (
+        id: item['id'] is String ? item['id'] as String : '',
+        trade: trade,
+        status: status,
+        issue: item['issue'] is String ? item['issue'] as String : '',
+        address: item['address'] is String ? item['address'] as String : '',
+        owed: item['owed'] is String ? item['owed'] as String : '',
+      );
+    }
+    final label = item['label'];
+    final owed = item['owed'];
+    if(label is! String || owed is! String) {
+      return null;
+    }
+    final splitAt = label.indexOf(' · ');
+    return (
+      id: '',
+      trade: splitAt < 0 ? label : label.substring(0, splitAt),
+      status: splitAt < 0 ? '' : label.substring(splitAt + ' · '.length),
+      issue: '',
+      address: '',
+      owed: owed,
+    );
+  }
+
   Future<void> loadRequestHistory() async {
     final prefs = await SharedPreferences.getInstance();
     final rawEmergency = prefs.getString(_emergencyRequestsKey);
@@ -1649,8 +1734,7 @@ class EmergencyRequestState extends ChangeNotifier {
     if(decodedDomestic is List) {
       final stored = [
         for(final item in decodedDomestic)
-          if(item is Map && item['label'] is String && item['owed'] is String)
-            (label: item['label'] as String, owed: item['owed'] as String),
+          if(_domesticHistoryEntry(item) case final entry?) entry,
       ];
       domesticHistory.insertAll(0, stored);
     }
@@ -1682,7 +1766,14 @@ class EmergencyRequestState extends ChangeNotifier {
       _domesticHistoryKey,
       jsonEncode([
         for(final entry in domesticHistory)
-          {'label': entry.label, 'owed': entry.owed},
+          {
+            'id': entry.id,
+            'trade': entry.trade,
+            'status': entry.status,
+            'issue': entry.issue,
+            'address': entry.address,
+            'owed': entry.owed,
+          },
       ]),
     );
   }

@@ -515,16 +515,6 @@ class _RegisterScreen extends StatelessWidget {
 const _pickupStatuses = {'ASSIGNED', 'EN_ROUTE', 'TRANSFER_EN_ROUTE'};
 const _hospitalStatuses = {'PICKED_UP', 'EN_ROUTE_HOSPITAL'};
 
-String _requestStatusLabel(String status) {
-  if(status == 'QUEUED') {
-    return 'WAITING';
-  }
-  if(status == 'COMPLETED') {
-    return 'FINISHED';
-  }
-  return 'ASSIGNED';
-}
-
 String _peopleLabel(int? count) {
   if(count == null) {
     return 'people count not sent';
@@ -3817,11 +3807,17 @@ class _RequestsScreenState extends State<_RequestsScreen>
             height: 44,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: selected ? AppColors.blue : AppColors.surface,
+              color: selected ? AppColors.blue : const Color(0x00000000),
               borderRadius: BorderRadius.circular(AppRadius.sm),
-              border: Border.all(
-                color: selected ? AppColors.blue : AppColors.line,
-              ),
+              boxShadow: selected
+                  ? const [
+                      BoxShadow(
+                        color: Color(0x3317365D),
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
+                      ),
+                    ]
+                  : null,
             ),
             child: Text(
               label,
@@ -3838,37 +3834,26 @@ class _RequestsScreenState extends State<_RequestsScreen>
   List<Widget> emergencyCards(EmergencyRequestState state) {
     return [
       for(final request in state.emergencyRequests)
-        _InfoCard(
-          title: request.address ?? 'Emergency request',
-          subtitle: [
-            [
-              if(request.happened != null) request.happened!,
-              if(request.people != null) _peopleLabel(request.people),
-            ].join(' · '),
-            'Status: ${_requestStatusLabel(request.status)}',
-          ].where((line) => line.isNotEmpty).join('\n'),
-          icon: Icons.local_hospital_rounded,
+        _EmergencyRequestCard(
+          title: request.happened?.trim().isNotEmpty == true
+              ? request.happened!.trim()
+              : 'Emergency request',
+          status: request.status,
+          people: request.people,
+          address: request.address ?? '',
         ),
     ];
   }
 
   List<Widget> domesticCards(EmergencyRequestState state) {
-    final booking = state.domesticBooking;
     return [
-      if(booking != null && booking.finalTotal == null)
-        _InfoCard(
-          title: booking.specialisationName ?? state.domesticTrade,
-          subtitle: [
-            'Status: ${booking.status}',
-            if(booking.address.trim().isNotEmpty) booking.address.trim(),
-          ].join('\n'),
-          icon: Icons.handyman_rounded,
-        ),
       for(final entry in state.domesticHistory)
-        _InfoCard(
-          title: entry.label,
-          subtitle: entry.owed,
-          icon: Icons.handyman_rounded,
+        _DomesticRequestCard(
+          trade: entry.trade,
+          status: entry.status,
+          issue: entry.issue,
+          address: entry.address,
+          owed: entry.owed,
         ),
     ];
   }
@@ -3885,12 +3870,18 @@ class _RequestsScreenState extends State<_RequestsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              half(context, 'Emergency', true),
-              const SizedBox(width: AppSpacing.space2),
-              half(context, 'Domestic', false),
-            ],
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: AppColors.soft,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: Row(
+              children: [
+                half(context, 'Emergency', true),
+                half(context, 'Domestic', false),
+              ],
+            ),
           ),
           const SizedBox(height: AppSpacing.space4),
           AnimatedBuilder(
@@ -4975,6 +4966,327 @@ class _ChoiceCard extends StatelessWidget {
         ],
       ),
       child: card,
+    );
+  }
+}
+
+class _EmergencyRequestCard extends StatelessWidget {
+  const _EmergencyRequestCard({
+    required this.title,
+    required this.status,
+    required this.people,
+    required this.address,
+  });
+
+  final String title;
+  final String status;
+  final int? people;
+  final String address;
+
+  @override
+  Widget build(BuildContext context) {
+    final finished = status == 'COMPLETED';
+    final waiting = status == 'QUEUED';
+    var statusWord = 'Assigned';
+    var statusColor = AppColors.line;
+    var statusFill = AppColors.soft;
+    var statusText = AppColors.ink;
+    var statusBorder = AppColors.line;
+    if(finished) {
+      statusWord = 'Finished';
+      statusColor = AppColors.red;
+      statusFill = AppColors.red;
+      statusText = AppColors.surface;
+      statusBorder = AppColors.red;
+    }
+    else if(waiting) {
+      statusWord = 'Waiting';
+      statusColor = AppColors.orange;
+      statusFill = AppColors.orange;
+      statusText = AppColors.surface;
+      statusBorder = AppColors.orange;
+    }
+    final facts = <(String, String)>[
+      if(people != null) ('People', _peopleLabel(people)),
+      if(address.trim().isNotEmpty) ('Address', address.trim()),
+    ];
+    final captionStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: AppColors.muted,
+      letterSpacing: 0.2,
+    );
+    final valueStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+      color: AppColors.ink,
+      height: 1.35,
+    );
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.line.withValues(alpha: 0.6)),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1417212F),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ColoredBox(
+              color: statusColor,
+              child: const SizedBox(width: 4),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.space4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppColors.blue.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                          ),
+                          child: const Icon(
+                            Icons.local_hospital_rounded,
+                            color: AppColors.blue,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.space3),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: Theme.of(context).textTheme.labelLarge
+                                ?.copyWith(letterSpacing: -0.2),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.space2),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.space2,
+                            vertical: AppSpacing.space1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: statusFill,
+                            border: Border.all(color: statusBorder),
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                          ),
+                          child: Text(
+                            statusWord,
+                            style: Theme.of(context).textTheme.labelLarge
+                                ?.copyWith(
+                                  color: statusText,
+                                  letterSpacing: 0.2,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    for(final fact in facts) ...[
+                      const SizedBox(height: AppSpacing.space3),
+                      Text(fact.$1, style: captionStyle),
+                      const SizedBox(height: AppSpacing.space1),
+                      Text(fact.$2, style: valueStyle),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DomesticRequestCard extends StatelessWidget {
+  const _DomesticRequestCard({
+    required this.trade,
+    required this.status,
+    required this.issue,
+    required this.address,
+    required this.owed,
+  });
+
+  final String trade;
+  final String status;
+  final String issue;
+  final String address;
+  final String owed;
+
+  @override
+  Widget build(BuildContext context) {
+    var statusColor = AppColors.line;
+    var statusFill = AppColors.soft;
+    var statusWord = AppColors.ink;
+    var statusBorder = AppColors.line;
+    if(status == 'Completed') {
+      statusColor = AppColors.green;
+      statusFill = AppColors.green;
+      statusWord = AppColors.surface;
+      statusBorder = AppColors.green;
+    }
+    else if(status == 'Ongoing') {
+      statusColor = AppColors.orange;
+      statusFill = AppColors.orange;
+      statusWord = AppColors.surface;
+      statusBorder = AppColors.orange;
+    }
+    final parts = [
+      for(final part in issue.split(' · '))
+        if(part.trim().isNotEmpty) part.trim(),
+    ];
+    final facts = <(String, String)>[];
+    if(parts.length == 1) {
+      facts.add(('Problem', parts[0]));
+    }
+    else if(parts.length == 2) {
+      facts.add(('Problem', parts[0]));
+      facts.add(('Details', parts[1]));
+    }
+    else if(parts.length >= 3) {
+      facts.add(('Problem', parts.first));
+      facts.add(('Details', parts[1]));
+      facts.add(('Note', parts.sublist(2).join(' ')));
+    }
+    final savedAddress = address.trim();
+    if(savedAddress.isNotEmpty) {
+      facts.add(('Address', savedAddress));
+    }
+    final captionStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: AppColors.muted,
+      letterSpacing: 0.2,
+    );
+    final valueStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+      color: AppColors.ink,
+      height: 1.35,
+    );
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.line.withValues(alpha: 0.6)),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1417212F),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ColoredBox(
+                  color: statusColor,
+                  child: const SizedBox(width: 4),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.space4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: AppColors.blue.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.sm,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.handyman_rounded,
+                                color: AppColors.blue,
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.space3),
+                            Expanded(
+                              child: Text(
+                                trade,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelLarge
+                                    ?.copyWith(letterSpacing: -0.2),
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.space2),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.space2,
+                                vertical: AppSpacing.space1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusFill,
+                                border: Border.all(color: statusBorder),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.sm,
+                                ),
+                              ),
+                              child: Text(
+                                status,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelLarge
+                                    ?.copyWith(
+                                      color: statusWord,
+                                      letterSpacing: 0.2,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        for(final fact in facts) ...[
+                          const SizedBox(height: AppSpacing.space3),
+                          Text(fact.$1, style: captionStyle),
+                          const SizedBox(height: AppSpacing.space1),
+                          Text(fact.$2, style: valueStyle),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if(owed.isNotEmpty)
+            ColoredBox(
+              color: statusColor.withValues(alpha: 0.12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.space4,
+                  vertical: AppSpacing.space3,
+                ),
+                child: Text(
+                  owed,
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
