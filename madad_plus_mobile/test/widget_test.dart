@@ -664,13 +664,11 @@ void main() {
 
     await tapText(tester, 'Accept job');
     await pumpAsync(tester);
-    await tapText(tester, 'Navigate to customer');
     await tapText(tester, 'Start job');
     await tapText(tester, 'Complete job');
     expect(find.text('Waiting for the repair total.'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField), '2000');
-    await tester.pump();
+    await fillPart(tester, 0, 'Pipe joint', '2000');
     expect(find.text('Accept'), findsNothing);
     expect(find.text('Refuse'), findsNothing);
 
@@ -775,14 +773,17 @@ void main() {
 
     await tapText(tester, 'Accept job');
     await pumpAsync(tester);
-    expect(find.text('Customer notified'), findsOneWidget);
-    expect(
-      find.text('Other providers no longer see this request.'),
-      findsOneWidget,
-    );
+    expect(find.text('Clifton'), findsOneWidget);
+    expect(find.text('Pipe leak'), findsOneWidget);
+    expect(find.text('Note'), findsNothing);
+    expect(find.text('Customer notified'), findsNothing);
 
-    await tapText(tester, 'Navigate to customer');
+    await tapText(tester, 'Start job');
     expect(find.text('Active job'), findsOneWidget);
+    expect(find.text('Provider notes'), findsOneWidget);
+    expect(find.text('Upload photos'), findsOneWidget);
+    expect(find.text('Complete job'), findsOneWidget);
+    expect(session.state.domesticJob, DomesticJob.inProgress);
 
     await tester.tap(find.byTooltip('Back'));
     await tester.pump();
@@ -794,6 +795,61 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Accept job'), findsNothing);
+  });
+
+  testWidgets('part prices add up and send only the parts total', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    session.api.seedJobs([
+      DomesticBooking(
+        requestId: 'job-1',
+        status: 'PENDING',
+        description: 'Other · ac',
+        address: 'Clifton',
+        userName: 'Test User',
+        providerName: 'Karachi Plumbers',
+        providerRating: 4.6,
+        inspectionFee: 2500,
+        specialisationName: 'Electrician',
+      ),
+    ]);
+    await reachSignIn(tester, session.state);
+    await tapText(tester, 'Sign in as provider');
+    await tapText(tester, 'VERIFY');
+    await pumpAsync(tester);
+    await tapText(tester, 'Karachi Plumbers · Plumber');
+    await pumpAsync(tester);
+    await tapText(tester, 'Other · ac');
+    await tapText(tester, 'Accept job');
+    await pumpAsync(tester);
+
+    expect(find.text('Other'), findsOneWidget);
+    expect(find.text('ac'), findsOneWidget);
+
+    await tapText(tester, 'Start job');
+    await tapText(tester, 'Complete job');
+    expect(find.text('Repair total'), findsNothing);
+    expect(find.text('Inspection fee: Rs. 2500'), findsOneWidget);
+    final feeTop = tester.getTopLeft(find.text('Inspection fee: Rs. 2500')).dy;
+    final rowTop = tester
+        .getTopLeft(find.widgetWithText(TextField, 'Component').first)
+        .dy;
+    expect(feeTop < rowTop, isTrue);
+
+    await fillPart(tester, 0, 'Capacitor', '100');
+    await tester.enterText(find.widgetWithText(TextField, 'Component').at(1), 'Fan');
+    await tester.pump();
+    expect(find.text('Submit'), findsNothing);
+
+    await tester.enterText(find.widgetWithText(TextField, 'Price').at(1), '250');
+    await tester.pump();
+    expect(find.text('Parts total: Rs. 350'), findsOneWidget);
+    expect(find.text('Final total: Rs. 2850'), findsOneWidget);
+
+    await tapText(tester, 'Submit');
+    await pumpAsync(tester);
+    expect(session.api.jobs.first.quotedTotal, 350);
   });
 
   testWidgets('refusing the repair total leaves only the inspection fee', (
@@ -839,14 +895,12 @@ void main() {
     await tapText(tester, 'Pipe leak · Water leak · Kitchen sink leak');
     await tapText(tester, 'Accept job');
     await pumpAsync(tester);
-    await tapText(tester, 'Navigate to customer');
 
     expect(find.text('Complete job'), findsNothing);
 
     await tapText(tester, 'Start job');
     await tapText(tester, 'Complete job');
-    await tester.enterText(find.byType(TextField), '1500');
-    await tester.pump();
+    await fillPart(tester, 0, 'Pipe joint', '1500');
     await tapText(tester, 'Submit');
     await pumpAsync(tester);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
@@ -1351,6 +1405,20 @@ Future<void> reachDriverCall(
   await pumpAsync(tester);
   await tester.tap(find.text('A-01 · Sara Khan'));
   await pumpAsync(tester);
+}
+
+Future<void> fillPart(
+  WidgetTester tester,
+  int row,
+  String component,
+  String price,
+) async {
+  await tester.enterText(
+    find.widgetWithText(TextField, 'Component').at(row),
+    component,
+  );
+  await tester.enterText(find.widgetWithText(TextField, 'Price').at(row), price);
+  await tester.pump();
 }
 
 Future<void> openProviderLocation(

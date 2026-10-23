@@ -3572,18 +3572,34 @@ class _CostReviewScreen extends StatefulWidget {
 }
 
 class _CostReviewScreenState extends State<_CostReviewScreen> {
-  final repairTotal = TextEditingController();
+  final components = List.generate(3, (_) => TextEditingController());
+  final prices = List.generate(3, (_) => TextEditingController());
 
   @override
   void dispose() {
-    repairTotal.dispose();
+    for(final controller in [...components, ...prices]) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
-    final typedTotal = repairTotal.text.trim();
+    final rows = [
+      for(var i = 0; i < 3; i++)
+        (name: components[i].text.trim(), price: prices[i].text.trim()),
+    ];
+    final partsTotal = rows.fold<int>(
+      0,
+      (sum, row) => sum + (int.tryParse(row.price) ?? 0),
+    );
+    final anyComplete = rows.any(
+      (row) => row.name.isNotEmpty && row.price.isNotEmpty,
+    );
+    final anyHalf = rows.any(
+      (row) => row.name.isEmpty != row.price.isEmpty,
+    );
     final provider = state.costFromProvider;
     final decided = provider && state.amountOwed != null;
     final showField = provider && !state.costWaiting && !decided;
@@ -3602,8 +3618,9 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
     final feeText = feeNumber != null
         ? 'Rs. ${feeNumber.toStringAsFixed(0)}'
         : state.inspectionFeeText;
+    final feeValue = feeNumber ?? state.currentInspectionFee;
     final shownTotal = provider
-        ? (typedTotal.isEmpty ? null : typedTotal)
+        ? (anyComplete ? '$partsTotal' : null)
         : quoted?.toStringAsFixed(0);
 
     return _FlowFrame(
@@ -3619,18 +3636,9 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
           ),
           const SizedBox(height: AppSpacing.space4),
           if(showField)
-            TextField(
-              controller: repairTotal,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              onChanged: (_) {
-                setState(() {});
-              },
-              decoration: const InputDecoration(
-                labelText: 'Repair total',
-                helperText: 'This amount does not include the inspection fee.',
-                border: OutlineInputBorder(),
-              ),
+            Text(
+              'This amount does not include the inspection fee.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           if(!showField && shownTotal != null)
             Text(
@@ -3649,13 +3657,64 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
               style: Theme.of(context).textTheme.labelLarge,
             ),
           ],
-          if(showField && typedTotal.isEmpty) ...[
+          if(showField && !anyComplete) ...[
             const SizedBox(height: AppSpacing.space2),
             Text(
               'Waiting for the repair total.',
               style: Theme.of(context).textTheme.bodyLarge
                   ?.copyWith(color: AppColors.muted),
             ),
+          ],
+          if(showField) ...[
+            for(var i = 0; i < 3; i++) ...[
+              const SizedBox(height: AppSpacing.space3),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: components[i],
+                      onChanged: (_) {
+                        setState(() {});
+                      },
+                      decoration: const InputDecoration(
+                        labelText: 'Component',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.space3),
+                  Expanded(
+                    child: TextField(
+                      controller: prices[i],
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      onChanged: (_) {
+                        setState(() {});
+                      },
+                      decoration: const InputDecoration(
+                        labelText: 'Price',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: AppSpacing.space3),
+            Text(
+              'Parts total: Rs. $partsTotal',
+              textAlign: TextAlign.end,
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            if(feeValue != null) ...[
+              const SizedBox(height: AppSpacing.space2),
+              Text(
+                'Final total: Rs. ${(partsTotal + feeValue).toStringAsFixed(0)}',
+                textAlign: TextAlign.end,
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+            ],
           ],
           if(decided) ...[
             const SizedBox(height: AppSpacing.space3),
@@ -3674,12 +3733,12 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
           const SizedBox(height: AppSpacing.space5),
           if(provider && state.costWaiting)
             const Center(child: CircularProgressIndicator()),
-          if(showField && typedTotal.isNotEmpty) ...[
+          if(showField && anyComplete && !anyHalf) ...[
             _ActionButton(
               label: 'Submit',
               color: AppColors.green,
               onPressed: () {
-                state.submitRepairTotal(typedTotal);
+                state.submitRepairTotal('$partsTotal');
               },
             ),
             const SizedBox(height: AppSpacing.space3),
@@ -4399,57 +4458,43 @@ class _ProviderAcceptedScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
+    final job = state.activeJob;
+    final pieces = job?.description.split(' · ') ?? const <String>[];
+    final note = pieces.skip(1).join(' · ');
 
     return _FlowFrame(
       title: 'Job accepted',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: AppSpacing.space5),
-          const Icon(
-            Icons.check_circle_rounded,
-            color: AppColors.green,
-            size: 52,
+          _InfoCard(
+            title: 'Address',
+            subtitle: job?.address ?? 'This job is no longer on this phone.',
+            icon: Icons.location_on_rounded,
           ),
-          const SizedBox(height: AppSpacing.space3),
-          Text(
-            'Customer notified',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.headlineLarge,
-          ),
-          const SizedBox(height: AppSpacing.space2),
-          Text(
-            "Start navigating when you're ready.",
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: AppColors.muted),
-          ),
-          const SizedBox(height: AppSpacing.space3),
-          Text(
-            'Other providers no longer see this request.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-          if(state.domesticNotice != null) ...[
+          if(pieces.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.space3),
-            Text(
-              state.domesticNotice!,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyLarge,
+            _InfoCard(
+              title: 'Problem',
+              subtitle: pieces.first,
+              icon: Icons.description_outlined,
+            ),
+          ],
+          if(note.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _InfoCard(
+              title: 'Note',
+              subtitle: note,
+              icon: Icons.notes_rounded,
             ),
           ],
           const SizedBox(height: AppSpacing.space5),
           _ActionButton(
-            label: 'Navigate to customer',
+            label: 'Start job',
+            color: AppColors.green,
             onPressed: () {
+              state.startProviderWork();
               state.goTo(EmergencyScreen.providerJob);
-            },
-          ),
-          const SizedBox(height: AppSpacing.space3),
-          _SecondaryButton(
-            label: 'Call customer',
-            onPressed: () {
-              state.showDomesticNotice('No call was placed.');
             },
           ),
         ],
@@ -4466,9 +4511,6 @@ class _ProviderJobScreen extends StatefulWidget {
 }
 
 class _ProviderJobScreenState extends State<_ProviderJobScreen> {
-  bool showingMap = false;
-  bool photoAttached = false;
-
   @override
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
@@ -4506,9 +4548,6 @@ class _ProviderJobScreenState extends State<_ProviderJobScreen> {
         ),
       );
     }
-    final job = state.activeJob;
-    final started = state.domesticJob == DomesticJob.inProgress;
-
     return _FlowFrame(
       title: 'Active job',
       onBack: () {
@@ -4517,43 +4556,6 @@ class _ProviderJobScreenState extends State<_ProviderJobScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _InfoCard(
-            title: job?.specialisationName ?? 'Job',
-            subtitle: job == null
-                ? 'This job is no longer on this phone.'
-                : '${job.userName ?? 'Customer'} · ${job.address}',
-            icon: Icons.handyman_rounded,
-          ),
-          if(job != null) ...[
-            const SizedBox(height: AppSpacing.space3),
-            _InfoCard(
-              title: 'Problem',
-              subtitle: job.description,
-              icon: Icons.description_outlined,
-            ),
-          ],
-          const SizedBox(height: AppSpacing.space3),
-          _ActionButton(
-            label: 'Navigate to customer',
-            onPressed: () {
-              setState(() {
-                showingMap = true;
-              });
-            },
-          ),
-          if(showingMap) ...[
-            const SizedBox(height: AppSpacing.space3),
-            const _MapBlock(),
-          ],
-          if(!started) ...[
-            const SizedBox(height: AppSpacing.space3),
-            _ActionButton(
-              label: 'Start job',
-              color: AppColors.green,
-              onPressed: state.startProviderWork,
-            ),
-          ],
-          const SizedBox(height: AppSpacing.space3),
           const TextField(
             minLines: 2,
             maxLines: 3,
@@ -4566,26 +4568,16 @@ class _ProviderJobScreenState extends State<_ProviderJobScreen> {
           const SizedBox(height: AppSpacing.space3),
           _SecondaryButton(
             label: 'Upload photos',
+            onPressed: () {},
+          ),
+          const SizedBox(height: AppSpacing.space5),
+          _ActionButton(
+            label: 'Complete job',
+            color: AppColors.green,
             onPressed: () {
-              setState(() {
-                photoAttached = true;
-              });
+              state.openCostReview(fromProvider: true);
             },
           ),
-          if(photoAttached) ...[
-            const SizedBox(height: AppSpacing.space2),
-            Text('Photo attached.', style: Theme.of(context).textTheme.bodyLarge),
-          ],
-          if(started) ...[
-            const SizedBox(height: AppSpacing.space5),
-            _ActionButton(
-              label: 'Complete job',
-              color: AppColors.green,
-              onPressed: () {
-                state.openCostReview(fromProvider: true);
-              },
-            ),
-          ],
         ],
       ),
     );
