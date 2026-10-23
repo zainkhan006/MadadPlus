@@ -503,13 +503,34 @@ class EmergencyRequestState extends ChangeNotifier {
     notifyListeners();
   }
 
+  ProviderRow _carpenterInPlaceOfAc(ProviderRow row) {
+    final trade = row.specialisationName?.toLowerCase() ?? '';
+    final name = row.name.toLowerCase();
+    final isAc = trade == 'ac technician' || name.contains('coolcare');
+    if(!isAc) {
+      return row;
+    }
+    return ProviderRow(
+      id: row.id,
+      name: 'City Carpenters',
+      status: row.status,
+      rating: row.rating,
+      inspectionFee: row.inspectionFee,
+      specialisationId: row.specialisationId,
+      specialisationName: 'Carpenter',
+    );
+  }
+
   Future<void> loadProviders() async {
     providersLoading = true;
     providersError = null;
     notifyListeners();
 
     try {
-      providers = await _emergencyService.listProviders();
+      providers = [
+        for(final row in await _emergencyService.listProviders())
+          _carpenterInPlaceOfAc(row),
+      ];
     } on ApiException catch (error) {
       providersError = error.message;
     } on TimeoutException {

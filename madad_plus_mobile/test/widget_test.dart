@@ -99,7 +99,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Plumber'), findsOneWidget);
     expect(find.text('Completed'), findsOneWidget);
-    expect(find.text('Amount owed: Rs. 2500'), findsOneWidget);
+    expect(find.text('Amount owed'), findsOneWidget);
+    expect(find.text('Rs. 2500'), findsOneWidget);
     expect(find.text('Problem'), findsNothing);
   });
 
@@ -516,10 +517,12 @@ void main() {
     expect(find.text('Hal Jordan'), findsOneWidget);
     expect(find.byIcon(Icons.person), findsNWidgets(2));
     expect(find.text('Saved addresses'), findsOneWidget);
-    expect(find.text('Notification settings'), findsOneWidget);
-    expect(find.text('Language · English'), findsOneWidget);
-    expect(find.text('Driver portal'), findsOneWidget);
-    expect(find.text('Switch to provider mode'), findsOneWidget);
+    expect(find.text('Language'), findsOneWidget);
+    expect(find.text('English'), findsOneWidget);
+    expect(find.text('Notification settings'), findsNothing);
+    expect(find.text('Language · English'), findsNothing);
+    expect(find.text('Driver portal'), findsNothing);
+    expect(find.text('Switch to provider mode'), findsNothing);
     expect(find.text('Dispatcher demo'), findsNothing);
     expect(find.text('Admin demo'), findsNothing);
 
@@ -712,7 +715,8 @@ void main() {
     expect(find.text('Water leak'), findsOneWidget);
     expect(find.text('Kitchen sink leak'), findsOneWidget);
     expect(find.text('Clifton Block 5'), findsOneWidget);
-    expect(find.text('Amount owed: Rs. 2500'), findsOneWidget);
+    expect(find.text('Amount owed'), findsOneWidget);
+    expect(find.text('Rs. 2500'), findsOneWidget);
     expect(find.text('No domestic request yet.'), findsNothing);
 
     await tester.pumpWidget(const SizedBox());

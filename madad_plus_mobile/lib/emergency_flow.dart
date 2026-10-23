@@ -955,7 +955,7 @@ class _HomeScreen extends StatelessWidget {
               icon: Icons.search,
               title: 'Find a service provider',
               subtitle:
-                  'Plumber, electrician, AC technician, mechanic, and more',
+                  'Plumber, electrician, or carpenter.',
               color: AppColors.green,
               onTap: () {
                 state.goTo(EmergencyScreen.services);
@@ -2380,6 +2380,7 @@ class _ProfileScreen extends StatelessWidget {
     return _FlowFrame(
       title: 'Profile',
       tab: _UserTab.profile,
+      fill: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -2401,28 +2402,118 @@ class _ProfileScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineMedium,
           ),
           const SizedBox(height: AppSpacing.space5),
-          const _ProfileRow(label: 'Saved addresses'),
-          const SizedBox(height: AppSpacing.space2),
-          const _ProfileRow(label: 'Notification settings'),
-          const SizedBox(height: AppSpacing.space2),
-          const _ProfileRow(label: 'Language · English'),
-          const SizedBox(height: AppSpacing.space2),
-          _ProfileRow(
-            label: 'Driver portal',
+          const _ProfileMenu(),
+          const Spacer(),
+          _ActionButton(
+            label: 'Sign out',
             onPressed: () {
-              context.read<EmergencyRequestState>().openDriverPortal();
-            },
-          ),
-          const SizedBox(height: AppSpacing.space2),
-          _ProfileRow(
-            label: 'Switch to provider mode',
-            onPressed: () {
-              context.read<EmergencyRequestState>().startProviderMode(
-                fromProfile: true,
-              );
+              context.read<EmergencyRequestState>().goTo(EmergencyScreen.login);
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ProfileMenu extends StatelessWidget {
+  const _ProfileMenu();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.line),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1417212F),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: const Column(
+        children: [
+          _ProfileMenuRow(
+            icon: Icons.location_on_rounded,
+            label: 'Saved addresses',
+          ),
+          Divider(height: 1, thickness: 1, color: AppColors.line),
+          _ProfileMenuRow(
+            icon: Icons.language_rounded,
+            label: 'Language',
+            detail: 'English',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileMenuRow extends StatelessWidget {
+  const _ProfileMenuRow({
+    required this.icon,
+    required this.label,
+    this.detail,
+  });
+
+  final IconData icon;
+  final String label;
+  final String? detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return _PressScale(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 56),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.space3,
+            vertical: AppSpacing.space2,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.blue.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Icon(icon, color: AppColors.blue),
+              ),
+              const SizedBox(width: AppSpacing.space3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    if(detail != null)
+                      Text(
+                        detail!,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppColors.muted,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Text(
+                '›',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: AppColors.muted,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -5164,6 +5255,17 @@ class _DomesticRequestCard extends StatelessWidget {
     if(savedAddress.isNotEmpty) {
       facts.add(('Address', savedAddress));
     }
+    final savedOwed = owed.trim();
+    const owedPrefix = 'Amount owed: ';
+    if(savedOwed.startsWith(owedPrefix)) {
+      final amount = savedOwed.substring(owedPrefix.length).trim();
+      if(amount.isNotEmpty) {
+        facts.add(('Amount owed', amount));
+      }
+    }
+    else if(savedOwed.isNotEmpty) {
+      facts.add(('Amount owed', savedOwed));
+    }
     final captionStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
       color: AppColors.muted,
       letterSpacing: 0.2,
@@ -5187,105 +5289,78 @@ class _DomesticRequestCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ColoredBox(
-                  color: statusColor,
-                  child: const SizedBox(width: 4),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.space4),
-                    child: Column(
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ColoredBox(
+              color: statusColor,
+              child: const SizedBox(width: 4),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.space4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: AppColors.blue.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(
-                                  AppRadius.sm,
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.handyman_rounded,
-                                color: AppColors.blue,
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.space3),
-                            Expanded(
-                              child: Text(
-                                trade,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelLarge
-                                    ?.copyWith(letterSpacing: -0.2),
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.space2),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.space2,
-                                vertical: AppSpacing.space1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: statusFill,
-                                border: Border.all(color: statusBorder),
-                                borderRadius: BorderRadius.circular(
-                                  AppRadius.sm,
-                                ),
-                              ),
-                              child: Text(
-                                status,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelLarge
-                                    ?.copyWith(
-                                      color: statusWord,
-                                      letterSpacing: 0.2,
-                                    ),
-                              ),
-                            ),
-                          ],
+                        Container(
+                          width: 40,
+                          height: 40,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppColors.blue.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                          ),
+                          child: const Icon(
+                            Icons.handyman_rounded,
+                            color: AppColors.blue,
+                          ),
                         ),
-                        for(final fact in facts) ...[
-                          const SizedBox(height: AppSpacing.space3),
-                          Text(fact.$1, style: captionStyle),
-                          const SizedBox(height: AppSpacing.space1),
-                          Text(fact.$2, style: valueStyle),
-                        ],
+                        const SizedBox(width: AppSpacing.space3),
+                        Expanded(
+                          child: Text(
+                            trade,
+                            style: Theme.of(context).textTheme.labelLarge
+                                ?.copyWith(letterSpacing: -0.2),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.space2),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.space2,
+                            vertical: AppSpacing.space1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: statusFill,
+                            border: Border.all(color: statusBorder),
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                          ),
+                          child: Text(
+                            status,
+                            style: Theme.of(context).textTheme.labelLarge
+                                ?.copyWith(
+                                  color: statusWord,
+                                  letterSpacing: 0.2,
+                                ),
+                          ),
+                        ),
                       ],
                     ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if(owed.isNotEmpty)
-            ColoredBox(
-              color: statusColor.withValues(alpha: 0.12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.space4,
-                  vertical: AppSpacing.space3,
-                ),
-                child: Text(
-                  owed,
-                  style: Theme.of(context).textTheme.labelLarge,
+                    for(final fact in facts) ...[
+                      const SizedBox(height: AppSpacing.space3),
+                      Text(fact.$1, style: captionStyle),
+                      const SizedBox(height: AppSpacing.space1),
+                      Text(fact.$2, style: valueStyle),
+                    ],
+                  ],
                 ),
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
