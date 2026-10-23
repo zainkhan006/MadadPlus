@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Madad+ &middot; Dispatcher</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- Login screen — NOT connected to real accounts yet. Any input logs in.
+     Swap this for a real check once Ibad's backend has dispatcher auth. -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <div class="login-card__head">
+      <div class="login-card__brand">Madad+</div>
+      <p class="login-card__sub">Dispatcher sign in</p>
+    </div>
+    <div class="login-card__body">
+
+    <label for="loginOrg">Organization / branch</label>
+    <select id="loginOrg">
+      <option>City Emergency Services, Karachi</option>
+      <option>Edhi Foundation, Karachi</option>
+      <option>Al-Khidmat Ambulance, Karachi</option>
+    </select>
+
+    <label for="loginUser">Username</label>
+    <input type="text" id="loginUser" placeholder="dispatcher01" autocomplete="username" />
+
+    <label for="loginPass">Password</label>
+    <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password" />
+
+    <button class="btn btn--primary btn--full" id="loginSubmit">Log in</button>
+    <p class="login-card__note">Any username and password will sign you in. Account checks start once sign-in is connected.</p>
+    </div>
+  </div>
+</div>
+
+<div class="app">
+
+  <header class="topbar">
+    <div class="topbar__brand">
+      <span class="topbar__mark">Madad+</span>
+      <span class="topbar__divider">&middot;</span>
+      <span class="topbar__org" id="orgName">City Emergency Services</span>
+    </div>
+    <div class="topbar__right">
+      <div class="topbar__status" id="connectionStatus" data-state="connecting">
+        <span class="status-dot"></span>
+        <span class="topbar__status-text" id="statusText">Connecting&hellip;</span>
+      </div>
+      <button class="icon-btn" id="settingsOpenBtn" title="Settings" aria-label="Settings">&#9881;</button>
+    </div>
+  </header>
+
+  <main class="console">
+
+    <section class="map-pane">
+      <div id="map"></div>
+      <div class="map-pane__legend">
+        <span class="legend-item"><i class="legend-dot legend-dot--free"></i>Free</span>
+        <span class="legend-item"><i class="legend-dot legend-dot--busy"></i>Busy</span>
+        <span class="legend-item"><i class="legend-dot legend-dot--unavailable"></i>Unavailable</span>
+        <span class="legend-item"><i class="legend-dot legend-dot--hospital"></i>Hospital</span>
+        <span class="legend-item"><i class="legend-dot legend-dot--request"></i>Incoming request</span>
+        <span class="legend-item"><i class="legend-line"></i>Unit route</span>
+      </div>
+    </section>
+
+    <aside class="board-pane">
+
+      <div class="tabs" id="tabs">
+        <button class="tab tab--free is-active" data-tab="FREE">
+          Free <span class="tab__count" id="countFree">0</span>
+        </button>
+        <button class="tab tab--busy" data-tab="BUSY">
+          Busy <span class="tab__count" id="countBusy">0</span>
+        </button>
+        <button class="tab tab--unavailable" data-tab="UNAVAILABLE">
+          Unavailable <span class="tab__count" id="countUnavailable">0</span>
+        </button>
+      </div>
+
+      <div class="board" id="board">
+        <ul class="board-list" id="listFree"></ul>
+        <ul class="board-list is-hidden" id="listBusy"></ul>
+        <ul class="board-list is-hidden" id="listUnavailable"></ul>
+      </div>
+
+    </aside>
+
+  </main>
+
+</div>
+
+<!-- Reassign modal -->
+<div class="modal" id="reassignModal">
+  <div class="modal__card">
+    <h2>Reassign booking</h2>
+    <p class="modal__sub" id="reassignSub"></p>
+    <ul class="modal__list" id="reassignList"></ul>
+    <button class="modal__close" id="reassignClose">Cancel</button>
+  </div>
+</div>
+
+<!-- Settings modal — ambulance/driver management is wired to the real
+     backend. The endpoints don't exist yet, so actions surface the
+     server's error until Ibad ships them. See app.js for the contract. -->
+<div class="modal" id="settingsModal">
+  <div class="modal__card modal__card--wide">
+    <div class="modal__header">
+      <h2>Settings</h2>
+      <button class="modal__x" id="settingsClose" aria-label="Close">&times;</button>
+    </div>
+
+    <p class="settings-note" id="settingsStatus"></p>
+
+    <section class="settings-section">
+      <h3>Dispatcher credentials</h3>
+      <label for="settingsUserId">User ID</label>
+      <input type="text" id="settingsUserId" placeholder="dispatcher01" />
+      <label for="settingsPassword">New password</label>
+      <input type="password" id="settingsPassword" placeholder="••••••••" />
+      <button class="btn btn--free" id="settingsSaveCreds">Save credentials</button>
+    </section>
+
+    <section class="settings-section">
+      <h3>Ambulances</h3>
+      <ul class="settings-list" id="settingsAmbulanceList"></ul>
+      <div class="settings-add-row">
+        <input type="text" id="newAmbLabel" placeholder="Label, e.g. A-06" />
+        <button class="btn" id="addAmbulanceBtn">Add ambulance</button>
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <h3>Drivers</h3>
+      <ul class="settings-list" id="settingsDriverList"></ul>
+      <div class="settings-add-row">
+        <input type="text" id="newDriverName" placeholder="Driver name" />
+        <input type="text" id="newDriverPhone" placeholder="Phone" />
+        <button class="btn" id="addDriverBtn">Add driver</button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- Leaflet JS (OpenStreetMap) — must load before app.js, which uses the L global -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<!-- Socket.IO client -->
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+<!-- App logic -->
+<script src="app.js"></script>
+
+</body>
+</html>

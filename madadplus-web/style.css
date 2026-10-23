@@ -1,0 +1,996 @@
+:root {
+  --bg: #f4f5f7;
+  --bg-panel: #ffffff;
+  --bg-panel-alt: #f0f2f5;
+  --bg-card: #ffffff;
+  --border: #dfe3e8;
+  --text-primary: #171d26;
+  --text-secondary: #5b6472;
+  --text-tertiary: #8b96a5;
+  --shadow-sm: 0 1px 2px rgba(23, 29, 38, 0.06), 0 1px 3px rgba(23, 29, 38, 0.08);
+
+  --accent-critical: #dc2626;
+  --status-free: #16a34a;
+  --status-busy: #b45309;
+  --status-unavailable: #dc2626;
+
+  /* Marker fill colors stay saturated regardless of theme, for contrast against the map. */
+  --marker-free: #22c55e;
+  --marker-busy: #f59e0b;
+  --marker-unavailable: #ef4444;
+
+  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-data: ui-monospace, "SF Mono", "Cascadia Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input, select {
+  font-family: inherit;
+}
+
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Login screen ---- */
+
+.login-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #2a261f;
+  background-image:
+    radial-gradient(ellipse 62% 56% at 50% 46%, rgba(22, 20, 17, 0.42) 0%, rgba(22, 20, 17, 0) 70%),
+    url("dispatch-plot.svg");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.login-screen.is-hidden {
+  display: none;
+}
+
+.login-card {
+  width: min(380px, 90vw);
+  background: #fffdf8;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.4),
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 22px 44px rgba(8, 40, 24, 0.34);
+}
+
+.login-card__head {
+  padding: 24px;
+  background: #0f6b45;
+  color: #ffffff;
+}
+
+.login-card__brand {
+  font-weight: 700;
+  font-size: 28px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.login-card__sub {
+  font-size: 15px;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  color: rgba(255, 255, 255, 0.88);
+  margin: 6px 0 0;
+}
+
+.login-card__body {
+  padding: 24px;
+}
+
+.login-card label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #0f4d34;
+  margin: 16px 0 8px;
+}
+
+.login-card label:first-child {
+  margin-top: 0;
+}
+
+.login-card select,
+.login-card input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #f3fbf7;
+  color: var(--text-primary);
+  font-size: 15px;
+  transition: border-color 100ms ease-out, box-shadow 100ms ease-out;
+}
+
+.login-card select:focus,
+.login-card input:focus {
+  outline: none;
+  border-color: #0f6b45;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.28);
+}
+
+.login-card__note {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #e7f6ee;
+  color: #0f4d34;
+  font-size: 13px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.login-card .btn--full {
+  min-height: 48px;
+  margin-top: 24px;
+  border-radius: 12px;
+  font-size: 15px;
+  box-shadow: 0 8px 16px rgba(15, 107, 69, 0.28);
+  transition: transform 100ms ease-out;
+}
+
+.login-card .btn--primary {
+  background: #0f6b45;
+  color: #ffffff;
+  border-color: #0f6b45;
+}
+
+.login-card .btn--full:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-card .btn--full:active,
+  .icon-btn:active,
+  .tab:active,
+  .btn:active,
+  .leaflet-bar a:active {
+    transform: none;
+  }
+
+  .booking-card {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .map-pane__legend,
+  .leaflet-bar a {
+    background: #ffffff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .topbar {
+    background: #ffffff;
+  }
+}
+
+.btn--primary {
+  background: var(--status-free);
+  color: #ffffff;
+  border-color: var(--status-free);
+}
+
+.btn--primary:hover {
+  filter: brightness(0.95);
+}
+
+.btn--full {
+  width: 100%;
+  margin-top: 18px;
+  padding: 11px;
+  font-size: 13.5px;
+}
+
+/* ---- Topbar ---- */
+
+.topbar {
+  height: 52px;
+  flex: 0 0 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: inset 0 -0.5px 0 rgba(0, 0, 0, 0.12);
+  z-index: 10;
+}
+
+.topbar__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.topbar__mark {
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -0.022em;
+  line-height: 1.1;
+}
+
+.topbar__divider {
+  color: var(--text-tertiary);
+}
+
+.topbar__org {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.011em;
+  color: var(--text-secondary);
+}
+
+.topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.topbar__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.006em;
+  color: var(--text-secondary);
+}
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-secondary);
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 100ms ease-out, background 100ms ease-out;
+}
+
+.icon-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--text-primary);
+}
+
+.icon-btn:active {
+  transform: scale(0.97);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.topbar__status[data-state="connected"] .status-dot {
+  background: var(--status-free);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
+}
+
+.topbar__status[data-state="connecting"] .status-dot {
+  background: var(--status-busy);
+  box-shadow: 0 0 0 3px rgba(180, 83, 9, 0.15);
+}
+
+.topbar__status[data-state="offline"] .status-dot {
+  background: var(--accent-critical);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+}
+
+/* ---- Console layout ---- */
+
+.console {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  min-height: 0;
+}
+
+@media (max-width: 860px) {
+  .console {
+    grid-template-columns: 1fr;
+    grid-template-rows: 50vh 1fr;
+  }
+}
+
+/* ---- Map pane ---- */
+
+.map-pane {
+  position: relative;
+  border-right: 1px solid var(--border);
+  min-width: 0;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+  background: #eef0f2;
+}
+
+.map-pane__hint {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 7px 14px;
+  background: rgba(23, 29, 38, 0.85);
+  border-radius: 20px;
+  font-size: 12px;
+  color: #f4f5f7;
+  z-index: 500;
+  pointer-events: none;
+}
+
+.map-pane__legend {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  display: flex;
+  gap: 14px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.14);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: #1d1d1f;
+  z-index: 500;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.legend-dot--free { background: var(--marker-free); }
+.legend-dot--busy { background: var(--marker-busy); }
+.legend-dot--unavailable { background: var(--marker-unavailable); }
+
+/* Ambulance marker icons (Leaflet divIcon) — represents the driver tied to that ambulance */
+.ambulance-marker {
+  background: transparent;
+  border: none;
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.35));
+}
+
+/* Light bar on the ambulance roof blinks, so the icon reads as an emergency vehicle */
+.ambulance-marker .amb-lightbar {
+  animation: amb-blink 1.1s steps(1, end) infinite;
+}
+
+@keyframes amb-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0.3; }
+}
+
+/* Hospital marker icons (Leaflet divIcon) — standing layer + active bookings */
+.hospital-marker {
+  background: transparent;
+  border: none;
+}
+
+/* Incoming-request pin: solid dot at the pickup point, two rings pulsing outwards */
+.request-pin {
+  background: transparent;
+  border: none;
+}
+
+.req-pin {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.req-pin__dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-critical);
+  border: 3px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.45);
+  z-index: 2;
+}
+
+.req-pin__pulse {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-critical);
+  opacity: 0;
+  animation: req-pin-pulse 2s ease-out infinite;
+}
+
+.req-pin__pulse--delay {
+  animation-delay: 1s;
+}
+
+@keyframes req-pin-pulse {
+  0% { transform: scale(1); opacity: 0.9; }
+  100% { transform: scale(3.2); opacity: 0; }
+}
+
+.legend-dot--hospital { background: #2563eb; }
+.legend-dot--request { background: var(--accent-critical); }
+
+.legend-line {
+  width: 16px;
+  height: 0;
+  border-top: 2px dashed var(--text-secondary);
+  display: inline-block;
+}
+
+.leaflet-top.leaflet-left {
+  top: 12px;
+  left: 12px;
+}
+
+.leaflet-bar {
+  border: none !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.08),
+    0 8px 20px rgba(0, 0, 0, 0.16);
+}
+
+.leaflet-bar a {
+  width: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  background: rgba(255, 255, 255, 0.82) !important;
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  color: #1d1d1f !important;
+  border-bottom: 0.5px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+.leaflet-bar a:last-child {
+  border-bottom: none !important;
+}
+
+.leaflet-bar a:hover {
+  background: rgba(255, 255, 255, 0.94) !important;
+}
+
+.leaflet-bar a:active {
+  transform: scale(0.97);
+}
+
+/* ---- Board pane ---- */
+
+.board-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #f2f2f7;
+}
+
+.tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  margin: 10px 12px 8px;
+  padding: 3px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 10px;
+}
+
+.tab {
+  flex: 1;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 7px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: transform 100ms ease-out, background 100ms ease-out, color 100ms ease-out;
+}
+
+.tab:hover {
+  color: var(--text-primary);
+}
+
+.tab:active {
+  transform: scale(0.97);
+}
+
+.tab.is-active {
+  background: #ffffff;
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.tab--free.is-active { color: var(--status-free); }
+.tab--busy.is-active { color: #d6a21a; }
+.tab--unavailable.is-active { color: var(--status-unavailable); }
+
+.tab__count {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 600;
+  color: inherit;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  min-width: 0;
+  text-align: center;
+}
+
+.board {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  position: relative;
+}
+
+.board-list {
+  list-style: none;
+  margin: 0 12px 12px;
+  padding: 0;
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+
+.board-list.is-hidden {
+  display: none;
+}
+
+.board-empty {
+  padding: 28px 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+
+/* ---- Ambulance card (Free / Unavailable tabs) ---- */
+
+.amb-card {
+  position: relative;
+  padding: 12px 14px;
+  border-bottom: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.amb-card::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 0;
+  height: 0.5px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.amb-card:last-child::after {
+  display: none;
+}
+
+.amb-card__label {
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.016em;
+  line-height: 1.2;
+}
+
+.amb-card__flag {
+  margin-left: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--status-unavailable);
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  border-radius: 10px;
+  padding: 1px 7px;
+  vertical-align: middle;
+}
+
+.amb-card__meta {
+  font-size: 13px;
+  letter-spacing: -0.006em;
+  line-height: 1.35;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.amb-card__reason {
+  font-size: 12px;
+  color: var(--status-unavailable);
+  margin-top: 4px;
+}
+
+.btn {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 6px 12px;
+  min-height: 32px;
+  border-radius: 980px;
+  border: none;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-primary);
+  white-space: nowrap;
+  transition: transform 100ms ease-out, filter 100ms ease-out;
+}
+
+.btn:hover { filter: brightness(0.96); }
+
+.btn:active { transform: scale(0.97); }
+
+.btn--danger {
+  color: #c41e1e;
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.btn--free {
+  color: #15803d;
+  background: rgba(22, 163, 74, 0.12);
+}
+
+.btn--test {
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+/* ---- Booking card (Busy tab) ---- */
+
+.booking-card {
+  position: relative;
+  padding: 14px;
+  border-bottom: none;
+  animation: reveal 0.25s ease;
+}
+
+.booking-card::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 0;
+  height: 0.5px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.booking-card:last-child::after {
+  display: none;
+}
+
+@keyframes reveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.booking-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.booking-card__id {
+  font-family: var(--font-data);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.booking-card__leg {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--status-busy);
+  background: rgba(180, 83, 9, 0.1);
+}
+
+.booking-card__leg--transfer {
+  color: var(--status-unavailable);
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.booking-card__main {
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.booking-card__note {
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  padding-left: 10px;
+  border-left: 2px solid var(--status-busy);
+}
+
+.booking-card__actions {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.booking-card__slider {
+  margin-top: 10px;
+}
+
+.booking-card__slider label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.booking-card__slider input[type="range"] {
+  width: 100%;
+  accent-color: var(--status-free);
+}
+
+/* ---- Modals (Reassign + Settings) ---- */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(23, 29, 38, 0.45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal.is-open {
+  display: flex;
+}
+
+.modal__card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  width: min(360px, 90vw);
+  max-height: 82vh;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.modal__card--wide {
+  width: min(480px, 92vw);
+}
+
+.modal__card h2 {
+  font-size: 15px;
+  margin: 0 0 4px;
+}
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal__x {
+  border: none;
+  background: none;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-secondary);
+  padding: 4px;
+}
+
+.modal__x:hover {
+  color: var(--text-primary);
+}
+
+.modal__sub {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin: 0 0 14px;
+}
+
+.modal__list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modal__list button {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel-alt);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.modal__list button:hover {
+  border-color: var(--status-free);
+}
+
+.modal__close {
+  width: 100%;
+  padding: 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* ---- Settings sections ---- */
+
+.settings-section {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  margin-top: 16px;
+}
+
+.settings-section:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 4px;
+}
+
+.settings-section h3 {
+  font-size: 13px;
+  margin: 0 0 10px;
+}
+
+.settings-section label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 10px 0 5px;
+}
+
+.settings-section input {
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel-alt);
+  font-size: 13px;
+}
+
+.settings-note {
+  font-size: 11.5px;
+  color: var(--status-free);
+  margin: 8px 0 0;
+  min-height: 14px;
+}
+
+.settings-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.settings-row__status {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-left: 6px;
+}
+
+.settings-add-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.settings-add-row input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel-alt);
+  font-size: 12.5px;
+}
+
+.settings-row__actions {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.settings-note.is-error {
+  color: var(--status-unavailable);
+}
+
+/* Same badge treatment as the ambulance card flag, used inside booking cards. */
+.booking-card__flag {
+  margin-left: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--status-unavailable);
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  border-radius: 10px;
+  padding: 1px 7px;
+  vertical-align: middle;
+}
