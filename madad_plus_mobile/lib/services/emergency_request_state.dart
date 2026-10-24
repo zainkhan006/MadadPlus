@@ -464,9 +464,13 @@ class EmergencyRequestState extends ChangeNotifier {
 
   List<ProviderRow> get providersForTrade {
     final trade = domesticTrade.toLowerCase();
-    return providers
-        .where((row) => row.specialisationName?.toLowerCase() == trade)
-        .toList();
+    return providers.where((row) {
+      final name = row.specialisationName?.toLowerCase() ?? '';
+      if(trade == 'electrician') {
+        return name == 'electrician' || name == 'ac technician';
+      }
+      return name == trade;
+    }).toList();
   }
 
   List<String> get providerTradeNames {
