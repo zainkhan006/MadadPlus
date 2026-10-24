@@ -143,6 +143,38 @@ TextStyle? _sectionTitle(BuildContext context) {
   );
 }
 
+const _monthNames = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+DateTime dateOnly(DateTime value) {
+  return DateTime(value.year, value.month, value.day);
+}
+
+String fullDateLabel(DateTime day) {
+  final date = dateOnly(day);
+  return '${date.day} ${_monthNames[date.month - 1]} ${date.year}';
+}
+
+String finishedDayLabel(DateTime day) {
+  final date = dateOnly(day);
+  if(date == dateOnly(DateTime.now())) {
+    return 'Today';
+  }
+  return fullDateLabel(date);
+}
+
 Text _providerSectionLabel(BuildContext context, String label) {
   return Text(
     label,
@@ -2562,6 +2594,92 @@ class _ProfileRow extends StatelessWidget {
   }
 }
 
+class _DemoProviderRow extends StatelessWidget {
+  const _DemoProviderRow({
+    required this.name,
+    required this.trade,
+    required this.onPressed,
+  });
+
+  final String name;
+  final String trade;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final tradeKey = trade.toLowerCase();
+    final chipText = tradeKey == 'ac technician' ? 'AC technician' : trade;
+    final isYellow = tradeKey == 'electrician' || tradeKey == 'ac technician';
+    final Color chipColor;
+    if(isYellow) {
+      chipColor = AppColors.electricianChip;
+    }
+    else if(tradeKey == 'plumber') {
+      chipColor = AppColors.plumberChip;
+    }
+    else if(tradeKey == 'carpenter') {
+      chipColor = AppColors.carpenterChip;
+    }
+    else {
+      chipColor = AppColors.soft;
+    }
+    final chipTextColor = chipColor == AppColors.electricianChip ||
+            chipColor == AppColors.soft
+        ? AppColors.ink
+        : Colors.white;
+
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 56),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.space3,
+            vertical: AppSpacing.space2,
+          ),
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.line),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.space2),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.space2,
+                  vertical: AppSpacing.space1,
+                ),
+                decoration: BoxDecoration(
+                  color: chipColor,
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Text(
+                  chipText,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: chipTextColor,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 String _scheduleLabel(BuildContext context, DateTime? scheduledAt) {
   if(scheduledAt == null) {
     return 'As soon as possible';
@@ -4023,6 +4141,7 @@ class _ProviderDashboardScreen extends StatefulWidget {
 
 class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
   String? typedFee;
+  DateTime _finishedDay = dateOnly(DateTime.now());
 
   List<Widget> providerLoadNotes(
     BuildContext context,
@@ -4131,6 +4250,22 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
   }
 
   Widget demoProviderList(BuildContext context, EmergencyRequestState state) {
+    const demoOrder = [
+      'Kashif electric wala',
+      'Qasim Mistri',
+      'Ali plumber',
+      'muzammil ac repairs',
+      'ahsan plumbing',
+      'Khan Repairs and Installations',
+    ];
+    int demoRank(ProviderRow provider) {
+      final index = demoOrder.indexOf(provider.name);
+      return index == -1 ? demoOrder.length : index;
+    }
+
+    final shownProviders = [...state.providers]
+      ..sort((a, b) => demoRank(a).compareTo(demoRank(b)));
+
     return _FlowFrame(
       title: 'Demo: act as a provider',
       onBack: state.leaveProviderMode,
@@ -4138,21 +4273,15 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Which provider do you want to test as?',
+            'Select a provider to test.',
             style: Theme.of(context).textTheme.headlineMedium,
-          ),
-          const SizedBox(height: AppSpacing.space2),
-          Text(
-            'Demo only. Anyone can open any provider here.',
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: AppColors.muted),
           ),
           const SizedBox(height: AppSpacing.space4),
           ...providerLoadNotes(context, state),
-          for(final provider in state.providers) ...[
-            _ProfileRow(
-              label:
-                  '${provider.name} · ${provider.specialisationName ?? 'Provider'}',
+          for(final provider in shownProviders) ...[
+            _DemoProviderRow(
+              name: provider.name,
+              trade: provider.specialisationName ?? 'Provider',
               onPressed: () {
                 state.chooseProviderProfile(provider);
               },
@@ -4165,6 +4294,129 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
   }
 
   @override
+  String _jobLines(String description) {
+    final parts = [
+      for(final part in description.split(' · '))
+        if(part.trim().isNotEmpty) part.trim(),
+    ];
+    if(parts.isEmpty) {
+      return description;
+    }
+    return parts.join('\n');
+  }
+
+  (String, String?) _typeAndNote(String description) {
+    final lines = _jobLines(description).split('\n');
+    if(lines.length < 2) {
+      return (lines.first, null);
+    }
+    return (lines.first, lines.skip(1).join('\n'));
+  }
+
+  bool _jobIsSettled(DomesticBooking job) {
+    return job.finalTotal != null ||
+        job.receiptStatus == 'ACCEPTED' ||
+        job.receiptStatus == 'DECLINED';
+  }
+
+  DateTime _shownFinishedAt(DomesticBooking job) {
+    final finishedAt = job.finishedAt;
+    if(finishedAt == null) {
+      return dateOnly(DateTime.now());
+    }
+    return dateOnly(finishedAt.toLocal());
+  }
+
+  bool _onFinishedDay(DomesticBooking job) {
+    return _shownFinishedAt(job) == dateOnly(_finishedDay);
+  }
+
+  Future<void> _pickFinishedDay() async {
+    final picked = await showDialog<DateTime>(
+      context: context,
+      builder: (context) {
+        var pending = _finishedDay;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final onToday = dateOnly(pending) == dateOnly(DateTime.now());
+            return Dialog(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.space2,
+                  AppSpacing.space3,
+                  AppSpacing.space2,
+                  AppSpacing.space2,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: () {
+                            setDialogState(() {
+                              pending = dateOnly(
+                                pending.subtract(const Duration(days: 1)),
+                              );
+                            });
+                          },
+                          icon: const Icon(Icons.chevron_left_rounded),
+                        ),
+                        Expanded(
+                          child: Text(
+                            finishedDayLabel(pending),
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.labelLarge,
+                          ),
+                        ),
+                        IconButton(
+                          key: const Key('finished-next-day'),
+                          onPressed: onToday
+                              ? null
+                              : () {
+                                  setDialogState(() {
+                                    pending = dateOnly(
+                                      pending.add(const Duration(days: 1)),
+                                    );
+                                  });
+                                },
+                          icon: const Icon(Icons.chevron_right_rounded),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                          },
+                          child: const Text('Cancel'),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(context, dateOnly(pending));
+                          },
+                          child: const Text('OK'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    if(picked == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _finishedDay = picked;
+    });
+  }
+
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
     final provider = state.providerProfile;
@@ -4184,8 +4436,7 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
     final accepted = state.acceptedJobs;
     final finished = [
       for(final job in accepted)
-        if(job.requestId != state.activeJobId && job.receiptStatus == 'ACCEPTED')
-          job,
+        if(job.requestId != state.activeJobId && _jobIsSettled(job)) job,
     ];
 
     final plateColor = switch(state.providerDuty) {
@@ -4193,12 +4444,6 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
       ProviderDuty.offline => AppColors.muted,
       ProviderDuty.onJob => AppColors.blue,
     };
-    final upcoming = [
-      for(final job in accepted)
-        if(job.requestId == state.activeJobId || job.receiptStatus != 'ACCEPTED')
-          job,
-    ];
-
     return _FlowFrame(
       title: 'Provider dashboard',
       plainChrome: true,
@@ -4226,7 +4471,7 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
                     Text(provider.name, style: _sectionTitle(context)),
                     const SizedBox(height: AppSpacing.space1),
                     Text(
-                      '${provider.specialisationName ?? 'Provider'} · ${provider.rating.toStringAsFixed(1)} rating',
+                      '${provider.specialisationName ?? 'Provider'}\n${provider.rating.toStringAsFixed(1)} rating',
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: AppColors.muted,
                         height: 1.35,
@@ -4332,7 +4577,6 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
                   },
                   decoration: const InputDecoration(
                     labelText: 'Inspection fee (Rs.)',
-                    helperText: 'Customers see this next to your rating.',
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: UnderlineInputBorder(
@@ -4386,9 +4630,10 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
                 child: _ChoiceCard(
                   quiet: true,
                   icon: Icons.handyman_outlined,
-                  title: job.description,
+                  title: _typeAndNote(job.description).$1,
+                  note: _typeAndNote(job.description).$2,
                   subtitle:
-                      '${job.address} · ${job.userName ?? 'Customer'} · Inspection fee Rs. ${(job.inspectionFee ?? provider.inspectionFee).toStringAsFixed(0)}',
+                      '${job.address}\n${job.userName ?? 'Customer'}\nInspection fee Rs. ${(job.inspectionFee ?? provider.inspectionFee).toStringAsFixed(0)}',
                   color: AppColors.green,
                   onTap: () {
                     state.openJob(job.requestId);
@@ -4398,45 +4643,65 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
               const SizedBox(height: AppSpacing.space3),
             ],
           const SizedBox(height: AppSpacing.space5),
-          _providerSectionLabel(context, "TODAY'S JOBS"),
-          const SizedBox(height: AppSpacing.space2),
-          if(upcoming.isNotEmpty)
-            _InsetGroup(
-              children: [
-                for(final job in upcoming)
-                  _InsetRow(
-                    label:
-                        '${job.requestId == state.activeJobId ? 'Active job' : 'Accepted'} · ${job.description}',
-                    onPressed: () {
-                      state.openActiveJob(job.requestId);
-                    },
+          Row(
+            children: [
+              _providerSectionLabel(context, 'FINISHED'),
+              const Spacer(),
+              InkWell(
+                onTap: _pickFinishedDay,
+                borderRadius: BorderRadius.circular(8),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 44),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.access_time_rounded,
+                          size: 18,
+                          color: AppColors.ink,
+                        ),
+                        const SizedBox(width: AppSpacing.space2),
+                        Text(
+                          finishedDayLabel(_finishedDay),
+                          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-              ],
-            )
-          else
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          if(finished.where(_onFinishedDay).isEmpty)
             Text(
-              'No upcoming jobs.',
+              'No finished jobs.',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: AppColors.muted,
                 height: 1.4,
               ),
-            ),
-          if(finished.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.space5),
-            _providerSectionLabel(context, 'FINISHED'),
-            const SizedBox(height: AppSpacing.space2),
+            )
+          else
             _InsetGroup(
               children: [
                 for(final job in finished)
-                  _InsetRow(
-                    label: 'Finished · ${job.description}',
-                    onPressed: () {
-                      state.openFinishedJob(job.requestId);
-                    },
-                  ),
+                  if(_onFinishedDay(job))
+                    _InsetRow(
+                      label: _typeAndNote(job.description).$1,
+                      dateLabel: fullDateLabel(_shownFinishedAt(job)),
+                      note: _typeAndNote(job.description).$2,
+                      status: 'Finished',
+                      statusColor: AppColors.green,
+                      onPressed: () {
+                        state.openFinishedJob(job.requestId);
+                      },
+                    ),
               ],
             ),
-          ],
           const SizedBox(height: AppSpacing.space5),
           _GroupedLinks(
             links: [
@@ -4973,12 +5238,14 @@ class _ChoiceCard extends StatelessWidget {
     required this.subtitle,
     required this.color,
     required this.onTap,
+    this.note,
     this.quiet = false,
     this.emphasis = false,
   });
 
   final IconData icon;
   final String title;
+  final String? note;
   final String subtitle;
   final Color color;
   final VoidCallback onTap;
@@ -5028,6 +5295,14 @@ class _ChoiceCard extends StatelessWidget {
                         letterSpacing: quiet ? -0.3 : 0,
                       ),
                     ),
+                    if(note != null && note!.isNotEmpty)
+                      Text(
+                        note!,
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          letterSpacing: quiet ? -0.3 : 0,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
                     const SizedBox(height: AppSpacing.space1),
                     Text(
                       subtitle,
@@ -5969,41 +6244,139 @@ class _InsetRow extends StatelessWidget {
   const _InsetRow({
     required this.label,
     required this.onPressed,
+    this.note,
+    this.dateLabel,
+    this.status,
+    this.statusColor,
     this.showChevron = true,
   });
 
   final String label;
+  final String? note;
+  final String? dateLabel;
+  final String? status;
+  final Color? statusColor;
   final VoidCallback onPressed;
   final bool showChevron;
 
   @override
   Widget build(BuildContext context) {
-    final text = Text(
-      label,
-      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-        color: showChevron ? AppColors.ink : AppColors.blue,
-        fontWeight: FontWeight.w600,
-        height: 1.3,
-      ),
+    final style = Theme.of(context).textTheme.labelLarge?.copyWith(
+      color: showChevron ? AppColors.ink : AppColors.blue,
+      fontWeight: FontWeight.w600,
+      height: 1.3,
     );
+    final detail = note;
+    final hasNote = detail != null && detail.isNotEmpty;
+    final hasStatus = status != null && status!.isNotEmpty;
+    final noteStyle = style?.copyWith(fontWeight: FontWeight.w400, height: 1.5);
+    final Widget text;
+    if(hasStatus) {
+      text = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(label, style: style)),
+              const SizedBox(width: AppSpacing.space3),
+              _JobStatusBox(label: status!, color: statusColor ?? AppColors.green),
+              if(showChevron) ...[
+                const SizedBox(width: AppSpacing.space2),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.muted,
+                  size: 22,
+                ),
+              ],
+            ],
+          ),
+          if(dateLabel != null && dateLabel!.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.space2),
+            Text(dateLabel!, style: noteStyle),
+          ],
+          if(hasNote) ...[
+            const SizedBox(height: AppSpacing.space2),
+            Text(detail!, style: noteStyle),
+          ],
+        ],
+      );
+    }
+    else if(!hasNote) {
+      text = Text(label, style: style);
+    }
+    else {
+      text = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: style),
+          const SizedBox(height: AppSpacing.space2),
+          Text(detail!, style: noteStyle),
+        ],
+      );
+    }
+    final Widget row;
+    if(!showChevron) {
+      row = Center(child: text);
+    }
+    else if(hasStatus) {
+      row = text;
+    }
+    else {
+      row = Row(
+        children: [
+          Expanded(child: text),
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: AppColors.muted,
+            size: 22,
+          ),
+        ],
+      );
+    }
     return InkWell(
       onTap: onPressed,
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 52),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space4),
-          child: showChevron
-              ? Row(
-                  children: [
-                    Expanded(child: text),
-                    const Icon(
-                      Icons.chevron_right_rounded,
-                      color: AppColors.muted,
-                      size: 22,
-                    ),
-                  ],
-                )
-              : Center(child: text),
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpacing.space4,
+            vertical: hasStatus ? AppSpacing.space3 : 0,
+          ),
+          child: row,
+        ),
+      ),
+    );
+  }
+}
+
+class _JobStatusBox extends StatelessWidget {
+  const _JobStatusBox({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final yellowish = color == AppColors.orange;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.space2,
+        vertical: AppSpacing.space1,
+      ),
+      decoration: BoxDecoration(
+        color: yellowish ? const Color(0xFFFFF4D6) : color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: color,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.2,
+          height: 1.2,
         ),
       ),
     );

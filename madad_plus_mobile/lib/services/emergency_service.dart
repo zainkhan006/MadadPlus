@@ -10,6 +10,13 @@ double? _coord(dynamic value) {
   return null;
 }
 
+DateTime? _time(dynamic value) {
+  if(value is! String || value.isEmpty) {
+    return null;
+  }
+  return DateTime.tryParse(value);
+}
+
 ({double lat, double lng})? _point(dynamic value) {
   if(value is! Map) {
     return null;
@@ -327,6 +334,7 @@ class DomesticBooking {
     this.receiptInspectionFee,
     this.finalTotal,
     this.receiptStatus,
+    this.finishedAt,
   });
 
   final String requestId;
@@ -342,6 +350,7 @@ class DomesticBooking {
   final double? receiptInspectionFee;
   final double? finalTotal;
   final String? receiptStatus;
+  final DateTime? finishedAt;
 
   factory DomesticBooking.fromJson(Map<String, dynamic> json) {
     final user = json['user'];
@@ -367,6 +376,7 @@ class DomesticBooking {
       receiptInspectionFee: (json['inspectionFee'] as num?)?.toDouble(),
       finalTotal: (json['finalTotal'] as num?)?.toDouble(),
       receiptStatus: json['receiptStatus'] as String?,
+      finishedAt: _time(json['finishedAt']),
     );
   }
 }

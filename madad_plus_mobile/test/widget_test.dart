@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:madad_plus_mobile/emergency_flow.dart';
 import 'package:madad_plus_mobile/main.dart';
 import 'package:madad_plus_mobile/services/emergency_outcome.dart';
 import 'package:madad_plus_mobile/services/emergency_request_state.dart';
@@ -665,7 +666,15 @@ void main() {
     await tapText(tester, 'Plumber');
     await tapText(tester, 'Yes, continue');
     await pumpAsync(tester);
-    await tapText(tester, 'Pipe leak · Water leak · Kitchen sink leak');
+    final requestType = tester.widget<Text>(find.text('Pipe leak'));
+    final requestNote = tester.widget<Text>(
+      find.text('Water leak\nKitchen sink leak'),
+    );
+    expect(requestType.style?.fontWeight, FontWeight.w700);
+    expect(requestNote.style?.fontWeight, FontWeight.w400);
+    expect(requestNote.style?.fontFamily, requestType.style?.fontFamily);
+    expect(requestNote.style?.fontSize, requestType.style?.fontSize);
+    await tapText(tester, 'Pipe leak');
     expect(find.text('Customer: Test User'), findsOneWidget);
     expect(find.text('Customer: Hal Jordan'), findsNothing);
 
@@ -732,7 +741,16 @@ void main() {
       findsNothing,
     );
 
-    await tapText(tester, 'Finished · Pipe leak · Water leak · Kitchen sink leak');
+    final finishedType = tester.widget<Text>(find.text('Pipe leak'));
+    final finishedNote = tester.widget<Text>(
+      find.text('Water leak\nKitchen sink leak'),
+    );
+    expect(finishedType.style?.fontWeight, FontWeight.w600);
+    expect(finishedNote.style?.fontWeight, FontWeight.w400);
+    expect(finishedNote.style?.height, 1.5);
+    expect(finishedNote.style?.fontFamily, finishedType.style?.fontFamily);
+    expect(finishedNote.style?.fontSize, finishedType.style?.fontSize);
+    await tapText(tester, 'Pipe leak');
     expect(find.text('Finished job'), findsOneWidget);
     expect(find.text('Pipe leak · Water leak · Kitchen sink leak'), findsOneWidget);
     expect(find.text('Price: Rs. 2500'), findsOneWidget);
@@ -772,10 +790,10 @@ void main() {
     await tapText(tester, 'VERIFY');
     await pumpAsync(tester);
 
-    expect(find.text('Which provider do you want to test as?'), findsOneWidget);
+    expect(find.text('Select a provider to test.'), findsOneWidget);
     expect(find.text('What work do you do?'), findsNothing);
     expect(find.textContaining('Rs.'), findsNothing);
-    await tapText(tester, 'Karachi Plumbers · Plumber');
+    await tapText(tester, 'Karachi Plumbers');
     await pumpAsync(tester);
 
     expect(find.text('Provider dashboard'), findsOneWidget);
@@ -801,6 +819,11 @@ void main() {
     await tester.tap(find.byTooltip('Back'));
     await tester.pump();
     expect(find.text('On a job'), findsOneWidget);
+    expect(find.text("TODAY'S JOBS"), findsNothing);
+    expect(find.text('FINISHED'), findsOneWidget);
+    expect(find.text('Today'), findsOneWidget);
+    expect(find.text('No finished jobs.'), findsOneWidget);
+    expect(find.text('Ongoing'), findsNothing);
 
     await tapText(tester, 'Tap install');
     expect(
@@ -826,14 +849,101 @@ void main() {
         inspectionFee: 2500,
         specialisationName: 'Electrician',
       ),
+      DomesticBooking(
+        requestId: 'job-done',
+        status: 'ACCEPTED',
+        description: 'Pipe leak · Kitchen sink leak',
+        address: 'DHA',
+        userName: 'Test User',
+        providerName: 'Karachi Plumbers',
+        providerRating: 4.6,
+        inspectionFee: 500,
+        specialisationName: 'Plumber',
+        receiptStatus: 'ACCEPTED',
+        finishedAt: DateTime.now(),
+      ),
+      DomesticBooking(
+        requestId: 'job-declined',
+        status: 'ACCEPTED',
+        description: 'Fan · humming',
+        address: 'DHA',
+        userName: 'Test User',
+        providerName: 'Karachi Plumbers',
+        providerRating: 4.6,
+        inspectionFee: 650,
+        specialisationName: 'Electrician',
+        receiptStatus: 'DECLINED',
+        finalTotal: 650,
+        finishedAt: DateTime.now(),
+      ),
+      DomesticBooking(
+        requestId: 'job-undated',
+        status: 'ACCEPTED',
+        description: 'Wire · loose',
+        address: 'DHA',
+        userName: 'Test User',
+        providerName: 'Karachi Plumbers',
+        providerRating: 4.6,
+        inspectionFee: 500,
+        specialisationName: 'Electrician',
+        receiptStatus: 'ACCEPTED',
+      ),
     ]);
     await reachSignIn(tester, session.state);
     await tapText(tester, 'Sign in as provider');
     await tapText(tester, 'VERIFY');
     await pumpAsync(tester);
-    await tapText(tester, 'Karachi Plumbers · Plumber');
+    await tapText(tester, 'Karachi Plumbers');
     await pumpAsync(tester);
-    await tapText(tester, 'Other · ac');
+    final requestType = tester.widget<Text>(find.text('Other'));
+    final requestNote = tester.widget<Text>(find.text('ac'));
+    expect(requestType.style?.fontWeight, FontWeight.w700);
+    expect(requestNote.style?.fontWeight, FontWeight.w400);
+    expect(requestNote.style?.fontFamily, requestType.style?.fontFamily);
+    expect(requestNote.style?.fontSize, requestType.style?.fontSize);
+    final finishedType = tester.widget<Text>(find.text('Pipe leak'));
+    final finishedNote = tester.widget<Text>(find.text('Kitchen sink leak'));
+    expect(finishedType.style?.fontWeight, FontWeight.w600);
+    expect(finishedNote.style?.fontWeight, FontWeight.w400);
+    expect(finishedNote.style?.height, 1.5);
+    expect(finishedNote.style?.fontFamily, finishedType.style?.fontFamily);
+    expect(finishedNote.style?.fontSize, finishedType.style?.fontSize);
+    expect(find.text('Wire'), findsOneWidget);
+    expect(find.text(fullDateLabel(DateTime.now())), findsNWidgets(3));
+    expect(find.text('Accepted'), findsNothing);
+    expect(find.text('Finished'), findsNWidgets(3));
+    final finishedStatus = tester.widget<Text>(find.text('Finished').first);
+    expect(finishedStatus.style?.color, AppColors.green);
+    await tapText(tester, 'Fan');
+    expect(find.text('Finished job'), findsOneWidget);
+    expect(find.text('Start job'), findsNothing);
+    expect(find.text('Price: Rs. 650'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pump();
+    final clock = find.byIcon(Icons.access_time_rounded);
+    await tester.ensureVisible(clock);
+    await tester.pump();
+    await tester.tap(clock);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<IconButton>(find.byKey(const Key('finished-next-day'))).onPressed,
+      isNull,
+    );
+    await tester.tap(find.byIcon(Icons.chevron_left_rounded));
+    await tester.pump();
+    expect(
+      tester.widget<IconButton>(find.byKey(const Key('finished-next-day'))).onPressed,
+      isNotNull,
+    );
+    await tapText(tester, 'OK');
+    await tester.pumpAndSettle();
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    expect(find.text(finishedDayLabel(yesterday)), findsOneWidget);
+    expect(find.text('Pipe leak'), findsNothing);
+    expect(find.text('Fan'), findsNothing);
+    expect(find.text('Wire'), findsNothing);
+    expect(find.text('No finished jobs.'), findsOneWidget);
+    await tapText(tester, 'Other');
     await tapText(tester, 'Accept job');
     await pumpAsync(tester);
 
@@ -905,7 +1015,7 @@ void main() {
     await tapText(tester, 'Plumber');
     await tapText(tester, 'Yes, continue');
     await pumpAsync(tester);
-    await tapText(tester, 'Pipe leak · Water leak · Kitchen sink leak');
+    await tapText(tester, 'Pipe leak');
     await tapText(tester, 'Accept job');
     await pumpAsync(tester);
 
@@ -994,12 +1104,13 @@ void main() {
     await tapText(tester, 'VERIFY');
     await pumpAsync(tester);
 
-    expect(find.text('Which provider do you want to test as?'), findsOneWidget);
+    expect(find.text('Select a provider to test.'), findsOneWidget);
     expect(
       find.text('Demo only. Anyone can open any provider here.'),
-      findsOneWidget,
+      findsNothing,
     );
-    expect(find.text('Karachi Plumbers · Plumber'), findsOneWidget);
+    expect(find.text('Karachi Plumbers'), findsOneWidget);
+    expect(find.text('Plumber'), findsOneWidget);
     expect(find.textContaining('Rs.'), findsNothing);
     expect(find.text('Provider dashboard'), findsNothing);
     expect(
@@ -1314,6 +1425,7 @@ class FakeEmergencyService extends EmergencyService {
       receiptInspectionFee: current.inspectionFee,
       finalTotal: finalTotal,
       receiptStatus: receiptStatus,
+      finishedAt: current.finishedAt,
     );
     jobs[index] = updated;
     for(final listener in List.of(listeners)) {

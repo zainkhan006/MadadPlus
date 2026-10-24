@@ -80,6 +80,7 @@ class EmergencyRequestState extends ChangeNotifier {
   static const _homeChosenKey = 'homeChosen';
   static const _emergencyRequestsKey = 'emergencyRequests';
   static const _domesticHistoryKey = 'domesticHistory';
+  static const _declinedJobsKey = 'declinedProviderJobs';
 
   EmergencyRequestState({
     EmergencyService? emergencyService,
@@ -503,34 +504,13 @@ class EmergencyRequestState extends ChangeNotifier {
     notifyListeners();
   }
 
-  ProviderRow _carpenterInPlaceOfAc(ProviderRow row) {
-    final trade = row.specialisationName?.toLowerCase() ?? '';
-    final name = row.name.toLowerCase();
-    final isAc = trade == 'ac technician' || name.contains('coolcare');
-    if(!isAc) {
-      return row;
-    }
-    return ProviderRow(
-      id: row.id,
-      name: 'City Carpenters',
-      status: row.status,
-      rating: row.rating,
-      inspectionFee: row.inspectionFee,
-      specialisationId: row.specialisationId,
-      specialisationName: 'Carpenter',
-    );
-  }
-
   Future<void> loadProviders() async {
     providersLoading = true;
     providersError = null;
     notifyListeners();
 
     try {
-      providers = [
-        for(final row in await _emergencyService.listProviders())
-          _carpenterInPlaceOfAc(row),
-      ];
+      providers = await _emergencyService.listProviders();
     } on ApiException catch (error) {
       providersError = error.message;
     } on TimeoutException {
@@ -877,7 +857,42 @@ class EmergencyRequestState extends ChangeNotifier {
       providerId: provider.id,
       onBooking: _receiveProviderBooking,
     );
-    loadProviderJobs();
+    _restoreProviderJobs(provider.id);
+  }
+
+  Future<void> _readDeclinedJobs(String providerId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_declinedJobsKey);
+    final decoded = raw == null ? null : jsonDecode(raw);
+    declinedJobIds.clear();
+    if(decoded is! Map) {
+      return;
+    }
+    final saved = decoded[providerId];
+    if(saved is! List) {
+      return;
+    }
+    for(final id in saved) {
+      if(id is String) {
+        declinedJobIds.add(id);
+      }
+    }
+  }
+
+  Future<void> _writeDeclinedJobs(String providerId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_declinedJobsKey);
+    final decoded = raw == null ? null : jsonDecode(raw);
+    final stored = decoded is Map
+        ? Map<String, dynamic>.from(decoded)
+        : <String, dynamic>{};
+    stored[providerId] = declinedJobIds.toList();
+    await prefs.setString(_declinedJobsKey, jsonEncode(stored));
+  }
+
+  Future<void> _restoreProviderJobs(String providerId) async {
+    await _readDeclinedJobs(providerId);
+    await loadProviderJobs();
   }
 
   void changeProviderProfile() {
@@ -1019,8 +1034,12 @@ class EmergencyRequestState extends ChangeNotifier {
 
   void declineJob() {
     final requestId = openedJobId;
+    final providerId = providerProfile?.id;
     if(requestId != null) {
       declinedJobIds.add(requestId);
+      if(providerId != null) {
+        _writeDeclinedJobs(providerId);
+      }
     }
     goTo(EmergencyScreen.providerDashboard);
   }
