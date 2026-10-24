@@ -90,6 +90,7 @@ exports.seed = async function (knex) {
         { name: "Plumber" },
         { name: "Electrician" },
         { name: "AC Technician" },
+        { name: "Carpenter" },
         { name: "Mechanic" }
       ])
       .returning(["id", "name"]);
@@ -110,20 +111,8 @@ exports.seed = async function (knex) {
 
     await trx("providers").insert([
       {
-        auth_user_id: "00000000-0000-0000-0000-000000000011",
-        name: "Ali Plumbing Works",
-        phone: "+92 300 0000011",
-        cnic: "42101-0000011-1",
-        status: "ONLINE",
-        designation: "Plumber",
-        specialisation_id: specialisationByName.Plumber,
-        rating: 4.2,
-        inspection_fee: 500,
-        services_provided_count: 37
-      },
-      {
         auth_user_id: "00000000-0000-0000-0000-000000000012",
-        name: "City Electricians",
+        name: "Kashif electric wala",
         phone: "+92 300 0000012",
         cnic: "42101-0000012-1",
         status: "ONLINE",
@@ -135,15 +124,63 @@ exports.seed = async function (knex) {
       },
       {
         auth_user_id: "00000000-0000-0000-0000-000000000013",
-        name: "CoolCare AC Services",
+        name: "Qasim Mistri",
         phone: "+92 300 0000013",
         cnic: "42101-0000013-1",
         status: "ONLINE",
-        designation: "AC Technician",
-        specialisation_id: specialisationByName["AC Technician"],
+        designation: "Carpenter",
+        specialisation_id: specialisationByName.Carpenter,
         rating: 4.5,
         inspection_fee: 1000,
         services_provided_count: 52
+      },
+      {
+        auth_user_id: "00000000-0000-0000-0000-000000000011",
+        name: "Ali plumber",
+        phone: "+92 300 0000011",
+        cnic: "42101-0000011-1",
+        status: "ONLINE",
+        designation: "Plumber",
+        specialisation_id: specialisationByName.Plumber,
+        rating: 4.2,
+        inspection_fee: 500,
+        services_provided_count: 37
+      },
+      {
+        auth_user_id: "00000000-0000-0000-0000-000000000014",
+        name: "muzammil ac repairs",
+        phone: "+92 300 0000014",
+        cnic: "42101-0000014-1",
+        status: "ONLINE",
+        designation: "AC Technician",
+        specialisation_id: specialisationByName["AC Technician"],
+        rating: 4.8,
+        inspection_fee: 2500,
+        services_provided_count: 0
+      },
+      {
+        auth_user_id: "00000000-0000-0000-0000-000000000015",
+        name: "ahsan plumbing",
+        phone: "+92 300 0000015",
+        cnic: "42101-0000015-1",
+        status: "ONLINE",
+        designation: "Plumber",
+        specialisation_id: specialisationByName.Plumber,
+        rating: 4.2,
+        inspection_fee: 500,
+        services_provided_count: 0
+      },
+      {
+        auth_user_id: "00000000-0000-0000-0000-000000000016",
+        name: "Khan Repairs and Installations",
+        phone: "+92 300 0000016",
+        cnic: "42101-0000016-1",
+        status: "ONLINE",
+        designation: "Carpenter",
+        specialisation_id: specialisationByName.Carpenter,
+        rating: 4.5,
+        inspection_fee: 1000,
+        services_provided_count: 0
       }
     ]);
   });
