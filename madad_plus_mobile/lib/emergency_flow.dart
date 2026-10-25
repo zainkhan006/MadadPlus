@@ -4417,6 +4417,7 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
     });
   }
 
+  @override
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
     final provider = state.providerProfile;
@@ -6297,7 +6298,7 @@ class _InsetRow extends StatelessWidget {
           ],
           if(hasNote) ...[
             const SizedBox(height: AppSpacing.space2),
-            Text(detail!, style: noteStyle),
+            Text(detail, style: noteStyle),
           ],
         ],
       );
@@ -6312,7 +6313,7 @@ class _InsetRow extends StatelessWidget {
         children: [
           Text(label, style: style),
           const SizedBox(height: AppSpacing.space2),
-          Text(detail!, style: noteStyle),
+          Text(detail, style: noteStyle),
         ],
       );
     }

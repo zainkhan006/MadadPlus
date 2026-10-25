@@ -1778,7 +1778,7 @@ class EmergencyRequestState extends ChangeNotifier {
     if(decodedDomestic is List) {
       final stored = [
         for(final item in decodedDomestic)
-          if(_domesticHistoryEntry(item) case final entry?) entry,
+          ?_domesticHistoryEntry(item),
       ];
       domesticHistory.insertAll(0, stored);
     }
