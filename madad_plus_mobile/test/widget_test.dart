@@ -733,7 +733,7 @@ void main() {
     await tester.pump();
     expect(find.text('Provider dashboard'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.text('Amount owed: Rs. 2500'), findsOneWidget);
+    expect(find.text('Amount owed: Rs. 2500'), findsNothing);
     expect(find.text('Accept'), findsNothing);
     expect(find.text('FINISHED'), findsOneWidget);
     expect(
@@ -1048,13 +1048,13 @@ void main() {
     await tester.pumpWidget(MyApp(requestState: providerSession));
     await tester.pump();
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.text('Amount owed: Rs. 500'), findsOneWidget);
+    expect(find.text('Amount owed: Rs. 500'), findsNothing);
     expect(find.text('Inspection fee: Rs. 500'), findsOneWidget);
     expect(find.text('Inspection fee: x'), findsNothing);
 
     await tester.tap(find.byTooltip('Back'));
     await tester.pump();
-    expect(find.text('Amount owed: Rs. 500'), findsOneWidget);
+    expect(find.text('Amount owed: Rs. 500'), findsNothing);
     expect(
       find.text('Accepted · Pipe leak · Water leak · Kitchen sink leak'),
       findsOneWidget,
@@ -1349,6 +1349,21 @@ class FakeEmergencyService extends EmergencyService {
 
   @override
   Future<List<ProviderRow>> listProviders() async => providers;
+
+  @override
+  Future<double> setProviderRating({
+    required String providerId,
+    required int rating,
+  }) async {
+    final index = providers.indexWhere((row) => row.id == providerId);
+    if(index == -1) {
+      return rating.toDouble();
+    }
+    final current = providers[index];
+    final saved = ((current.rating + rating) / 2 * 10).round() / 10;
+    providers[index] = current.withRating(saved);
+    return saved;
+  }
 
   @override
   Future<double> setInspectionFee({

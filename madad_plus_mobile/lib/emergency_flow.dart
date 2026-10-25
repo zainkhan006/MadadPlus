@@ -3746,7 +3746,8 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
           const SizedBox(height: AppSpacing.space5),
           _ActionButton(
             label: 'Submit rating',
-            onPressed: () {
+            onPressed: () async {
+              await state.submitProviderRating(stars);
               state.finishDomestic(EmergencyScreen.home);
             },
           ),
@@ -4542,15 +4543,6 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
                   ),
                 ],
               ),
-          ],
-          if(state.amountOwed != null) ...[
-            const SizedBox(height: AppSpacing.space3),
-            Text(
-              state.amountOwed!,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
           ],
           const SizedBox(height: AppSpacing.space5),
           _providerSectionLabel(context, 'INSPECTION FEE'),

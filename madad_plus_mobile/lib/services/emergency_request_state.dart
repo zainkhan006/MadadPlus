@@ -817,6 +817,40 @@ class EmergencyRequestState extends ChangeNotifier {
     goTo(screen);
   }
 
+  Future<void> submitProviderRating(int stars) async {
+    final provider = chosenProvider;
+    if(provider == null || stars < 1 || stars > 5) {
+      return;
+    }
+    try {
+      final saved = await _emergencyService.setProviderRating(
+        providerId: provider.id,
+        rating: stars,
+      );
+      _applyProviderRating(provider.id, saved);
+    } on ApiException catch (error) {
+      showDomesticNotice(error.message);
+    } on TimeoutException {
+      showDomesticNotice('The rating took too long to save. Try again.');
+    } catch (_) {
+      showDomesticNotice('The rating could not be saved. Try again.');
+    }
+  }
+
+  void _applyProviderRating(String providerId, double rating) {
+    if(chosenProvider?.id == providerId) {
+      chosenProvider = chosenProvider!.withRating(rating);
+    }
+    if(providerProfile?.id == providerId) {
+      providerProfile = providerProfile!.withRating(rating);
+    }
+    providers = [
+      for(final row in providers)
+        row.id == providerId ? row.withRating(rating) : row,
+    ];
+    notifyListeners();
+  }
+
   void startProviderMode({required bool fromProfile, bool demo = false}) {
     providerFromProfile = fromProfile;
     providerDemo = demo;
@@ -923,6 +957,13 @@ class EmergencyRequestState extends ChangeNotifier {
 
     try {
       providerJobs = await _emergencyService.listProviderRequests(provider.id);
+      final rows = await _emergencyService.listProviders();
+      for(final row in rows) {
+        if(row.id == provider.id) {
+          providerProfile = provider.withRating(row.rating);
+          break;
+        }
+      }
     } on ApiException catch (error) {
       domesticNotice = error.message;
     } on TimeoutException {

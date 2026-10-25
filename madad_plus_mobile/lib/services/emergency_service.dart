@@ -306,6 +306,18 @@ class ProviderRow {
     );
   }
 
+  ProviderRow withRating(double nextRating) {
+    return ProviderRow(
+      id: id,
+      name: name,
+      status: status,
+      rating: nextRating,
+      inspectionFee: inspectionFee,
+      specialisationId: specialisationId,
+      specialisationName: specialisationName,
+    );
+  }
+
   factory ProviderRow.fromJson(Map<String, dynamic> json) {
     return ProviderRow(
       id: json['id'] as String,
@@ -560,6 +572,21 @@ class EmergencyService {
       'The inspection fee could not be saved.',
     );
     return ((decoded as Map)['inspectionFee'] as num).toDouble();
+  }
+
+  Future<double> setProviderRating({
+    required String providerId,
+    required int rating,
+  }) async {
+    final decoded = await _send(
+      http.patch(
+        Uri.parse('$baseUrl/api/v1/providers/$providerId/rating'),
+        headers: _headers,
+        body: jsonEncode({'rating': rating}),
+      ),
+      'The rating could not be saved.',
+    );
+    return ((decoded as Map)['rating'] as num).toDouble();
   }
 
   Future<DomesticBooking> createDomesticRequest({
