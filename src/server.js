@@ -1193,6 +1193,27 @@ app.patch("/api/v1/providers/:providerId/inspection-fee", async (req, res) => {
   }
 });
 
+app.patch("/api/v1/providers/:providerId/rating", async (req, res) => {
+  const stars = Number(req.body.rating);
+  if (!Number.isInteger(stars) || stars < 1 || stars > 5) {
+    return res.status(400).json({ error: "rating must be a whole number from 1 to 5" });
+  }
+
+  try {
+    const current = await db("providers").where("id", req.params.providerId).first();
+    if (!current) return res.status(404).json({ error: "Provider not found" });
+    const rating = Math.round(((Number(current.rating) + stars) / 2) * 10) / 10;
+    const updated = await db("providers")
+      .where("id", req.params.providerId)
+      .update({ rating, updated_at: db.fn.now() });
+    if (updated !== 1) return res.status(404).json({ error: "Provider not found" });
+    res.json({ providerId: req.params.providerId, rating });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to update rating" });
+  }
+});
+
 app.post("/api/v1/domestic-requests", async (req, res) => {
   const {
     userId,
