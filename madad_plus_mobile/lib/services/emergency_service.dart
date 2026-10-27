@@ -288,6 +288,7 @@ class ProviderRow {
     required this.specialisationId,
     required this.specialisationName,
     this.phone,
+    this.cnic,
   });
 
   final String id;
@@ -298,6 +299,7 @@ class ProviderRow {
   final String? specialisationId;
   final String? specialisationName;
   final String? phone;
+  final String? cnic;
 
   ProviderRow withFee(double fee) {
     return ProviderRow(
@@ -334,6 +336,27 @@ class ProviderRow {
       inspectionFee: (json['inspectionFee'] as num?)?.toDouble() ?? 0,
       specialisationId: json['specialisationId'] as String?,
       specialisationName: json['specialisationName'] as String?,
+      phone: json['phone'] as String?,
+      cnic: json['cnic'] as String?,
+    );
+  }
+}
+
+class CallerRow {
+  const CallerRow({
+    required this.id,
+    required this.name,
+    this.phone,
+  });
+
+  final String id;
+  final String name;
+  final String? phone;
+
+  factory CallerRow.fromJson(Map<String, dynamic> json) {
+    return CallerRow(
+      id: json['id'] as String,
+      name: json['name'] as String,
       phone: json['phone'] as String?,
     );
   }
@@ -566,6 +589,94 @@ class EmergencyService {
       'The ambulance could not be marked unavailable.',
     );
     return DriverReassignment.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<List<CallerRow>> listCallers() async {
+    final decoded = await _send(
+      http.get(Uri.parse('$baseUrl/api/v1/callers'), headers: _headers),
+      'The caller list could not be loaded.',
+    );
+    return (decoded as List)
+        .map((row) => CallerRow.fromJson(Map<String, dynamic>.from(row as Map)))
+        .toList();
+  }
+
+  Future<CallerRow> registerCaller({
+    required String name,
+    required String phone,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse('$baseUrl/api/v1/callers'),
+        headers: _headers,
+        body: jsonEncode({'name': name, 'phone': phone}),
+      ),
+      'The account could not be created.',
+    );
+    return CallerRow.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<AmbulanceRow> registerDriver({
+    required String name,
+    required String phone,
+    required String ambulanceLabel,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse('$baseUrl/api/v1/drivers'),
+        headers: _headers,
+        body: jsonEncode({
+          'name': name,
+          'phone': phone,
+          'ambulanceLabel': ambulanceLabel,
+        }),
+      ),
+      'The driver account could not be created.',
+    );
+    return AmbulanceRow.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<List<ProviderRow>> checkProviderName({
+    required String name,
+    String? trade,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse('$baseUrl/api/v1/providers/name-check'),
+        headers: _headers,
+        body: jsonEncode({
+          'name': name,
+          if(trade != null && trade.isNotEmpty) 'trade': trade,
+        }),
+      ),
+      'The name could not be checked.',
+    );
+    final matches = (decoded as Map)['matches'] as List;
+    return matches
+        .map((row) => ProviderRow.fromJson(Map<String, dynamic>.from(row as Map)))
+        .toList();
+  }
+
+  Future<ProviderRow> registerProvider({
+    required String name,
+    required String phone,
+    required String cnic,
+    required String trade,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse('$baseUrl/api/v1/providers'),
+        headers: _headers,
+        body: jsonEncode({
+          'name': name,
+          'phone': phone,
+          'cnic': cnic,
+          'trade': trade,
+        }),
+      ),
+      'The provider account could not be created.',
+    );
+    return ProviderRow.fromJson(Map<String, dynamic>.from(decoded as Map));
   }
 
   Future<List<ProviderRow>> listProviders() async {

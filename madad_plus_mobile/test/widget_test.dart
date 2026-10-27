@@ -119,8 +119,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('CONTINUE'));
     await tester.pump();
-    await tester.tap(find.text('CONTINUE'));
-    await tester.pump();
+    await submitCallerName(tester, 'hal jordan');
     await tester.tap(find.text('VERIFY'));
     await tester.pump();
     await tester.tap(find.text('Emergency help'));
@@ -248,12 +247,23 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Register as Driver'));
     await tester.pump();
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Zain Ali');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Phone number'),
+      '0333 1234567',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Ambulance number'),
+      'A-08',
+    );
     await tester.tap(find.text('Continue'));
-    await tester.pump();
+    await pumpAsync(tester);
     await tester.tap(find.text('VERIFY'));
     await pumpAsync(tester);
 
-    expect(find.text('How can we help?'), findsOneWidget);
+    expect(find.text('How can we help?'), findsNothing);
+    expect(find.text('Sign out'), findsOneWidget);
+    expect(session.state.driverId, 'drv-new');
     expect(find.text('Choose your ambulance'), findsNothing);
     expect(find.text('Which ambulance are you driving?'), findsNothing);
   });
@@ -270,6 +280,75 @@ void main() {
 
     expect(find.text('No active call'), findsOneWidget);
     expect(find.text('Choose your ambulance'), findsNothing);
+  });
+
+  testWidgets('a driver name matches without matching capitals', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    session.api.ambulances.add(
+      const AmbulanceRow(
+        id: 'amb-7',
+        label: 'A-07',
+        status: 'BUSY',
+        driverId: 'drv-7',
+        driverName: 'Fahad Iqbal',
+      ),
+    );
+    await reachSignIn(tester, session.state);
+    await submitStaffName(tester, 'Sign in as driver', 'fahad iqbal');
+
+    expect(find.text('Verify phone'), findsOneWidget);
+    expect(
+      find.text('Nobody was found with that name or number.'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a provider name matches without matching capitals', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    await reachSignIn(tester, session.state);
+    await submitStaffName(tester, 'Sign in as provider', 'karachi plumbers');
+
+    expect(find.text('Verify phone'), findsOneWidget);
+    expect(
+      find.text('Nobody was found with that name or number.'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a partial provider name on sign in asks if this is you', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    const match = ProviderRow(
+      id: 'prov-raja',
+      name: 'raja circuitry and electrical works',
+      status: 'ONLINE',
+      rating: 0,
+      inspectionFee: 0,
+      specialisationId: 'spec-electrician',
+      specialisationName: 'Electrician',
+      phone: '0315 6767679',
+      cnic: '42201 xxxxxxxx',
+    );
+    session.api.nameMatches = [match];
+    await reachSignIn(tester, session.state);
+    await submitStaffName(tester, 'Sign in as provider', 'raja');
+
+    expect(find.text('Is this you?'), findsOneWidget);
+    expect(find.text('raja circuitry and electrical works'), findsOneWidget);
+    expect(find.text('CNIC 42201 xxxxxxxx'), findsOneWidget);
+    expect(find.text('Create account'), findsNothing);
+    expect(session.api.providerInserts, 0);
+
+    await tapText(tester, 'raja circuitry and electrical works');
+    expect(find.text('Verify phone'), findsOneWidget);
+    await tapText(tester, 'VERIFY');
+    await pumpAsync(tester);
+    expect(find.text('Provider dashboard'), findsOneWidget);
   });
 
   testWidgets('Hassan Ali phone opens his driver page', (
@@ -302,6 +381,38 @@ void main() {
     expect(find.text('Name or phone number'), findsOneWidget);
     expect(find.text('Verify phone'), findsNothing);
     expect(find.text('Choose your ambulance'), findsNothing);
+  });
+
+  testWidgets('a caller name matches without matching capitals', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    await reachSignIn(tester, session.state);
+    await submitCallerName(tester, 'hal jordan');
+
+    expect(find.text('Verify phone'), findsOneWidget);
+    expect(
+      find.text(
+        'Nobody was found with that name or number. Type the name you registered with, or your phone number.',
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('an unknown caller name stays on the sign-in page', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    await reachSignIn(tester, session.state);
+    await submitCallerName(tester, 'Nobody');
+
+    expect(
+      find.text(
+        'Nobody was found with that name or number. Type the name you registered with, or your phone number.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Verify phone'), findsNothing);
   });
 
   testWidgets('a driver picks a live ambulance and moves a call to drop-off', (
@@ -613,7 +724,13 @@ void main() {
 
     expect(find.text('Ambulance number'), findsNothing);
 
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Ibad Khan');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Phone number'),
+      '0332 6767679',
+    );
     await tester.tap(find.text('Continue'));
+    await tester.pump();
     await tester.pump();
     await tester.tap(find.text('VERIFY'));
     await tester.pump();
@@ -651,7 +768,8 @@ void main() {
     await tester.tap(find.text('Profile'));
     await tester.pump();
 
-    expect(find.text('Hal Jordan'), findsOneWidget);
+    expect(find.text('Ibad Khan'), findsOneWidget);
+    expect(find.text('Hal Jordan'), findsNothing);
     expect(find.byIcon(Icons.person), findsNWidgets(2));
     expect(find.text('Saved addresses'), findsOneWidget);
     expect(find.text('Language'), findsOneWidget);
@@ -678,6 +796,15 @@ void main() {
     WidgetTester tester,
   ) async {
     final session = testSession(demoUserId: '');
+    session.api.callers
+      ..clear()
+      ..add(
+        const CallerRow(
+          id: '',
+          name: 'Hal Jordan',
+          phone: '+92 300 0000001',
+        ),
+      );
     await reachHome(tester, session.state);
     await tapText(tester, 'Services');
     await tapText(tester, 'Plumber');
@@ -1205,22 +1332,127 @@ void main() {
     expect(find.text('Electrician'), findsOneWidget);
     expect(find.text('Ambulance number'), findsNothing);
 
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Name'),
+      'Raja circuitry and electrical works',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Phone number'),
+      '0334 7654321',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'CNIC'),
+      '42101-6969679-1',
+    );
+    await tapText(tester, 'Electrician');
     await tapText(tester, 'Continue');
-    await tester.tap(find.byTooltip('Back'));
-    await tester.pump();
-    expect(find.text('Register as Provider'), findsOneWidget);
-
-    await tapText(tester, 'Continue');
+    await pumpAsync(tester);
     await tapText(tester, 'VERIFY');
     await pumpAsync(tester);
-    expect(find.text('Is this you?'), findsOneWidget);
-    expect(find.text('Your business'), findsOneWidget);
-    expect(find.text('Karachi Plumbers · Plumber'), findsOneWidget);
-    expect(find.text('Which provider are you?'), findsNothing);
+    expect(find.text('Provider dashboard'), findsOneWidget);
+    expect(find.text('Raja circuitry and electrical works'), findsOneWidget);
+    expect(find.text('Is this you?'), findsNothing);
+    expect(find.text('Kashif electric wala · Electrician'), findsNothing);
+    expect(session.api.providerInserts, 1);
+  });
 
-    await tester.tap(find.byTooltip('Back'));
-    await tester.pump();
-    expect(find.text('Existing account'), findsOneWidget);
+  Future<void> fillProviderForm(WidgetTester tester, String name) async {
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), name);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Phone number'),
+      '0334 7654321',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'CNIC'),
+      '42101-6969679-1',
+    );
+    await tapText(tester, 'Electrician');
+    await tapText(tester, 'Continue');
+    await pumpAsync(tester);
+  }
+
+  Future<void> openProviderRegister(WidgetTester tester, TestSession session) async {
+    await reachSignIn(tester, session.state);
+    await tapText(tester, 'Create account');
+    await tapText(tester, 'Register as Provider');
+  }
+
+  const rajaMatch = ProviderRow(
+    id: 'prov-raja',
+    name: 'raja circuitry and electrical works',
+    status: 'ONLINE',
+    rating: 0,
+    inspectionFee: 0,
+    specialisationId: 'spec-electrician',
+    specialisationName: 'Electrician',
+    phone: '0315 6767679',
+    cnic: '42201 xxxxxxxx',
+  );
+
+  testWidgets('an exact provider name stays on the form with a notice', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    session.api.nameCheckError = const ApiException(
+      'A user already exists with that name.',
+      statusCode: 409,
+    );
+    await openProviderRegister(tester, session);
+    await fillProviderForm(tester, 'RAJA circuitry and electrical works');
+
+    expect(find.text('A user already exists with that name.'), findsOneWidget);
+    expect(find.text('Is this you?'), findsNothing);
+    expect(find.text('Register as Provider'), findsOneWidget);
+    expect(session.api.providerInserts, 0);
+  });
+
+  testWidgets('a partial provider name lists matches and inserts nothing', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    session.api.nameMatches = [rajaMatch];
+    await openProviderRegister(tester, session);
+    await fillProviderForm(tester, 'Raja circuitry');
+
+    expect(find.text('Is this you?'), findsOneWidget);
+    expect(find.text('raja circuitry and electrical works'), findsOneWidget);
+    expect(find.text('0315 6767679'), findsOneWidget);
+    expect(find.text('CNIC 42201 xxxxxxxx'), findsOneWidget);
+    expect(find.text('Create account'), findsOneWidget);
+    expect(session.api.providerInserts, 0);
+  });
+
+  testWidgets('picking a matching provider opens that dashboard', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    session.api.nameMatches = [rajaMatch];
+    await openProviderRegister(tester, session);
+    await fillProviderForm(tester, 'Raja circuitry');
+    await tapText(tester, 'raja circuitry and electrical works');
+    await pumpAsync(tester);
+
+    expect(find.text('Provider dashboard'), findsOneWidget);
+    expect(find.text('Is this you?'), findsNothing);
+    expect(session.api.providerInserts, 0);
+  });
+
+  testWidgets('Create account on the match page inserts the provider', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    session.api.nameMatches = [rajaMatch];
+    await openProviderRegister(tester, session);
+    await fillProviderForm(tester, 'Raja circuitry');
+    await tapText(tester, 'Create account');
+    await pumpAsync(tester);
+
+    expect(session.api.providerInserts, 1);
+    expect(find.text('Enter verification code'), findsOneWidget);
+    await tapText(tester, 'VERIFY');
+    await pumpAsync(tester);
+    expect(find.text('Provider dashboard'), findsOneWidget);
+    expect(find.text('Raja circuitry'), findsOneWidget);
   });
 
   testWidgets('the demo provider list hides fees', (WidgetTester tester) async {
@@ -1320,6 +1552,14 @@ class FakeEmergencyService extends EmergencyService {
       status: 'FREE',
       driverId: 'drv-1',
       driverName: 'Sara Khan',
+    ),
+  ];
+
+  final callers = [
+    const CallerRow(
+      id: 'user-demo',
+      name: 'Hal Jordan',
+      phone: '+92 300 0000001',
     ),
   ];
 
@@ -1483,6 +1723,75 @@ class FakeEmergencyService extends EmergencyService {
       callerMessage: 'Your ambulance has changed to A-02.',
       request: null,
     );
+  }
+
+  @override
+  Future<List<CallerRow>> listCallers() async => callers;
+
+  var providerInserts = 0;
+  var nameMatches = <ProviderRow>[];
+  ApiException? nameCheckError;
+
+  @override
+  Future<List<ProviderRow>> checkProviderName({
+    required String name,
+    String? trade,
+  }) async {
+    final error = nameCheckError;
+    if(error != null) {
+      throw error;
+    }
+    return nameMatches;
+  }
+
+  @override
+  Future<ProviderRow> registerProvider({
+    required String name,
+    required String phone,
+    required String cnic,
+    required String trade,
+  }) async {
+    providerInserts += 1;
+    final created = ProviderRow(
+      id: 'prov-new',
+      name: name,
+      status: 'ONLINE',
+      rating: 0,
+      inspectionFee: 0,
+      specialisationId: 'spec-new',
+      specialisationName: trade,
+      phone: phone,
+    );
+    providers.add(created);
+    return created;
+  }
+
+  @override
+  Future<AmbulanceRow> registerDriver({
+    required String name,
+    required String phone,
+    required String ambulanceLabel,
+  }) async {
+    return AmbulanceRow(
+      id: 'amb-new',
+      label: ambulanceLabel.toUpperCase(),
+      status: 'FREE',
+      driverId: 'drv-new',
+      driverName: name,
+      driverPhone: phone,
+      latitude: 24.86,
+      longitude: 67.05,
+    );
+  }
+
+  @override
+  Future<CallerRow> registerCaller({
+    required String name,
+    required String phone,
+  }) async {
+    final created = CallerRow(id: 'user-new', name: name, phone: phone);
+    callers.add(created);
+    return created;
   }
 
   @override
@@ -1664,8 +1973,7 @@ Future<TestSession> reachAmbulanceRequest(WidgetTester tester) async {
   await tester.pump();
   await tester.tap(find.text('CONTINUE'));
   await tester.pump();
-  await tester.tap(find.text('CONTINUE'));
-  await tester.pump();
+  await submitCallerName(tester, 'hal jordan');
   await tester.tap(find.text('VERIFY'));
   await tester.pump();
   await tester.tap(find.text('Emergency help'));
@@ -1773,12 +2081,22 @@ Future<void> openProviderLocation(
   await tapText(tester, 'Continue');
 }
 
+Future<void> submitCallerName(WidgetTester tester, String name) async {
+  await tester.enterText(
+    find.widgetWithText(TextField, 'Name or phone number'),
+    name,
+  );
+  await tester.pump();
+  await tapText(tester, 'CONTINUE');
+  await pumpAsync(tester);
+}
+
 Future<void> reachHome(
   WidgetTester tester,
   EmergencyRequestState state,
 ) async {
   await reachSignIn(tester, state);
-  await tapText(tester, 'CONTINUE');
+  await submitCallerName(tester, 'hal jordan');
   await tapText(tester, 'VERIFY');
 }
 

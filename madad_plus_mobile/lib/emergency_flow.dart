@@ -61,6 +61,8 @@ class EmergencyFlow extends StatelessWidget {
         return const _CostReviewScreen();
       case EmergencyScreen.providerDashboard:
         return const _ProviderDashboardScreen();
+      case EmergencyScreen.providerNameMatch:
+        return const _ProviderNameMatchScreen();
       case EmergencyScreen.providerRequest:
         return const _ProviderRequestScreen();
       case EmergencyScreen.providerAccepted:
@@ -293,12 +295,27 @@ class _OnboardingScreen extends StatelessWidget {
   }
 }
 
-class _LoginScreen extends StatelessWidget {
+class _LoginScreen extends StatefulWidget {
   const _LoginScreen();
 
   @override
+  State<_LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<_LoginScreen> {
+  final _name = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final state = context.read<EmergencyRequestState>();
+    final state = context.watch<EmergencyRequestState>();
+    final notice = state.callerSignInNotice;
+    final loading = state.callerSignInBusy;
     return _FlowFrame(
       plainChrome: true,
       title: 'Sign in',
@@ -319,11 +336,13 @@ class _LoginScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.space5),
-          const TextField(
-            keyboardType: TextInputType.phone,
-            decoration: InputDecoration(
-              labelText: 'Phone number',
-              hintText: '+92 300 1234567',
+          TextField(
+            controller: _name,
+            keyboardType: TextInputType.text,
+            textInputAction: TextInputAction.done,
+            onSubmitted: state.submitCallerSignIn,
+            decoration: const InputDecoration(
+              labelText: 'Name or phone number',
               filled: true,
               fillColor: AppColors.surface,
               contentPadding: EdgeInsets.symmetric(
@@ -344,11 +363,23 @@ class _LoginScreen extends StatelessWidget {
               ),
             ),
           ),
+          if(notice != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _ErrorNotice(message: notice),
+          ],
+          if(loading) ...[
+            const SizedBox(height: AppSpacing.space4),
+            const Center(child: CircularProgressIndicator()),
+          ],
           const SizedBox(height: AppSpacing.space5),
           _PressScale(
             child: _ActionButton(
               label: 'CONTINUE',
-              onPressed: state.continueSignIn,
+              onPressed: loading
+                  ? null
+                  : () {
+                      state.submitCallerSignIn(_name.text);
+                    },
             ),
           ),
           const SizedBox(height: AppSpacing.space4),
@@ -513,32 +544,44 @@ class _RoleChoiceScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: AppSpacing.space6),
-          _ActionButton(
-            label: 'Register as Driver',
-            onPressed: () {
-              context.read<EmergencyRequestState>().chooseAccount(
-                AccountPath.driver,
-              );
-            },
+          Text(
+            'Pick the account you are creating.',
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              color: AppColors.muted,
+              letterSpacing: -0.2,
+            ),
           ),
-          const SizedBox(height: AppSpacing.space3),
-          _ActionButton(
-            label: 'Register as User',
-            onPressed: () {
-              context.read<EmergencyRequestState>().chooseAccount(
-                AccountPath.user,
-              );
-            },
-          ),
-          const SizedBox(height: AppSpacing.space3),
-          _ActionButton(
-            label: 'Register as Provider',
-            onPressed: () {
-              context.read<EmergencyRequestState>().chooseAccount(
-                AccountPath.provider,
-              );
-            },
+          const SizedBox(height: AppSpacing.space5),
+          _JoinGroup(
+            rows: [
+              _JoinRow(
+                label: 'Register as Driver',
+                detail: 'Drive an ambulance',
+                onPressed: () {
+                  context.read<EmergencyRequestState>().chooseAccount(
+                    AccountPath.driver,
+                  );
+                },
+              ),
+              _JoinRow(
+                label: 'Register as User',
+                detail: 'Request help',
+                onPressed: () {
+                  context.read<EmergencyRequestState>().chooseAccount(
+                    AccountPath.user,
+                  );
+                },
+              ),
+              _JoinRow(
+                label: 'Register as Provider',
+                detail: 'Offer a trade',
+                onPressed: () {
+                  context.read<EmergencyRequestState>().chooseAccount(
+                    AccountPath.provider,
+                  );
+                },
+              ),
+            ],
           ),
         ],
       ),
@@ -546,14 +589,34 @@ class _RoleChoiceScreen extends StatelessWidget {
   }
 }
 
-class _RegisterScreen extends StatelessWidget {
+class _RegisterScreen extends StatefulWidget {
   const _RegisterScreen();
+
+  @override
+  State<_RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends State<_RegisterScreen> {
+  final _name = TextEditingController();
+  final _phone = TextEditingController();
+  final _ambulance = TextEditingController();
+  final _cnic = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _phone.dispose();
+    _ambulance.dispose();
+    _cnic.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
     final driver = state.accountPath == AccountPath.driver;
     final provider = state.accountPath == AccountPath.provider;
+    final caller = !driver && !provider;
     final title = switch(state.accountPath) {
       AccountPath.driver => 'Register as Driver',
       AccountPath.provider => 'Register as Provider',
@@ -570,63 +633,433 @@ class _RegisterScreen extends StatelessWidget {
         children: [
           Text(
             'This wireframe accepts what you type.',
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: AppColors.muted),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              color: AppColors.muted,
+              letterSpacing: -0.2,
+              height: 1.35,
+            ),
           ),
           const SizedBox(height: AppSpacing.space5),
-          const TextField(
-            decoration: InputDecoration(
-              labelText: 'Name',
-              border: OutlineInputBorder(),
-            ),
+          _RegisterFields(
+            children: [
+              TextField(
+                controller: _name,
+                textInputAction: TextInputAction.next,
+                style: const TextStyle(letterSpacing: -0.2),
+                decoration: _registerField('Name'),
+              ),
+              TextField(
+                controller: _phone,
+                keyboardType: TextInputType.phone,
+                textInputAction: driver || provider
+                    ? TextInputAction.next
+                    : TextInputAction.done,
+                style: const TextStyle(
+                  letterSpacing: -0.2,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+                decoration: _registerField('Phone number'),
+              ),
+              if(driver)
+                TextField(
+                  controller: _ambulance,
+                  textCapitalization: TextCapitalization.characters,
+                  textInputAction: TextInputAction.done,
+                  style: const TextStyle(letterSpacing: -0.2),
+                  decoration: _registerField('Ambulance number'),
+                ),
+              if(provider)
+                TextField(
+                  controller: _cnic,
+                  textInputAction: TextInputAction.done,
+                  style: const TextStyle(
+                    letterSpacing: -0.2,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                  decoration: _registerField('CNIC'),
+                ),
+            ],
           ),
-          const SizedBox(height: AppSpacing.space3),
-          const TextField(
-            keyboardType: TextInputType.phone,
-            decoration: InputDecoration(
-              labelText: 'Phone number',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          if(driver) ...[
-            const SizedBox(height: AppSpacing.space3),
-            const TextField(
-              decoration: InputDecoration(
-                labelText: 'Ambulance number',
-                border: OutlineInputBorder(),
+          if(provider) ...[
+            const SizedBox(height: AppSpacing.space5),
+            Text(
+              'Trade',
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                letterSpacing: -0.1,
               ),
             ),
-          ],
-          if(provider) ...[
-            const SizedBox(height: AppSpacing.space4),
-            Text('TRADE', style: Theme.of(context).textTheme.labelSmall),
             const SizedBox(height: AppSpacing.space2),
-            Wrap(
-              spacing: AppSpacing.space2,
-              runSpacing: AppSpacing.space2,
-              children: ['Carpenter', 'Plumber', 'Electrician']
-                  .map(
-                    (trade) => _SelectionChip(
-                      label: trade,
-                      selected: state.registerTrade == trade,
-                      onPressed: () {
-                        state.selectRegisterTrade(trade);
-                      },
-                    ),
-                  )
-                  .toList(),
+            _TradeSegment(
+              trades: const ['Carpenter', 'Plumber', 'Electrician'],
+              selected: state.registerTrade,
+              onSelected: state.selectRegisterTrade,
             ),
           ],
+          if(state.registerNotice != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _ErrorNotice(message: state.registerNotice!),
+          ],
           const SizedBox(height: AppSpacing.space5),
-          _ActionButton(
+          _JoinContinue(
             label: 'Continue',
-            onPressed: () {
-              context.read<EmergencyRequestState>().continueRegistration();
-            },
+            onPressed: state.registerBusy
+                ? null
+                : () {
+                    if(caller) {
+                      state.registerCaller(_name.text, _phone.text);
+                    }
+                    else if(driver) {
+                      state.registerDriver(_name.text, _phone.text, _ambulance.text);
+                    }
+                    else {
+                      state.registerProvider(_name.text, _phone.text, _cnic.text);
+                    }
+                  },
           ),
         ],
       ),
     );
+  }
+}
+
+class _ProviderNameMatchScreen extends StatelessWidget {
+  const _ProviderNameMatchScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final canCreate = state.providerMatchCanCreate;
+
+    return _FlowFrame(
+      title: canCreate ? 'Register as Provider' : 'Sign in as provider',
+      onBack: () {
+        state.goTo(
+          canCreate ? EmergencyScreen.register : EmergencyScreen.staffSignIn,
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Is this you?',
+            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+              letterSpacing: -0.6,
+              height: 1.1,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          Text(
+            canCreate
+                ? 'Tap the business if it is yours. Create account only if none of these are you.'
+                : 'Tap the business that is yours.',
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              color: AppColors.muted,
+              letterSpacing: -0.2,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space5),
+          _JoinGroup(
+            rows: [
+              for(final provider in state.providerNameMatches)
+                _JoinRow(
+                  label: provider.name,
+                  detail: provider.phone ?? '',
+                  extra: 'CNIC ${provider.cnic ?? ''}',
+                  onPressed: () {
+                    if(canCreate) {
+                      state.chooseExistingProvider(provider);
+                    }
+                    else {
+                      state.chooseSignInProvider(provider);
+                    }
+                  },
+                ),
+            ],
+          ),
+          if(state.registerNotice != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _ErrorNotice(message: state.registerNotice!),
+          ],
+          if(canCreate) ...[
+            const SizedBox(height: AppSpacing.space5),
+            _JoinContinue(
+              label: 'Create account',
+              onPressed: state.registerBusy
+                  ? null
+                  : state.confirmProviderRegistration,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+InputDecoration _registerField(String label) {
+  return InputDecoration(
+    labelText: label,
+    floatingLabelBehavior: FloatingLabelBehavior.auto,
+    filled: true,
+    fillColor: AppColors.surface,
+    contentPadding: const EdgeInsets.symmetric(
+      horizontal: AppSpacing.space4,
+      vertical: AppSpacing.space3,
+    ),
+    border: InputBorder.none,
+    enabledBorder: InputBorder.none,
+    focusedBorder: const UnderlineInputBorder(
+      borderSide: BorderSide(color: AppColors.focus, width: 2),
+    ),
+    labelStyle: const TextStyle(
+      color: AppColors.muted,
+      letterSpacing: -0.1,
+    ),
+  );
+}
+
+class _RegisterFields extends StatelessWidget {
+  const _RegisterFields({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          children: [
+            for(var index = 0; index < children.length; index++) ...[
+              if(index > 0)
+                const Divider(height: 1, thickness: 1, color: AppColors.line),
+              children[index],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _JoinGroup extends StatelessWidget {
+  const _JoinGroup({required this.rows});
+
+  final List<_JoinRow> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          children: [
+            for(var index = 0; index < rows.length; index++) ...[
+              if(index > 0)
+                const Divider(height: 1, thickness: 1, color: AppColors.line),
+              rows[index],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _JoinRow extends StatelessWidget {
+  const _JoinRow({
+    required this.label,
+    required this.detail,
+    required this.onPressed,
+    this.extra,
+  });
+
+  final String label;
+  final String detail;
+  final String? extra;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return _PressScale(
+      child: Material(
+        color: AppColors.surface,
+        child: InkWell(
+          onTap: onPressed,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 64),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.space4,
+                vertical: AppSpacing.space3,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            fontSize: 17,
+                            letterSpacing: -0.3,
+                            height: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          detail,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.muted,
+                            letterSpacing: -0.1,
+                            height: 1.3,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        if(extra != null)
+                          Text(
+                            extra!,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: AppColors.muted,
+                              letterSpacing: -0.1,
+                              height: 1.3,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: AppColors.muted),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TradeSegment extends StatelessWidget {
+  const _TradeSegment({
+    required this.trades,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final List<String> trades;
+  final String selected;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.page,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(3),
+        child: Row(
+          children: [
+            for(final trade in trades)
+              Expanded(
+                child: _PressScale(
+                  child: Material(
+                    color: trade == selected ? AppColors.surface : Colors.transparent,
+                    borderRadius: BorderRadius.circular(9),
+                    elevation: trade == selected ? 1 : 0,
+                    shadowColor: const Color(0x33000000),
+                    child: InkWell(
+                      onTap: () {
+                        onSelected(trade);
+                      },
+                      borderRadius: BorderRadius.circular(9),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 44),
+                        child: Center(
+                          child: Text(
+                            trade,
+                            style: TextStyle(
+                              fontFamily: 'GeneralSans',
+                              fontSize: 14,
+                              fontWeight: trade == selected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              letterSpacing: -0.2,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _JoinContinue extends StatelessWidget {
+  const _JoinContinue({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final button = SizedBox(
+      height: 50,
+      child: FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.blue,
+          disabledBackgroundColor: AppColors.line,
+          foregroundColor: AppColors.surface,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          textStyle: const TextStyle(
+            fontFamily: 'GeneralSans',
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.3,
+          ),
+        ),
+        child: Text(label),
+      ),
+    );
+    if(onPressed == null) {
+      return button;
+    }
+    return _PressScale(child: button);
   }
 }
 
@@ -2449,6 +2882,7 @@ class _ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final name = context.watch<EmergencyRequestState>().signedInUserName;
     return _FlowFrame(
       title: 'Profile',
       tab: _UserTab.profile,
@@ -2469,7 +2903,7 @@ class _ProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.space2),
           Text(
-            'Hal Jordan',
+            name ?? 'Hal Jordan',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineMedium,
           ),
@@ -4739,7 +5173,7 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
           _GroupedLinks(
             links: [
               _GroupedLink('Refresh jobs', state.loadProviderJobs),
-              _GroupedLink('Change provider', state.changeProviderProfile),
+              _GroupedLink('Sign out', state.signOutProvider),
             ],
           ),
         ],

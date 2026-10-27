@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
+const crypto = require("crypto");
 const { Server } = require("socket.io");
 const db = require("./db");
 const {
@@ -1109,6 +1110,105 @@ app.get("/api/v1/specialisations", async (req, res) => {
   }
 });
 
+app.get("/api/v1/callers", async (req, res) => {
+  try {
+    const callers = await db("users")
+      .select("id", "name", "phone")
+      .orderBy("name");
+    res.json(callers);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to load callers" });
+  }
+});
+
+app.post("/api/v1/callers", async (req, res) => {
+  const name = String(req.body.name || "").trim();
+  const phone = String(req.body.phone || "").trim();
+  if (!name || !phone) {
+    return res.status(400).json({ error: "name and phone are required" });
+  }
+
+  try {
+    const taken = await db("users").select("id").where("phone", phone).first();
+    if (taken) {
+      return res.status(409).json({ error: "That phone number is already registered" });
+    }
+    const authUserId = crypto.randomUUID();
+    const [caller] = await db("users")
+      .insert({
+        auth_user_id: authUserId,
+        name,
+        phone,
+        email: `${authUserId}@madadplus.test`,
+        verified: true
+      })
+      .returning(["id", "name", "phone"]);
+    res.status(201).json(caller);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to register caller" });
+  }
+});
+
+app.post("/api/v1/drivers", async (req, res) => {
+  const name = String(req.body.name || "").trim();
+  const phone = String(req.body.phone || "").trim();
+  const label = String(req.body.ambulanceLabel || "").trim().toUpperCase();
+  if (!name || !phone || !label) {
+    return res.status(400).json({ error: "name, phone, and ambulanceLabel are required" });
+  }
+
+  try {
+    const ambulanceId = await db.transaction(async (trx) => {
+      const orgId = await organizationId(trx);
+      const [driver] = await trx("drivers")
+        .insert({ organization_id: orgId, name, phone })
+        .returning(["id"]);
+
+      const existing = await trx("ambulances").select("id").where("label", label).first();
+      if (existing) {
+        await trx("ambulances").where("id", existing.id).update({ driver_id: driver.id });
+        return existing.id;
+      }
+
+      // New ambulances start somewhere in Karachi (Clifton to Korangi).
+      const lat = 24.84 + Math.random() * 0.08;
+      const lng = 67.03 + Math.random() * 0.09;
+      const [created] = await trx("ambulances")
+        .insert({
+          organization_id: orgId,
+          driver_id: driver.id,
+          label,
+          status: "FREE",
+          location: point(trx, lat, lng)
+        })
+        .returning(["id"]);
+      return created.id;
+    });
+
+    const ambulance = await db("ambulances as a")
+      .leftJoin("drivers as d", "d.id", "a.driver_id")
+      .select(
+        "a.id",
+        "a.label",
+        "a.status",
+        "d.id as driverId",
+        "d.name as driverName",
+        "d.phone as driverPhone",
+        db.raw("ST_Y(a.location::geometry) as lat"),
+        db.raw("ST_X(a.location::geometry) as lng")
+      )
+      .where("a.id", ambulanceId)
+      .first();
+    await emitAmbulance(ambulanceId);
+    res.status(201).json(ambulance);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to register driver" });
+  }
+});
+
 app.get("/api/v1/providers", async (req, res) => {
   try {
     const providers = await db("providers as p")
@@ -1143,6 +1243,159 @@ app.get("/api/v1/providers", async (req, res) => {
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Unable to load providers" });
+  }
+});
+
+function normalizeName(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function editDistance(a, b) {
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost);
+    }
+    previous = current;
+  }
+  return previous[b.length];
+}
+
+function isPartialNameMatch(typed, saved) {
+  if (saved.includes(typed) || typed.includes(saved)) return true;
+  if (typed.length < 8 || saved.length < 8) return false;
+  return editDistance(typed, saved) <= 2;
+}
+
+function maskCnic(cnic) {
+  let seen = 0;
+  return String(cnic || "").replace(/\d/g, (digit) => {
+    seen += 1;
+    return seen <= 5 ? digit : "x";
+  });
+}
+
+async function findProviderNameMatches(name, specialisationId) {
+  const typed = normalizeName(name);
+  const rows = await db("providers as p")
+    .leftJoin("specialisations as s", "s.id", "p.specialisation_id")
+    .select(
+      "p.id",
+      "p.name",
+      "p.phone",
+      "p.cnic",
+      "p.status",
+      "p.rating",
+      "p.inspection_fee as inspectionFee",
+      "s.id as specialisationId",
+      "s.name as specialisationName"
+    )
+    .modify((query) => {
+      if (specialisationId) query.where("p.specialisation_id", specialisationId);
+    });
+
+  const exact = rows.some((row) => normalizeName(row.name) === typed);
+  const matches = exact
+    ? []
+    : rows
+        .filter((row) => isPartialNameMatch(typed, normalizeName(row.name)))
+        .map((row) => ({
+          ...row,
+          cnic: maskCnic(row.cnic),
+          rating: Number(row.rating),
+          inspectionFee: Number(row.inspectionFee)
+        }));
+  return { exact, matches };
+}
+
+const existingNameMessage = "A user already exists with that name.";
+
+app.post("/api/v1/providers/name-check", async (req, res) => {
+  const name = String(req.body.name || "").trim();
+  const trade = String(req.body.trade || "").trim();
+  if (!name) {
+    return res.status(400).json({ error: "name is required" });
+  }
+
+  try {
+    let specialisationId = null;
+    if (trade) {
+      const specialisation = await db("specialisations")
+        .select("id")
+        .whereRaw("lower(name) = lower(?)", [trade])
+        .first();
+      if (!specialisation) {
+        return res.status(404).json({ error: `No trade called ${trade} was found` });
+      }
+      specialisationId = specialisation.id;
+    }
+    const { exact, matches } = await findProviderNameMatches(name, specialisationId);
+    if (exact) {
+      return res.status(409).json({ error: existingNameMessage });
+    }
+    res.json({ matches });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to check provider name" });
+  }
+});
+
+app.post("/api/v1/providers", async (req, res) => {
+  const name = String(req.body.name || "").trim();
+  const phone = String(req.body.phone || "").trim();
+  const cnic = String(req.body.cnic || "").trim();
+  const trade = String(req.body.trade || "").trim();
+  if (!name || !phone || !cnic || !trade) {
+    return res.status(400).json({ error: "name, phone, cnic, and trade are required" });
+  }
+
+  try {
+    const specialisation = await db("specialisations")
+      .select("id", "name")
+      .whereRaw("lower(name) = lower(?)", [trade])
+      .first();
+    if (!specialisation) {
+      return res.status(404).json({ error: `No trade called ${trade} was found` });
+    }
+    const { exact } = await findProviderNameMatches(name, specialisation.id);
+    if (exact) {
+      return res.status(409).json({ error: existingNameMessage });
+    }
+    const takenPhone = await db("providers").select("id").where("phone", phone).first();
+    if (takenPhone) {
+      return res.status(409).json({ error: "That phone number is already registered" });
+    }
+    const takenCnic = await db("providers").select("id").where("cnic", cnic).first();
+    if (takenCnic) {
+      return res.status(409).json({ error: "That CNIC is already registered" });
+    }
+
+    const [provider] = await db("providers")
+      .insert({
+        auth_user_id: crypto.randomUUID(),
+        name,
+        phone,
+        cnic,
+        status: "ONLINE",
+        designation: specialisation.name,
+        specialisation_id: specialisation.id,
+        rating: 0,
+        inspection_fee: 0,
+        services_provided_count: 0
+      })
+      .returning(["id", "name", "phone", "status"]);
+    res.status(201).json({
+      ...provider,
+      rating: 0,
+      inspectionFee: 0,
+      specialisationId: specialisation.id,
+      specialisationName: specialisation.name
+    });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to register provider" });
   }
 });
 
