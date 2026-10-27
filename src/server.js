@@ -1109,6 +1109,18 @@ app.get("/api/v1/specialisations", async (req, res) => {
   }
 });
 
+app.get("/api/v1/callers", async (req, res) => {
+  try {
+    const callers = await db("users")
+      .select("id", "name", "phone")
+      .orderBy("name");
+    res.json(callers);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to load callers" });
+  }
+});
+
 app.get("/api/v1/providers", async (req, res) => {
   try {
     const providers = await db("providers as p")
