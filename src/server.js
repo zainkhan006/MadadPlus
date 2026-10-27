@@ -1116,6 +1116,7 @@ app.get("/api/v1/providers", async (req, res) => {
       .select(
         "p.id",
         "p.name",
+        "p.phone",
         "p.status",
         "p.designation",
         "p.rating",
