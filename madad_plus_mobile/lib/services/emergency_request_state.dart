@@ -17,6 +17,7 @@ enum EmergencyScreen {
   splash,
   onboarding,
   login,
+  staffSignIn,
   otp,
   home,
   homeLocation,
@@ -137,6 +138,7 @@ class EmergencyRequestState extends ChangeNotifier {
   List<ProviderRow> providers = [];
   bool providersLoading = false;
   String? providersError;
+  String? staffSignInNotice;
   ProviderRow? chosenProvider;
   DomesticBooking? domesticBooking;
   bool domesticSending = false;
@@ -160,6 +162,9 @@ class EmergencyRequestState extends ChangeNotifier {
   EmergencyCall? driverCall;
   bool driverLoading = false;
   String? driverError;
+  AmbulanceRow? matchedDriver;
+  ProviderRow? matchedProvider;
+  bool staffSignInBusy = false;
 
   final List<({String address, double latitude, double longitude})>
   homePlaces = [];
@@ -382,14 +387,97 @@ class EmergencyRequestState extends ChangeNotifier {
   void continueDriverSignIn() {
     accountPath = AccountPath.driver;
     otpFromRegistration = false;
-    goTo(EmergencyScreen.otp);
+    matchedDriver = null;
+    matchedProvider = null;
+    staffSignInNotice = null;
+    goTo(EmergencyScreen.staffSignIn);
   }
 
   void continueProviderSignIn() {
     accountPath = AccountPath.provider;
     otpFromRegistration = false;
     providerDemo = false;
-    goTo(EmergencyScreen.otp);
+    matchedDriver = null;
+    matchedProvider = null;
+    staffSignInNotice = null;
+    goTo(EmergencyScreen.staffSignIn);
+  }
+
+  Future<void> submitStaffSignIn(String raw) async {
+    if(staffSignInBusy) {
+      return;
+    }
+    final typed = raw.trim();
+    staffSignInNotice = null;
+    matchedDriver = null;
+    matchedProvider = null;
+    if(typed.isEmpty) {
+      staffSignInNotice = 'Enter the name or phone number you registered with.';
+      notifyListeners();
+      return;
+    }
+
+    staffSignInBusy = true;
+    notifyListeners();
+    try {
+      if(accountPath == AccountPath.driver) {
+        await loadDriverAmbulances();
+        if(driverError != null) {
+          return;
+        }
+        AmbulanceRow? match;
+        for(final row in driverAmbulances) {
+          if(_sameStaffName(row.driverName, typed) || _sameStaffPhone(row.driverPhone, typed)) {
+            match = row;
+            break;
+          }
+        }
+        if(match == null) {
+          staffSignInNotice = 'Nobody was found with that name or number.';
+          return;
+        }
+        matchedDriver = match;
+        goTo(EmergencyScreen.otp);
+        return;
+      }
+
+      await loadProviders();
+      if(providersError != null) {
+        return;
+      }
+      ProviderRow? match;
+      for(final row in providers) {
+        if(_sameStaffName(row.name, typed) || _sameStaffPhone(row.phone, typed)) {
+          match = row;
+          break;
+        }
+      }
+      if(match == null) {
+        staffSignInNotice = 'Nobody was found with that name or number.';
+        return;
+      }
+      matchedProvider = match;
+      goTo(EmergencyScreen.otp);
+    }
+    finally {
+      staffSignInBusy = false;
+      notifyListeners();
+    }
+  }
+
+  bool _sameStaffName(String? recorded, String typed) {
+    final left = recorded?.trim().toLowerCase() ?? '';
+    return left.isNotEmpty && left == typed.trim().toLowerCase();
+  }
+
+  bool _sameStaffPhone(String? recorded, String typed) {
+    final left = _staffDigits(recorded ?? '');
+    final right = _staffDigits(typed);
+    return left.isNotEmpty && right.isNotEmpty && left == right;
+  }
+
+  String _staffDigits(String value) {
+    return value.replaceAll(RegExp(r'\D'), '');
   }
 
   void openProviderDemo() {
@@ -421,6 +509,12 @@ class EmergencyRequestState extends ChangeNotifier {
 
   void verifyCode() {
     if(accountPath == AccountPath.driver) {
+      final matched = matchedDriver;
+      if(matched != null) {
+        chooseDriverAmbulance(matched);
+        goTo(EmergencyScreen.driverJob);
+        return;
+      }
       openDriverPortal();
       return;
     }
@@ -428,10 +522,15 @@ class EmergencyRequestState extends ChangeNotifier {
     if(accountPath == AccountPath.provider) {
       if(otpFromRegistration) {
         startProviderMode(fromProfile: false);
+        return;
       }
-      else {
-        openProviderDemo();
+      final matched = matchedProvider;
+      if(matched != null) {
+        chooseProviderProfile(matched);
+        startProviderMode(fromProfile: false, demo: true);
+        return;
       }
+      openProviderDemo();
       return;
     }
 
@@ -441,6 +540,10 @@ class EmergencyRequestState extends ChangeNotifier {
   void backFromOtp() {
     if(otpFromRegistration) {
       goTo(EmergencyScreen.register);
+      return;
+    }
+    if(accountPath == AccountPath.driver || accountPath == AccountPath.provider) {
+      goTo(EmergencyScreen.staffSignIn);
       return;
     }
 
@@ -817,6 +920,40 @@ class EmergencyRequestState extends ChangeNotifier {
     goTo(screen);
   }
 
+  Future<void> submitProviderRating(int stars) async {
+    final provider = chosenProvider;
+    if(provider == null || stars < 1 || stars > 5) {
+      return;
+    }
+    try {
+      final saved = await _emergencyService.setProviderRating(
+        providerId: provider.id,
+        rating: stars,
+      );
+      _applyProviderRating(provider.id, saved);
+    } on ApiException catch (error) {
+      showDomesticNotice(error.message);
+    } on TimeoutException {
+      showDomesticNotice('The rating took too long to save. Try again.');
+    } catch (_) {
+      showDomesticNotice('The rating could not be saved. Try again.');
+    }
+  }
+
+  void _applyProviderRating(String providerId, double rating) {
+    if(chosenProvider?.id == providerId) {
+      chosenProvider = chosenProvider!.withRating(rating);
+    }
+    if(providerProfile?.id == providerId) {
+      providerProfile = providerProfile!.withRating(rating);
+    }
+    providers = [
+      for(final row in providers)
+        row.id == providerId ? row.withRating(rating) : row,
+    ];
+    notifyListeners();
+  }
+
   void startProviderMode({required bool fromProfile, bool demo = false}) {
     providerFromProfile = fromProfile;
     providerDemo = demo;
@@ -923,6 +1060,13 @@ class EmergencyRequestState extends ChangeNotifier {
 
     try {
       providerJobs = await _emergencyService.listProviderRequests(provider.id);
+      final rows = await _emergencyService.listProviders();
+      for(final row in rows) {
+        if(row.id == provider.id) {
+          providerProfile = provider.withRating(row.rating);
+          break;
+        }
+      }
     } on ApiException catch (error) {
       domesticNotice = error.message;
     } on TimeoutException {
@@ -1089,13 +1233,12 @@ class EmergencyRequestState extends ChangeNotifier {
   }
 
   void openDriverPortal() {
-    goTo(EmergencyScreen.driverJob);
     if(driverId == null) {
-      loadDriverAmbulances();
+      goTo(EmergencyScreen.home);
+      return;
     }
-    else {
-      loadDriverPortal();
-    }
+    goTo(EmergencyScreen.driverJob);
+    loadDriverPortal();
   }
 
   Future<void> loadDriverAmbulances() async {
@@ -1139,7 +1282,7 @@ class EmergencyRequestState extends ChangeNotifier {
     loadDriverPortal();
   }
 
-  void changeDriverAmbulance() {
+  void signOutDriver() {
     _emergencySocketService.disconnectDriver();
     driverId = null;
     driverAmbulanceLabel = null;
@@ -1147,8 +1290,9 @@ class EmergencyRequestState extends ChangeNotifier {
     driverAmbulanceLat = null;
     driverAmbulanceLng = null;
     driverCall = null;
+    matchedDriver = null;
     clearRoute();
-    loadDriverAmbulances();
+    goTo(EmergencyScreen.login);
   }
 
   Future<void> markDriverUnavailable() {
@@ -2082,6 +2226,9 @@ class EmergencyRequestState extends ChangeNotifier {
         notifyListeners();
       },
       onPickedUp: receivePickup,
+      onReconnected: () {
+        _catchUpAfterReconnect();
+      },
       onCallerMessage: (message, assignment) {
         receiveCallerMessage(message, assignment: assignment);
       },
@@ -2127,6 +2274,9 @@ class EmergencyRequestState extends ChangeNotifier {
     if(call.requestId != requestId) {
       return;
     }
+    if(routeLeg >= 2) {
+      return;
+    }
 
     final name = call.hospitalName?.trim() ?? '';
     final address = call.hospitalAddress?.trim() ?? '';
@@ -2149,6 +2299,25 @@ class EmergencyRequestState extends ChangeNotifier {
       toLng: call.hospitalLongitude,
     );
     notifyListeners();
+  }
+
+  Future<void> _catchUpAfterReconnect() async {
+    final id = requestId;
+    if(id == null || routeLeg >= 2) {
+      return;
+    }
+
+    try {
+      final call = await _emergencyService.loadEmergencyRequest(id);
+      if(requestId != id || routeLeg >= 2) {
+        return;
+      }
+      if(!_hospitalLegStatuses.contains(call.status)) {
+        return;
+      }
+      receivePickup(call);
+    } catch(_) {
+    }
   }
 
   void _startArrivalSimulation() {

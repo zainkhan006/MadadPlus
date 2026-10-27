@@ -122,6 +122,7 @@ class AmbulanceRow {
     required this.status,
     required this.driverId,
     required this.driverName,
+    this.driverPhone,
     this.latitude,
     this.longitude,
   });
@@ -131,6 +132,7 @@ class AmbulanceRow {
   final String status;
   final String? driverId;
   final String? driverName;
+  final String? driverPhone;
   final double? latitude;
   final double? longitude;
 
@@ -141,6 +143,7 @@ class AmbulanceRow {
       status: json['status'] as String,
       driverId: json['driverId'] as String?,
       driverName: json['driverName'] as String?,
+      driverPhone: json['driverPhone'] as String?,
       latitude: _coord(json['lat']),
       longitude: _coord(json['lng']),
     );
@@ -284,6 +287,7 @@ class ProviderRow {
     required this.inspectionFee,
     required this.specialisationId,
     required this.specialisationName,
+    this.phone,
   });
 
   final String id;
@@ -293,6 +297,7 @@ class ProviderRow {
   final double inspectionFee;
   final String? specialisationId;
   final String? specialisationName;
+  final String? phone;
 
   ProviderRow withFee(double fee) {
     return ProviderRow(
@@ -303,6 +308,20 @@ class ProviderRow {
       inspectionFee: fee,
       specialisationId: specialisationId,
       specialisationName: specialisationName,
+      phone: phone,
+    );
+  }
+
+  ProviderRow withRating(double nextRating) {
+    return ProviderRow(
+      id: id,
+      name: name,
+      status: status,
+      rating: nextRating,
+      inspectionFee: inspectionFee,
+      specialisationId: specialisationId,
+      specialisationName: specialisationName,
+      phone: phone,
     );
   }
 
@@ -315,6 +334,7 @@ class ProviderRow {
       inspectionFee: (json['inspectionFee'] as num?)?.toDouble() ?? 0,
       specialisationId: json['specialisationId'] as String?,
       specialisationName: json['specialisationName'] as String?,
+      phone: json['phone'] as String?,
     );
   }
 }
@@ -459,6 +479,17 @@ class EmergencyService {
     );
   }
 
+  Future<EmergencyCall> loadEmergencyRequest(String requestId) async {
+    final decoded = await _send(
+      http.get(
+        Uri.parse('$baseUrl/api/v1/emergency-requests/$requestId'),
+        headers: _headers,
+      ),
+      'The emergency request could not be loaded.',
+    );
+    return EmergencyCall.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
   Future<List<AmbulanceRow>> listAmbulances() async {
     final decoded = await _send(
       http.get(Uri.parse('$baseUrl/api/v1/ambulances'), headers: _headers),
@@ -560,6 +591,21 @@ class EmergencyService {
       'The inspection fee could not be saved.',
     );
     return ((decoded as Map)['inspectionFee'] as num).toDouble();
+  }
+
+  Future<double> setProviderRating({
+    required String providerId,
+    required int rating,
+  }) async {
+    final decoded = await _send(
+      http.patch(
+        Uri.parse('$baseUrl/api/v1/providers/$providerId/rating'),
+        headers: _headers,
+        body: jsonEncode({'rating': rating}),
+      ),
+      'The rating could not be saved.',
+    );
+    return ((decoded as Map)['rating'] as num).toDouble();
   }
 
   Future<DomesticBooking> createDomesticRequest({
