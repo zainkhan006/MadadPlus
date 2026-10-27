@@ -1245,6 +1245,53 @@ app.get("/api/v1/providers", async (req, res) => {
   }
 });
 
+app.post("/api/v1/providers", async (req, res) => {
+  const name = String(req.body.name || "").trim();
+  const phone = String(req.body.phone || "").trim();
+  const trade = String(req.body.trade || "").trim();
+  if (!name || !phone || !trade) {
+    return res.status(400).json({ error: "name, phone, and trade are required" });
+  }
+
+  try {
+    const specialisation = await db("specialisations")
+      .select("id", "name")
+      .whereRaw("lower(name) = lower(?)", [trade])
+      .first();
+    if (!specialisation) {
+      return res.status(404).json({ error: `No trade called ${trade} was found` });
+    }
+    const taken = await db("providers").select("id").where("phone", phone).first();
+    if (taken) {
+      return res.status(409).json({ error: "That phone number is already registered" });
+    }
+
+    const [provider] = await db("providers")
+      .insert({
+        auth_user_id: crypto.randomUUID(),
+        name,
+        phone,
+        status: "ONLINE",
+        designation: specialisation.name,
+        specialisation_id: specialisation.id,
+        rating: 0,
+        inspection_fee: 0,
+        services_provided_count: 0
+      })
+      .returning(["id", "name", "phone", "status"]);
+    res.status(201).json({
+      ...provider,
+      rating: 0,
+      inspectionFee: 0,
+      specialisationId: specialisation.id,
+      specialisationName: specialisation.name
+    });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to register provider" });
+  }
+});
+
 app.get("/api/v1/providers/:providerId", async (req, res) => {
   try {
     const provider = await db("providers as p")
