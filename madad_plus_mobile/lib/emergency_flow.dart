@@ -326,15 +326,7 @@ class _LoginScreenState extends State<_LoginScreen> {
         child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Existing account', style: _sectionTitle(context)),
-          const SizedBox(height: AppSpacing.space2),
-          Text(
-            'We will send a verification code. Demo mode does not send a real SMS.',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: AppColors.muted,
-              height: 1.45,
-            ),
-          ),
+          Text('Sign in to your account', style: _sectionTitle(context)),
           const SizedBox(height: AppSpacing.space5),
           TextField(
             controller: _name,
@@ -1467,14 +1459,6 @@ class _HomeScreen extends StatelessWidget {
               },
             ),
           ),
-          const SizedBox(height: AppSpacing.space5),
-          Text(
-            'Simulation mode only. For a real emergency, call 1122.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppColors.muted,
-              height: 1.45,
-            ),
-          ),
         ],
         ),
       ),
@@ -1667,14 +1651,6 @@ class _EmergencyTypeScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('What do you need?', style: _largeTitle(context)),
-            const SizedBox(height: AppSpacing.space2),
-            Text(
-              'Ambulance requests are available in this demo.',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: AppColors.muted,
-                height: 1.45,
-              ),
-            ),
             const SizedBox(height: AppSpacing.space4),
             _PressScale(
               child: _ChoiceCard(
@@ -1689,15 +1665,6 @@ class _EmergencyTypeScreen extends StatelessWidget {
                     EmergencyScreen.emergencyLocation,
                   );
                 },
-              ),
-            ),
-            const SizedBox(height: AppSpacing.space5),
-            Text(
-              'Simulation mode only. For a real emergency, call 1122.',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: AppColors.red,
-                height: 1.45,
-                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -2065,12 +2032,6 @@ class _EmergencySpeakScreenState extends State<_EmergencySpeakScreen> {
             'Speak in English or Urdu',
             style: _largeTitle(context),
           ),
-          const SizedBox(height: AppSpacing.space2),
-          Text(
-            'Say what happened and how many people need help.',
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: AppColors.muted),
-          ),
           const SizedBox(height: AppSpacing.space6),
           Center(
             child: _PressScale(
@@ -2233,12 +2194,6 @@ class _EmergencyDetailsScreenState extends State<_EmergencyDetailsScreen> {
           Text(
             'Tell us only if you can',
             style: _largeTitle(context),
-          ),
-          const SizedBox(height: AppSpacing.space2),
-          Text(
-            'What happened and how many people need help are required.',
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: AppColors.muted),
           ),
           const SizedBox(height: AppSpacing.space4),
           Text(
@@ -3262,14 +3217,6 @@ class _TradeDetailScreen extends StatelessWidget {
           Text(
             state.domesticTrade,
             style: Theme.of(context).textTheme.headlineLarge,
-          ),
-          const SizedBox(height: AppSpacing.space2),
-          Text(
-            plumber
-                ? 'Leaks, pipes, taps, and water motors.'
-                : 'Describe the job on the next screen.',
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: AppColors.muted),
           ),
           const SizedBox(height: AppSpacing.space4),
           Text('CHOOSE AN ISSUE', style: Theme.of(context).textTheme.labelSmall),

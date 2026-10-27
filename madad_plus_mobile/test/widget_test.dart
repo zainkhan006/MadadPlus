@@ -233,7 +233,7 @@ void main() {
     await tapText(tester, 'Sign out');
     await pumpAsync(tester);
 
-    expect(find.text('Existing account'), findsOneWidget);
+    expect(find.text('Sign in to your account'), findsOneWidget);
     expect(find.text('How can we help?'), findsNothing);
     expect(find.text('No active call'), findsNothing);
   });
@@ -1047,7 +1047,7 @@ void main() {
     await tester.tap(find.byTooltip('Back'));
     await tester.pump();
 
-    expect(find.text('Existing account'), findsOneWidget);
+    expect(find.text('Sign in to your account'), findsOneWidget);
 
     await submitStaffName(tester, 'Sign in as provider', 'Karachi Plumbers');
     await tapText(tester, 'VERIFY');
