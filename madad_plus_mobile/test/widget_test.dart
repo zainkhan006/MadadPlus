@@ -272,6 +272,43 @@ void main() {
     expect(find.text('Choose your ambulance'), findsNothing);
   });
 
+  testWidgets('a driver name matches without matching capitals', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    session.api.ambulances.add(
+      const AmbulanceRow(
+        id: 'amb-7',
+        label: 'A-07',
+        status: 'BUSY',
+        driverId: 'drv-7',
+        driverName: 'Fahad Iqbal',
+      ),
+    );
+    await reachSignIn(tester, session.state);
+    await submitStaffName(tester, 'Sign in as driver', 'fahad iqbal');
+
+    expect(find.text('Verify phone'), findsOneWidget);
+    expect(
+      find.text('Nobody was found with that name or number.'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a provider name matches without matching capitals', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    await reachSignIn(tester, session.state);
+    await submitStaffName(tester, 'Sign in as provider', 'karachi plumbers');
+
+    expect(find.text('Verify phone'), findsOneWidget);
+    expect(
+      find.text('Nobody was found with that name or number.'),
+      findsNothing,
+    );
+  });
+
   testWidgets('Hassan Ali phone opens his driver page', (
     WidgetTester tester,
   ) async {
