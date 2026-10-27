@@ -247,12 +247,23 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Register as Driver'));
     await tester.pump();
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Zain Ali');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Phone number'),
+      '0333 1234567',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Ambulance number'),
+      'A-08',
+    );
     await tester.tap(find.text('Continue'));
-    await tester.pump();
+    await pumpAsync(tester);
     await tester.tap(find.text('VERIFY'));
     await pumpAsync(tester);
 
-    expect(find.text('How can we help?'), findsOneWidget);
+    expect(find.text('How can we help?'), findsNothing);
+    expect(find.text('Sign out'), findsOneWidget);
+    expect(session.state.driverId, 'drv-new');
     expect(find.text('Choose your ambulance'), findsNothing);
     expect(find.text('Which ambulance are you driving?'), findsNothing);
   });
@@ -681,7 +692,13 @@ void main() {
 
     expect(find.text('Ambulance number'), findsNothing);
 
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Ibad Khan');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Phone number'),
+      '0332 6767679',
+    );
     await tester.tap(find.text('Continue'));
+    await tester.pump();
     await tester.pump();
     await tester.tap(find.text('VERIFY'));
     await tester.pump();
@@ -719,7 +736,8 @@ void main() {
     await tester.tap(find.text('Profile'));
     await tester.pump();
 
-    expect(find.text('Hal Jordan'), findsOneWidget);
+    expect(find.text('Ibad Khan'), findsOneWidget);
+    expect(find.text('Hal Jordan'), findsNothing);
     expect(find.byIcon(Icons.person), findsNWidgets(2));
     expect(find.text('Saved addresses'), findsOneWidget);
     expect(find.text('Language'), findsOneWidget);
@@ -1282,22 +1300,27 @@ void main() {
     expect(find.text('Electrician'), findsOneWidget);
     expect(find.text('Ambulance number'), findsNothing);
 
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Name'),
+      'Raja circuitry and electrical works',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Phone number'),
+      '0334 7654321',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'CNIC'),
+      '42101-6969679-1',
+    );
+    await tapText(tester, 'Electrician');
     await tapText(tester, 'Continue');
-    await tester.tap(find.byTooltip('Back'));
-    await tester.pump();
-    expect(find.text('Register as Provider'), findsOneWidget);
-
-    await tapText(tester, 'Continue');
+    await pumpAsync(tester);
     await tapText(tester, 'VERIFY');
     await pumpAsync(tester);
-    expect(find.text('Is this you?'), findsOneWidget);
-    expect(find.text('Your business'), findsOneWidget);
-    expect(find.text('Karachi Plumbers · Plumber'), findsOneWidget);
-    expect(find.text('Which provider are you?'), findsNothing);
-
-    await tester.tap(find.byTooltip('Back'));
-    await tester.pump();
-    expect(find.text('Existing account'), findsOneWidget);
+    expect(find.text('Provider dashboard'), findsOneWidget);
+    expect(find.text('Raja circuitry and electrical works'), findsOneWidget);
+    expect(find.text('Is this you?'), findsNothing);
+    expect(find.text('Kashif electric wala · Electrician'), findsNothing);
   });
 
   testWidgets('the demo provider list hides fees', (WidgetTester tester) async {
@@ -1572,6 +1595,55 @@ class FakeEmergencyService extends EmergencyService {
 
   @override
   Future<List<CallerRow>> listCallers() async => callers;
+
+  @override
+  Future<ProviderRow> registerProvider({
+    required String name,
+    required String phone,
+    required String cnic,
+    required String trade,
+  }) async {
+    final created = ProviderRow(
+      id: 'prov-new',
+      name: name,
+      status: 'ONLINE',
+      rating: 0,
+      inspectionFee: 0,
+      specialisationId: 'spec-new',
+      specialisationName: trade,
+      phone: phone,
+    );
+    providers.add(created);
+    return created;
+  }
+
+  @override
+  Future<AmbulanceRow> registerDriver({
+    required String name,
+    required String phone,
+    required String ambulanceLabel,
+  }) async {
+    return AmbulanceRow(
+      id: 'amb-new',
+      label: ambulanceLabel.toUpperCase(),
+      status: 'FREE',
+      driverId: 'drv-new',
+      driverName: name,
+      driverPhone: phone,
+      latitude: 24.86,
+      longitude: 67.05,
+    );
+  }
+
+  @override
+  Future<CallerRow> registerCaller({
+    required String name,
+    required String phone,
+  }) async {
+    final created = CallerRow(id: 'user-new', name: name, phone: phone);
+    callers.add(created);
+    return created;
+  }
 
   @override
   Future<List<ProviderRow>> listProviders() async => providers;

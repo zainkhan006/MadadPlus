@@ -598,6 +598,63 @@ class EmergencyService {
         .toList();
   }
 
+  Future<CallerRow> registerCaller({
+    required String name,
+    required String phone,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse('$baseUrl/api/v1/callers'),
+        headers: _headers,
+        body: jsonEncode({'name': name, 'phone': phone}),
+      ),
+      'The account could not be created.',
+    );
+    return CallerRow.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<AmbulanceRow> registerDriver({
+    required String name,
+    required String phone,
+    required String ambulanceLabel,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse('$baseUrl/api/v1/drivers'),
+        headers: _headers,
+        body: jsonEncode({
+          'name': name,
+          'phone': phone,
+          'ambulanceLabel': ambulanceLabel,
+        }),
+      ),
+      'The driver account could not be created.',
+    );
+    return AmbulanceRow.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<ProviderRow> registerProvider({
+    required String name,
+    required String phone,
+    required String cnic,
+    required String trade,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse('$baseUrl/api/v1/providers'),
+        headers: _headers,
+        body: jsonEncode({
+          'name': name,
+          'phone': phone,
+          'cnic': cnic,
+          'trade': trade,
+        }),
+      ),
+      'The provider account could not be created.',
+    );
+    return ProviderRow.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
   Future<List<ProviderRow>> listProviders() async {
     final decoded = await _send(
       http.get(Uri.parse('$baseUrl/api/v1/providers'), headers: _headers),

@@ -575,14 +575,34 @@ class _RoleChoiceScreen extends StatelessWidget {
   }
 }
 
-class _RegisterScreen extends StatelessWidget {
+class _RegisterScreen extends StatefulWidget {
   const _RegisterScreen();
+
+  @override
+  State<_RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends State<_RegisterScreen> {
+  final _name = TextEditingController();
+  final _phone = TextEditingController();
+  final _ambulance = TextEditingController();
+  final _cnic = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _phone.dispose();
+    _ambulance.dispose();
+    _cnic.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
     final driver = state.accountPath == AccountPath.driver;
     final provider = state.accountPath == AccountPath.provider;
+    final caller = !driver && !provider;
     final title = switch(state.accountPath) {
       AccountPath.driver => 'Register as Driver',
       AccountPath.provider => 'Register as Provider',
@@ -603,30 +623,41 @@ class _RegisterScreen extends StatelessWidget {
                 ?.copyWith(color: AppColors.muted),
           ),
           const SizedBox(height: AppSpacing.space5),
-          const TextField(
-            decoration: InputDecoration(
+          TextField(
+            controller: _name,
+            decoration: const InputDecoration(
               labelText: 'Name',
               border: OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: AppSpacing.space3),
-          const TextField(
+          TextField(
+            controller: _phone,
             keyboardType: TextInputType.phone,
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               labelText: 'Phone number',
               border: OutlineInputBorder(),
             ),
           ),
           if(driver) ...[
             const SizedBox(height: AppSpacing.space3),
-            const TextField(
-              decoration: InputDecoration(
+            TextField(
+              controller: _ambulance,
+              decoration: const InputDecoration(
                 labelText: 'Ambulance number',
                 border: OutlineInputBorder(),
               ),
             ),
           ],
           if(provider) ...[
+            const SizedBox(height: AppSpacing.space3),
+            TextField(
+              controller: _cnic,
+              decoration: const InputDecoration(
+                labelText: 'CNIC',
+                border: OutlineInputBorder(),
+              ),
+            ),
             const SizedBox(height: AppSpacing.space4),
             Text('TRADE', style: Theme.of(context).textTheme.labelSmall),
             const SizedBox(height: AppSpacing.space2),
@@ -646,12 +677,26 @@ class _RegisterScreen extends StatelessWidget {
                   .toList(),
             ),
           ],
+          if(state.registerNotice != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _ErrorNotice(message: state.registerNotice!),
+          ],
           const SizedBox(height: AppSpacing.space5),
           _ActionButton(
             label: 'Continue',
-            onPressed: () {
-              context.read<EmergencyRequestState>().continueRegistration();
-            },
+            onPressed: state.registerBusy
+                ? null
+                : () {
+                    if(caller) {
+                      state.registerCaller(_name.text, _phone.text);
+                    }
+                    else if(driver) {
+                      state.registerDriver(_name.text, _phone.text, _ambulance.text);
+                    }
+                    else {
+                      state.registerProvider(_name.text, _phone.text, _cnic.text);
+                    }
+                  },
           ),
         ],
       ),
@@ -2478,6 +2523,7 @@ class _ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final name = context.watch<EmergencyRequestState>().signedInUserName;
     return _FlowFrame(
       title: 'Profile',
       tab: _UserTab.profile,
@@ -2498,7 +2544,7 @@ class _ProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.space2),
           Text(
-            'Hal Jordan',
+            name ?? 'Hal Jordan',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineMedium,
           ),
@@ -4767,7 +4813,7 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
           _GroupedLinks(
             links: [
               _GroupedLink('Refresh jobs', state.loadProviderJobs),
-              _GroupedLink('Change provider', state.changeProviderProfile),
+              _GroupedLink('Sign out', state.signOutProvider),
             ],
           ),
         ],

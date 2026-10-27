@@ -141,6 +141,9 @@ class EmergencyRequestState extends ChangeNotifier {
   String? staffSignInNotice;
   String? callerSignInNotice;
   String? signedInUserId;
+  String? signedInUserName;
+  String? registerNotice;
+  bool registerBusy = false;
   bool callerSignInBusy = false;
   ProviderRow? chosenProvider;
   DomesticBooking? domesticBooking;
@@ -403,6 +406,7 @@ class EmergencyRequestState extends ChangeNotifier {
 
     callerSignInBusy = true;
     signedInUserId = null;
+    signedInUserName = null;
     notifyListeners();
     try {
       final callers = await _emergencyService.listCallers();
@@ -419,6 +423,7 @@ class EmergencyRequestState extends ChangeNotifier {
         return;
       }
       signedInUserId = match.id;
+      signedInUserName = match.name;
       accountPath = AccountPath.signIn;
       otpFromRegistration = false;
       goTo(EmergencyScreen.otp);
@@ -545,6 +550,8 @@ class EmergencyRequestState extends ChangeNotifier {
 
   void chooseAccount(AccountPath path) {
     accountPath = path;
+    registerNotice = null;
+    matchedProvider = null;
     goTo(EmergencyScreen.register);
   }
 
@@ -556,6 +563,115 @@ class EmergencyRequestState extends ChangeNotifier {
   void continueRegistration() {
     otpFromRegistration = true;
     goTo(EmergencyScreen.otp);
+  }
+
+  Future<void> registerCaller(String name, String phone) async {
+    if(registerBusy) {
+      return;
+    }
+    final typedName = name.trim();
+    final typedPhone = phone.trim();
+    registerNotice = null;
+    if(typedName.isEmpty || typedPhone.isEmpty) {
+      registerNotice = 'Enter your name and phone number.';
+      notifyListeners();
+      return;
+    }
+
+    registerBusy = true;
+    notifyListeners();
+    try {
+      final created = await _emergencyService.registerCaller(
+        name: typedName,
+        phone: typedPhone,
+      );
+      signedInUserId = created.id;
+      signedInUserName = created.name;
+      continueRegistration();
+    } on ApiException catch (error) {
+      registerNotice = error.message;
+    } on TimeoutException {
+      registerNotice = 'Creating your account took too long. Try again.';
+    } catch (_) {
+      registerNotice = 'Your account could not be created. Try again.';
+    }
+    finally {
+      registerBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> registerDriver(String name, String phone, String ambulance) async {
+    if(registerBusy) {
+      return;
+    }
+    final typedName = name.trim();
+    final typedPhone = phone.trim();
+    final typedAmbulance = ambulance.trim();
+    registerNotice = null;
+    if(typedName.isEmpty || typedPhone.isEmpty || typedAmbulance.isEmpty) {
+      registerNotice = 'Enter your name, phone number, and ambulance number.';
+      notifyListeners();
+      return;
+    }
+
+    registerBusy = true;
+    notifyListeners();
+    try {
+      matchedDriver = await _emergencyService.registerDriver(
+        name: typedName,
+        phone: typedPhone,
+        ambulanceLabel: typedAmbulance,
+      );
+      continueRegistration();
+    } on ApiException catch (error) {
+      registerNotice = error.message;
+    } on TimeoutException {
+      registerNotice = 'Creating your account took too long. Try again.';
+    } catch (_) {
+      registerNotice = 'Your account could not be created. Try again.';
+    }
+    finally {
+      registerBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> registerProvider(String name, String phone, String cnic) async {
+    if(registerBusy) {
+      return;
+    }
+    final typedName = name.trim();
+    final typedPhone = phone.trim();
+    final typedCnic = cnic.trim();
+    registerNotice = null;
+    if(typedName.isEmpty || typedPhone.isEmpty || typedCnic.isEmpty) {
+      registerNotice = 'Enter your name, phone number, and CNIC.';
+      notifyListeners();
+      return;
+    }
+
+    registerBusy = true;
+    notifyListeners();
+    try {
+      matchedProvider = await _emergencyService.registerProvider(
+        name: typedName,
+        phone: typedPhone,
+        cnic: typedCnic,
+        trade: registerTrade,
+      );
+      continueRegistration();
+    } on ApiException catch (error) {
+      registerNotice = error.message;
+    } on TimeoutException {
+      registerNotice = 'Creating your account took too long. Try again.';
+    } catch (_) {
+      registerNotice = 'Your account could not be created. Try again.';
+    }
+    finally {
+      registerBusy = false;
+      notifyListeners();
+    }
   }
 
   void verifyCode() {
@@ -571,11 +687,11 @@ class EmergencyRequestState extends ChangeNotifier {
     }
 
     if(accountPath == AccountPath.provider) {
-      if(otpFromRegistration) {
+      final matched = matchedProvider;
+      if(otpFromRegistration && matched == null) {
         startProviderMode(fromProfile: false);
         return;
       }
-      final matched = matchedProvider;
       if(matched != null) {
         chooseProviderProfile(matched);
         startProviderMode(fromProfile: false, demo: true);
@@ -1088,17 +1204,16 @@ class EmergencyRequestState extends ChangeNotifier {
     await loadProviderJobs();
   }
 
-  void changeProviderProfile() {
+  void signOutProvider() {
     _emergencySocketService.disconnectProvider();
     providerProfile = null;
     providerJobs = [];
     activeJobId = null;
     providerDuty = ProviderDuty.available;
-    if(!providerDemo) {
-      providerTrade = null;
-    }
-    goTo(EmergencyScreen.providerDashboard);
-    loadProviders();
+    providerDemo = false;
+    providerTrade = null;
+    matchedProvider = null;
+    goTo(EmergencyScreen.login);
   }
 
   Future<void> loadProviderJobs() async {
