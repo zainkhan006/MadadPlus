@@ -1151,6 +1151,64 @@ app.post("/api/v1/callers", async (req, res) => {
   }
 });
 
+app.post("/api/v1/drivers", async (req, res) => {
+  const name = String(req.body.name || "").trim();
+  const phone = String(req.body.phone || "").trim();
+  const label = String(req.body.ambulanceLabel || "").trim().toUpperCase();
+  if (!name || !phone || !label) {
+    return res.status(400).json({ error: "name, phone, and ambulanceLabel are required" });
+  }
+
+  try {
+    const ambulanceId = await db.transaction(async (trx) => {
+      const orgId = await organizationId(trx);
+      const [driver] = await trx("drivers")
+        .insert({ organization_id: orgId, name, phone })
+        .returning(["id"]);
+
+      const existing = await trx("ambulances").select("id").where("label", label).first();
+      if (existing) {
+        await trx("ambulances").where("id", existing.id).update({ driver_id: driver.id });
+        return existing.id;
+      }
+
+      // New ambulances start somewhere in Karachi (Clifton to Korangi).
+      const lat = 24.84 + Math.random() * 0.08;
+      const lng = 67.03 + Math.random() * 0.09;
+      const [created] = await trx("ambulances")
+        .insert({
+          organization_id: orgId,
+          driver_id: driver.id,
+          label,
+          status: "FREE",
+          location: point(trx, lat, lng)
+        })
+        .returning(["id"]);
+      return created.id;
+    });
+
+    const ambulance = await db("ambulances as a")
+      .leftJoin("drivers as d", "d.id", "a.driver_id")
+      .select(
+        "a.id",
+        "a.label",
+        "a.status",
+        "d.id as driverId",
+        "d.name as driverName",
+        "d.phone as driverPhone",
+        db.raw("ST_Y(a.location::geometry) as lat"),
+        db.raw("ST_X(a.location::geometry) as lng")
+      )
+      .where("a.id", ambulanceId)
+      .first();
+    await emitAmbulance(ambulanceId);
+    res.status(201).json(ambulance);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to register driver" });
+  }
+});
+
 app.get("/api/v1/providers", async (req, res) => {
   try {
     const providers = await db("providers as p")
