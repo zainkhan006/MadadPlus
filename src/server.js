@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
+const crypto = require("crypto");
 const { Server } = require("socket.io");
 const db = require("./db");
 const {
@@ -1118,6 +1119,35 @@ app.get("/api/v1/callers", async (req, res) => {
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Unable to load callers" });
+  }
+});
+
+app.post("/api/v1/callers", async (req, res) => {
+  const name = String(req.body.name || "").trim();
+  const phone = String(req.body.phone || "").trim();
+  if (!name || !phone) {
+    return res.status(400).json({ error: "name and phone are required" });
+  }
+
+  try {
+    const taken = await db("users").select("id").where("phone", phone).first();
+    if (taken) {
+      return res.status(409).json({ error: "That phone number is already registered" });
+    }
+    const authUserId = crypto.randomUUID();
+    const [caller] = await db("users")
+      .insert({
+        auth_user_id: authUserId,
+        name,
+        phone,
+        email: `${authUserId}@madadplus.test`,
+        verified: true
+      })
+      .returning(["id", "name", "phone"]);
+    res.status(201).json(caller);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to register caller" });
   }
 });
 
