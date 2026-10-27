@@ -293,12 +293,27 @@ class _OnboardingScreen extends StatelessWidget {
   }
 }
 
-class _LoginScreen extends StatelessWidget {
+class _LoginScreen extends StatefulWidget {
   const _LoginScreen();
 
   @override
+  State<_LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<_LoginScreen> {
+  final _name = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final state = context.read<EmergencyRequestState>();
+    final state = context.watch<EmergencyRequestState>();
+    final notice = state.callerSignInNotice;
+    final loading = state.callerSignInBusy;
     return _FlowFrame(
       plainChrome: true,
       title: 'Sign in',
@@ -319,11 +334,13 @@ class _LoginScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.space5),
-          const TextField(
-            keyboardType: TextInputType.phone,
-            decoration: InputDecoration(
-              labelText: 'Phone number',
-              hintText: '+92 300 1234567',
+          TextField(
+            controller: _name,
+            keyboardType: TextInputType.text,
+            textInputAction: TextInputAction.done,
+            onSubmitted: state.submitCallerSignIn,
+            decoration: const InputDecoration(
+              labelText: 'Name or phone number',
               filled: true,
               fillColor: AppColors.surface,
               contentPadding: EdgeInsets.symmetric(
@@ -344,11 +361,23 @@ class _LoginScreen extends StatelessWidget {
               ),
             ),
           ),
+          if(notice != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _ErrorNotice(message: notice),
+          ],
+          if(loading) ...[
+            const SizedBox(height: AppSpacing.space4),
+            const Center(child: CircularProgressIndicator()),
+          ],
           const SizedBox(height: AppSpacing.space5),
           _PressScale(
             child: _ActionButton(
               label: 'CONTINUE',
-              onPressed: state.continueSignIn,
+              onPressed: loading
+                  ? null
+                  : () {
+                      state.submitCallerSignIn(_name.text);
+                    },
             ),
           ),
           const SizedBox(height: AppSpacing.space4),

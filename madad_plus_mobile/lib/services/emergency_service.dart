@@ -339,6 +339,26 @@ class ProviderRow {
   }
 }
 
+class CallerRow {
+  const CallerRow({
+    required this.id,
+    required this.name,
+    this.phone,
+  });
+
+  final String id;
+  final String name;
+  final String? phone;
+
+  factory CallerRow.fromJson(Map<String, dynamic> json) {
+    return CallerRow(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      phone: json['phone'] as String?,
+    );
+  }
+}
+
 class DomesticBooking {
   const DomesticBooking({
     required this.requestId,
@@ -566,6 +586,16 @@ class EmergencyService {
       'The ambulance could not be marked unavailable.',
     );
     return DriverReassignment.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<List<CallerRow>> listCallers() async {
+    final decoded = await _send(
+      http.get(Uri.parse('$baseUrl/api/v1/callers'), headers: _headers),
+      'The caller list could not be loaded.',
+    );
+    return (decoded as List)
+        .map((row) => CallerRow.fromJson(Map<String, dynamic>.from(row as Map)))
+        .toList();
   }
 
   Future<List<ProviderRow>> listProviders() async {

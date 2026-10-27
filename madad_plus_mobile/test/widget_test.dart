@@ -119,8 +119,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('CONTINUE'));
     await tester.pump();
-    await tester.tap(find.text('CONTINUE'));
-    await tester.pump();
+    await submitCallerName(tester, 'hal jordan');
     await tester.tap(find.text('VERIFY'));
     await tester.pump();
     await tester.tap(find.text('Emergency help'));
@@ -339,6 +338,38 @@ void main() {
     expect(find.text('Name or phone number'), findsOneWidget);
     expect(find.text('Verify phone'), findsNothing);
     expect(find.text('Choose your ambulance'), findsNothing);
+  });
+
+  testWidgets('a caller name matches without matching capitals', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    await reachSignIn(tester, session.state);
+    await submitCallerName(tester, 'hal jordan');
+
+    expect(find.text('Verify phone'), findsOneWidget);
+    expect(
+      find.text(
+        'Nobody was found with that name or number. Type the name you registered with, or your phone number.',
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('an unknown caller name stays on the sign-in page', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    await reachSignIn(tester, session.state);
+    await submitCallerName(tester, 'Nobody');
+
+    expect(
+      find.text(
+        'Nobody was found with that name or number. Type the name you registered with, or your phone number.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Verify phone'), findsNothing);
   });
 
   testWidgets('a driver picks a live ambulance and moves a call to drop-off', (
@@ -715,6 +746,15 @@ void main() {
     WidgetTester tester,
   ) async {
     final session = testSession(demoUserId: '');
+    session.api.callers
+      ..clear()
+      ..add(
+        const CallerRow(
+          id: '',
+          name: 'Hal Jordan',
+          phone: '+92 300 0000001',
+        ),
+      );
     await reachHome(tester, session.state);
     await tapText(tester, 'Services');
     await tapText(tester, 'Plumber');
@@ -1360,6 +1400,14 @@ class FakeEmergencyService extends EmergencyService {
     ),
   ];
 
+  final callers = [
+    const CallerRow(
+      id: 'user-demo',
+      name: 'Hal Jordan',
+      phone: '+92 300 0000001',
+    ),
+  ];
+
   final providers = [
     const ProviderRow(
       id: 'prov-1',
@@ -1521,6 +1569,9 @@ class FakeEmergencyService extends EmergencyService {
       request: null,
     );
   }
+
+  @override
+  Future<List<CallerRow>> listCallers() async => callers;
 
   @override
   Future<List<ProviderRow>> listProviders() async => providers;
@@ -1701,8 +1752,7 @@ Future<TestSession> reachAmbulanceRequest(WidgetTester tester) async {
   await tester.pump();
   await tester.tap(find.text('CONTINUE'));
   await tester.pump();
-  await tester.tap(find.text('CONTINUE'));
-  await tester.pump();
+  await submitCallerName(tester, 'hal jordan');
   await tester.tap(find.text('VERIFY'));
   await tester.pump();
   await tester.tap(find.text('Emergency help'));
@@ -1810,12 +1860,22 @@ Future<void> openProviderLocation(
   await tapText(tester, 'Continue');
 }
 
+Future<void> submitCallerName(WidgetTester tester, String name) async {
+  await tester.enterText(
+    find.widgetWithText(TextField, 'Name or phone number'),
+    name,
+  );
+  await tester.pump();
+  await tapText(tester, 'CONTINUE');
+  await pumpAsync(tester);
+}
+
 Future<void> reachHome(
   WidgetTester tester,
   EmergencyRequestState state,
 ) async {
   await reachSignIn(tester, state);
-  await tapText(tester, 'CONTINUE');
+  await submitCallerName(tester, 'hal jordan');
   await tapText(tester, 'VERIFY');
 }
 

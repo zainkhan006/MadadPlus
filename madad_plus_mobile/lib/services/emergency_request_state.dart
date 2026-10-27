@@ -139,6 +139,9 @@ class EmergencyRequestState extends ChangeNotifier {
   bool providersLoading = false;
   String? providersError;
   String? staffSignInNotice;
+  String? callerSignInNotice;
+  String? signedInUserId;
+  bool callerSignInBusy = false;
   ProviderRow? chosenProvider;
   DomesticBooking? domesticBooking;
   bool domesticSending = false;
@@ -378,10 +381,58 @@ class EmergencyRequestState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void continueSignIn() {
-    accountPath = AccountPath.signIn;
-    otpFromRegistration = false;
-    goTo(EmergencyScreen.otp);
+  String get callerUserId {
+    final signedIn = signedInUserId?.trim() ?? '';
+    if(signedIn.isNotEmpty) {
+      return signedIn;
+    }
+    return demoUserId;
+  }
+
+  Future<void> submitCallerSignIn(String raw) async {
+    if(callerSignInBusy) {
+      return;
+    }
+    final typed = raw.trim();
+    callerSignInNotice = null;
+    if(typed.isEmpty) {
+      callerSignInNotice = 'Enter the name or phone number you registered with.';
+      notifyListeners();
+      return;
+    }
+
+    callerSignInBusy = true;
+    signedInUserId = null;
+    notifyListeners();
+    try {
+      final callers = await _emergencyService.listCallers();
+      CallerRow? match;
+      for(final row in callers) {
+        if(_sameStaffName(row.name, typed) || _sameStaffPhone(row.phone, typed)) {
+          match = row;
+          break;
+        }
+      }
+      if(match == null) {
+        callerSignInNotice =
+            'Nobody was found with that name or number. Type the name you registered with, or your phone number.';
+        return;
+      }
+      signedInUserId = match.id;
+      accountPath = AccountPath.signIn;
+      otpFromRegistration = false;
+      goTo(EmergencyScreen.otp);
+    } on ApiException catch (error) {
+      callerSignInNotice = error.message;
+    } on TimeoutException {
+      callerSignInNotice = 'The caller list took too long to load. Try again.';
+    } catch (_) {
+      callerSignInNotice = 'The caller list could not be loaded. Try again.';
+    }
+    finally {
+      callerSignInBusy = false;
+      notifyListeners();
+    }
   }
 
   void continueDriverSignIn() {
@@ -696,7 +747,8 @@ class EmergencyRequestState extends ChangeNotifier {
     }
 
     final provider = chosenProvider;
-    if(demoUserId.isEmpty) {
+    final userId = callerUserId;
+    if(userId.isEmpty) {
       showDomesticNotice(
         'The demo user id is missing, so the booking was not sent. '
         'Run the app with --dart-define=DEMO_USER_ID.',
@@ -714,7 +766,7 @@ class EmergencyRequestState extends ChangeNotifier {
 
     try {
       final booking = await _emergencyService.createDomesticRequest(
-        userId: demoUserId,
+        userId: userId,
         providerId: provider.id,
         specialisationId: provider.specialisationId!,
         description: domesticRequestText,
