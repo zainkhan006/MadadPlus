@@ -61,6 +61,8 @@ class EmergencyFlow extends StatelessWidget {
         return const _CostReviewScreen();
       case EmergencyScreen.providerDashboard:
         return const _ProviderDashboardScreen();
+      case EmergencyScreen.providerNameMatch:
+        return const _ProviderNameMatchScreen();
       case EmergencyScreen.providerRequest:
         return const _ProviderRequestScreen();
       case EmergencyScreen.providerAccepted:
@@ -698,6 +700,93 @@ class _RegisterScreenState extends State<_RegisterScreen> {
                     }
                   },
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProviderNameMatchScreen extends StatelessWidget {
+  const _ProviderNameMatchScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final canCreate = state.providerMatchCanCreate;
+
+    return _FlowFrame(
+      title: canCreate ? 'Register as Provider' : 'Sign in as provider',
+      onBack: () {
+        state.goTo(
+          canCreate ? EmergencyScreen.register : EmergencyScreen.staffSignIn,
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Is this you?',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          for(final provider in state.providerNameMatches) ...[
+            Material(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              child: InkWell(
+                onTap: () {
+                  if(canCreate) {
+                    state.chooseExistingProvider(provider);
+                  }
+                  else {
+                    state.chooseSignInProvider(provider);
+                  }
+                },
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                child: Container(
+                  padding: const EdgeInsets.all(AppSpacing.space3),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.line),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        provider.name,
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: AppSpacing.space1),
+                      Text(
+                        provider.phone ?? '',
+                        style: Theme.of(context).textTheme.bodyLarge
+                            ?.copyWith(color: AppColors.muted),
+                      ),
+                      Text(
+                        'CNIC ${provider.cnic ?? ''}',
+                        style: Theme.of(context).textTheme.bodyLarge
+                            ?.copyWith(color: AppColors.muted),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.space2),
+          ],
+          if(state.registerNotice != null) ...[
+            const SizedBox(height: AppSpacing.space2),
+            _ErrorNotice(message: state.registerNotice!),
+          ],
+          if(canCreate) ...[
+            const SizedBox(height: AppSpacing.space4),
+            _ActionButton(
+              label: 'Create account',
+              onPressed: state.registerBusy
+                  ? null
+                  : state.confirmProviderRegistration,
+            ),
+          ],
         ],
       ),
     );

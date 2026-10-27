@@ -319,6 +319,38 @@ void main() {
     );
   });
 
+  testWidgets('a partial provider name on sign in asks if this is you', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    const match = ProviderRow(
+      id: 'prov-raja',
+      name: 'raja circuitry and electrical works',
+      status: 'ONLINE',
+      rating: 0,
+      inspectionFee: 0,
+      specialisationId: 'spec-electrician',
+      specialisationName: 'Electrician',
+      phone: '0315 6767679',
+      cnic: '42201 xxxxxxxx',
+    );
+    session.api.nameMatches = [match];
+    await reachSignIn(tester, session.state);
+    await submitStaffName(tester, 'Sign in as provider', 'raja');
+
+    expect(find.text('Is this you?'), findsOneWidget);
+    expect(find.text('raja circuitry and electrical works'), findsOneWidget);
+    expect(find.text('CNIC 42201 xxxxxxxx'), findsOneWidget);
+    expect(find.text('Create account'), findsNothing);
+    expect(session.api.providerInserts, 0);
+
+    await tapText(tester, 'raja circuitry and electrical works');
+    expect(find.text('Verify phone'), findsOneWidget);
+    await tapText(tester, 'VERIFY');
+    await pumpAsync(tester);
+    expect(find.text('Provider dashboard'), findsOneWidget);
+  });
+
   testWidgets('Hassan Ali phone opens his driver page', (
     WidgetTester tester,
   ) async {
@@ -1321,6 +1353,106 @@ void main() {
     expect(find.text('Raja circuitry and electrical works'), findsOneWidget);
     expect(find.text('Is this you?'), findsNothing);
     expect(find.text('Kashif electric wala · Electrician'), findsNothing);
+    expect(session.api.providerInserts, 1);
+  });
+
+  Future<void> fillProviderForm(WidgetTester tester, String name) async {
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), name);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Phone number'),
+      '0334 7654321',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'CNIC'),
+      '42101-6969679-1',
+    );
+    await tapText(tester, 'Electrician');
+    await tapText(tester, 'Continue');
+    await pumpAsync(tester);
+  }
+
+  Future<void> openProviderRegister(WidgetTester tester, TestSession session) async {
+    await reachSignIn(tester, session.state);
+    await tapText(tester, 'Create account');
+    await tapText(tester, 'Register as Provider');
+  }
+
+  const rajaMatch = ProviderRow(
+    id: 'prov-raja',
+    name: 'raja circuitry and electrical works',
+    status: 'ONLINE',
+    rating: 0,
+    inspectionFee: 0,
+    specialisationId: 'spec-electrician',
+    specialisationName: 'Electrician',
+    phone: '0315 6767679',
+    cnic: '42201 xxxxxxxx',
+  );
+
+  testWidgets('an exact provider name stays on the form with a notice', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    session.api.nameCheckError = const ApiException(
+      'A user already exists with that name.',
+      statusCode: 409,
+    );
+    await openProviderRegister(tester, session);
+    await fillProviderForm(tester, 'RAJA circuitry and electrical works');
+
+    expect(find.text('A user already exists with that name.'), findsOneWidget);
+    expect(find.text('Is this you?'), findsNothing);
+    expect(find.text('Register as Provider'), findsOneWidget);
+    expect(session.api.providerInserts, 0);
+  });
+
+  testWidgets('a partial provider name lists matches and inserts nothing', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    session.api.nameMatches = [rajaMatch];
+    await openProviderRegister(tester, session);
+    await fillProviderForm(tester, 'Raja circuitry');
+
+    expect(find.text('Is this you?'), findsOneWidget);
+    expect(find.text('raja circuitry and electrical works'), findsOneWidget);
+    expect(find.text('0315 6767679'), findsOneWidget);
+    expect(find.text('CNIC 42201 xxxxxxxx'), findsOneWidget);
+    expect(find.text('Create account'), findsOneWidget);
+    expect(session.api.providerInserts, 0);
+  });
+
+  testWidgets('picking a matching provider opens that dashboard', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    session.api.nameMatches = [rajaMatch];
+    await openProviderRegister(tester, session);
+    await fillProviderForm(tester, 'Raja circuitry');
+    await tapText(tester, 'raja circuitry and electrical works');
+    await pumpAsync(tester);
+
+    expect(find.text('Provider dashboard'), findsOneWidget);
+    expect(find.text('Is this you?'), findsNothing);
+    expect(session.api.providerInserts, 0);
+  });
+
+  testWidgets('Create account on the match page inserts the provider', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    session.api.nameMatches = [rajaMatch];
+    await openProviderRegister(tester, session);
+    await fillProviderForm(tester, 'Raja circuitry');
+    await tapText(tester, 'Create account');
+    await pumpAsync(tester);
+
+    expect(session.api.providerInserts, 1);
+    expect(find.text('Enter verification code'), findsOneWidget);
+    await tapText(tester, 'VERIFY');
+    await pumpAsync(tester);
+    expect(find.text('Provider dashboard'), findsOneWidget);
+    expect(find.text('Raja circuitry'), findsOneWidget);
   });
 
   testWidgets('the demo provider list hides fees', (WidgetTester tester) async {
@@ -1596,6 +1728,22 @@ class FakeEmergencyService extends EmergencyService {
   @override
   Future<List<CallerRow>> listCallers() async => callers;
 
+  var providerInserts = 0;
+  var nameMatches = <ProviderRow>[];
+  ApiException? nameCheckError;
+
+  @override
+  Future<List<ProviderRow>> checkProviderName({
+    required String name,
+    String? trade,
+  }) async {
+    final error = nameCheckError;
+    if(error != null) {
+      throw error;
+    }
+    return nameMatches;
+  }
+
   @override
   Future<ProviderRow> registerProvider({
     required String name,
@@ -1603,6 +1751,7 @@ class FakeEmergencyService extends EmergencyService {
     required String cnic,
     required String trade,
   }) async {
+    providerInserts += 1;
     final created = ProviderRow(
       id: 'prov-new',
       name: name,

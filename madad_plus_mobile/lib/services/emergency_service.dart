@@ -288,6 +288,7 @@ class ProviderRow {
     required this.specialisationId,
     required this.specialisationName,
     this.phone,
+    this.cnic,
   });
 
   final String id;
@@ -298,6 +299,7 @@ class ProviderRow {
   final String? specialisationId;
   final String? specialisationName;
   final String? phone;
+  final String? cnic;
 
   ProviderRow withFee(double fee) {
     return ProviderRow(
@@ -335,6 +337,7 @@ class ProviderRow {
       specialisationId: json['specialisationId'] as String?,
       specialisationName: json['specialisationName'] as String?,
       phone: json['phone'] as String?,
+      cnic: json['cnic'] as String?,
     );
   }
 }
@@ -631,6 +634,27 @@ class EmergencyService {
       'The driver account could not be created.',
     );
     return AmbulanceRow.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<List<ProviderRow>> checkProviderName({
+    required String name,
+    String? trade,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse('$baseUrl/api/v1/providers/name-check'),
+        headers: _headers,
+        body: jsonEncode({
+          'name': name,
+          if(trade != null && trade.isNotEmpty) 'trade': trade,
+        }),
+      ),
+      'The name could not be checked.',
+    );
+    final matches = (decoded as Map)['matches'] as List;
+    return matches
+        .map((row) => ProviderRow.fromJson(Map<String, dynamic>.from(row as Map)))
+        .toList();
   }
 
   Future<ProviderRow> registerProvider({
