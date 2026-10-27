@@ -29,6 +29,8 @@ class EmergencyFlow extends StatelessWidget {
         return const _OnboardingScreen();
       case EmergencyScreen.login:
         return const _LoginScreen();
+      case EmergencyScreen.staffSignIn:
+        return const _StaffSignInScreen();
       case EmergencyScreen.otp:
         return const _OtpScreen();
       case EmergencyScreen.roleChoice:
@@ -414,6 +416,90 @@ class _OtpScreen extends StatelessWidget {
   }
 }
 
+class _StaffSignInScreen extends StatefulWidget {
+  const _StaffSignInScreen();
+
+  @override
+  State<_StaffSignInScreen> createState() => _StaffSignInScreenState();
+}
+
+class _StaffSignInScreenState extends State<_StaffSignInScreen> {
+  final _name = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final driver = state.accountPath == AccountPath.driver;
+    final notice = state.staffSignInNotice ??
+        (driver ? state.driverError : state.providersError);
+    final loading = state.staffSignInBusy;
+
+    return _FlowFrame(
+      plainChrome: true,
+      title: driver ? 'Sign in as driver' : 'Sign in as provider',
+      onBack: () {
+        state.goTo(EmergencyScreen.login);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _name,
+            textInputAction: TextInputAction.done,
+            onSubmitted: state.submitStaffSignIn,
+            decoration: const InputDecoration(
+              labelText: 'Name or phone number',
+              filled: true,
+              fillColor: AppColors.surface,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: AppSpacing.space4,
+                vertical: AppSpacing.space4,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+                borderSide: BorderSide(color: AppColors.focus, width: 1.5),
+              ),
+            ),
+          ),
+          if(notice != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            _ErrorNotice(message: notice),
+          ],
+          if(loading) ...[
+            const SizedBox(height: AppSpacing.space4),
+            const Center(child: CircularProgressIndicator()),
+          ],
+          const SizedBox(height: AppSpacing.space5),
+          _PressScale(
+            child: _ActionButton(
+              label: 'CONTINUE',
+              onPressed: loading
+                  ? null
+                  : () {
+                      state.submitStaffSignIn(_name.text);
+                    },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RoleChoiceScreen extends StatelessWidget {
   const _RoleChoiceScreen();
 
@@ -714,57 +800,11 @@ class _DriverJobScreenState extends State<_DriverJobScreen>
     await state.reassignDriverRequest();
   }
 
-  Widget pickAmbulance(BuildContext context, EmergencyRequestState state) {
-    return _FlowFrame(
-      title: 'Choose your ambulance',
-      onBack: () {
-        state.goTo(EmergencyScreen.login);
-      },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Which ambulance are you driving?',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-          const SizedBox(height: AppSpacing.space2),
-          Text(
-            'Calls for that ambulance will show up here.',
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: AppColors.muted),
-          ),
-          const SizedBox(height: AppSpacing.space4),
-          if(state.driverLoading)
-            const Center(child: CircularProgressIndicator()),
-          if(state.driverError != null) ...[
-            _ErrorNotice(message: state.driverError!),
-            const SizedBox(height: AppSpacing.space3),
-            _SecondaryButton(
-              label: 'Try again',
-              onPressed: state.loadDriverAmbulances,
-            ),
-            const SizedBox(height: AppSpacing.space3),
-          ],
-          for(final ambulance in state.driverAmbulances) ...[
-            _ProfileRow(
-              label: '${ambulance.label} · ${ambulance.driverName ?? 'No driver'}',
-              trailing: ambulance.status,
-              onPressed: () {
-                state.chooseDriverAmbulance(ambulance);
-              },
-            ),
-            const SizedBox(height: AppSpacing.space2),
-          ],
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
     if(state.driverId == null) {
-      return pickAmbulance(context, state);
+      return const _HomeScreen();
     }
 
     final call = state.driverCall;
@@ -939,8 +979,8 @@ class _DriverJobScreenState extends State<_DriverJobScreen>
           ),
           const SizedBox(height: AppSpacing.space3),
           _SecondaryButton(
-            label: 'Change ambulance',
-            onPressed: state.changeDriverAmbulance,
+            label: 'Sign out',
+            onPressed: state.signOutDriver,
           ),
         ],
       ),

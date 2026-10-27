@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:madad_plus_mobile/emergency_flow.dart';
@@ -148,30 +150,171 @@ void main() {
     expect(session.api.emergencyPosts, 0);
   });
 
-  testWidgets('a driver picks a live ambulance and moves a call to drop-off', (
+  testWidgets('an assigned ambulance leaves the finding help spinner', (
     WidgetTester tester,
   ) async {
-    final session = testSession();
+    final session = await reachAmbulanceRequest(tester);
+    session.api.scriptedEmergencyResult = EmergencyRequestResult(
+      requestId: 'req-assigned',
+      status: 'ASSIGNED',
+      assignedAmbulance: const AmbulanceAssignment(
+        id: 'amb-1',
+        label: 'A-01',
+        latitude: 24.805,
+        longitude: 67.0375,
+      ),
+      consideredNearest: null,
+      pickupLatitude: 24.8138,
+      pickupLongitude: 67.03,
+    );
+
+    await tapText(tester, 'REQUEST NOW');
+    await pumpAsync(tester);
+
+    expect(find.text('A-01 is coming'), findsOneWidget);
+    expect(find.text('Finding help'), findsNothing);
+    expect(find.text('FINDING HELP NOW'), findsNothing);
+    expect(session.api.emergencyPosts, 1);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    session.state.dispose();
+  });
+
+  testWidgets('a queued ambulance request leaves the finding help spinner', (
+    WidgetTester tester,
+  ) async {
+    final session = await reachAmbulanceRequest(tester);
+    session.api.scriptedEmergencyResult = const EmergencyRequestResult(
+      requestId: 'req-queued',
+      status: 'QUEUED',
+      assignedAmbulance: null,
+      consideredNearest: null,
+    );
+
+    await tapText(tester, 'REQUEST NOW');
+    await pumpAsync(tester);
+
+    expect(find.text('All ambulances are busy'), findsOneWidget);
+    expect(find.text('Finding help'), findsNothing);
+    expect(find.text('FINDING HELP NOW'), findsNothing);
+    expect(session.api.emergencyPosts, 1);
+  });
+
+  testWidgets('a timed out ambulance request leaves the finding help spinner', (
+    WidgetTester tester,
+  ) async {
+    final session = await reachAmbulanceRequest(tester);
+    session.api.scriptedEmergencyError = TimeoutException(
+      'The server did not answer.',
+    );
+
+    await tapText(tester, 'REQUEST NOW');
+    await pumpAsync(tester);
+
+    expect(
+      find.text(
+        'The server was asleep and is waking up now, so tap request again.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Finding help'), findsNothing);
+    expect(find.text('FINDING HELP NOW'), findsNothing);
+    expect(session.api.emergencyPosts, 1);
+  });
+
+  testWidgets('sign out returns the driver to login', (WidgetTester tester) async {
+    final session = testSession(withCall: false);
+    await reachSignIn(tester, session.state);
+    await submitStaffName(tester, 'Sign in as driver', 'Sara Khan');
+    await tapText(tester, 'VERIFY');
+    await pumpAsync(tester);
+
+    expect(find.text('Sign out'), findsOneWidget);
+    expect(find.text('Change ambulance'), findsNothing);
+    await tapText(tester, 'Sign out');
+    await pumpAsync(tester);
+
+    expect(find.text('Existing account'), findsOneWidget);
+    expect(find.text('How can we help?'), findsNothing);
+    expect(find.text('No active call'), findsNothing);
+  });
+
+  testWidgets('driver registration does not ask which ambulance', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
     await reachSignIn(tester, session.state);
     await tester.tap(find.text('Create account'));
     await tester.pump();
     await tester.tap(find.text('Register as Driver'));
     await tester.pump();
-
-    expect(find.text('Ambulance number'), findsOneWidget);
-    expect(find.text('This wireframe accepts what you type.'), findsOneWidget);
-
     await tester.tap(find.text('Continue'));
     await tester.pump();
     await tester.tap(find.text('VERIFY'));
     await pumpAsync(tester);
 
-    expect(find.text('Choose your ambulance'), findsOneWidget);
-    expect(find.text('A-01 · Sara Khan'), findsOneWidget);
-    expect(find.text('DHA Phase 5, Street 12, Near XYZ Mall'), findsNothing);
+    expect(find.text('How can we help?'), findsOneWidget);
+    expect(find.text('Choose your ambulance'), findsNothing);
+    expect(find.text('Which ambulance are you driving?'), findsNothing);
+  });
 
-    await tester.tap(find.text('A-01 · Sara Khan'));
+  testWidgets('Hassan Ali opens his driver page', (WidgetTester tester) async {
+    final session = testSession(withCall: false);
+    addHassanAli(session.api);
+    await reachSignIn(tester, session.state);
+    await submitStaffName(tester, 'Sign in as driver', 'Hassan Ali');
+
+    expect(find.text('Verify phone'), findsOneWidget);
+    await tapText(tester, 'VERIFY');
     await pumpAsync(tester);
+
+    expect(find.text('No active call'), findsOneWidget);
+    expect(find.text('Choose your ambulance'), findsNothing);
+  });
+
+  testWidgets('Hassan Ali phone opens his driver page', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    addHassanAli(session.api);
+    await reachSignIn(tester, session.state);
+    await submitStaffName(tester, 'Sign in as driver', '+92 301 1234567');
+
+    expect(find.text('Verify phone'), findsOneWidget);
+    await tapText(tester, 'VERIFY');
+    await pumpAsync(tester);
+
+    expect(find.text('No active call'), findsOneWidget);
+    expect(find.text('Choose your ambulance'), findsNothing);
+  });
+
+  testWidgets('an unknown staff name stays on the name page', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    await reachSignIn(tester, session.state);
+    await submitStaffName(tester, 'Sign in as driver', 'Nobody');
+
+    expect(
+      find.text('Nobody was found with that name or number.'),
+      findsOneWidget,
+    );
+    expect(find.text('Name or phone number'), findsOneWidget);
+    expect(find.text('Verify phone'), findsNothing);
+    expect(find.text('Choose your ambulance'), findsNothing);
+  });
+
+  testWidgets('a driver picks a live ambulance and moves a call to drop-off', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    await reachSignIn(tester, session.state);
+    await submitStaffName(tester, 'Sign in as driver', 'Sara Khan');
+    await tapText(tester, 'VERIFY');
+    await pumpAsync(tester);
+
+    expect(find.text('Choose your ambulance'), findsNothing);
+    expect(find.text('Which ambulance are you driving?'), findsNothing);
 
     expect(find.text('Pickup'), findsOneWidget);
     expect(find.text('BUSY'), findsOneWidget);
@@ -214,15 +357,8 @@ void main() {
   ) async {
     final session = testSession(withCall: false);
     await reachSignIn(tester, session.state);
-    await tester.tap(find.text('Create account'));
-    await tester.pump();
-    await tester.tap(find.text('Register as Driver'));
-    await tester.pump();
-    await tester.tap(find.text('Continue'));
-    await tester.pump();
-    await tester.tap(find.text('VERIFY'));
-    await pumpAsync(tester);
-    await tester.tap(find.text('A-01 · Sara Khan'));
+    await submitStaffName(tester, 'Sign in as driver', 'Sara Khan');
+    await tapText(tester, 'VERIFY');
     await pumpAsync(tester);
 
     expect(find.text('No active call'), findsOneWidget);
@@ -786,17 +922,14 @@ void main() {
 
     expect(find.text('Existing account'), findsOneWidget);
 
-    await tapText(tester, 'Sign in as provider');
+    await submitStaffName(tester, 'Sign in as provider', 'Karachi Plumbers');
     await tapText(tester, 'VERIFY');
     await pumpAsync(tester);
 
-    expect(find.text('Select a provider to test.'), findsOneWidget);
-    expect(find.text('What work do you do?'), findsNothing);
-    expect(find.textContaining('Rs.'), findsNothing);
-    await tapText(tester, 'Karachi Plumbers');
-    await pumpAsync(tester);
-
     expect(find.text('Provider dashboard'), findsOneWidget);
+    expect(find.text('Select a provider to test.'), findsNothing);
+    expect(find.text('Demo: act as a provider'), findsNothing);
+    expect(find.text('What work do you do?'), findsNothing);
     expect(find.text('Available'), findsOneWidget);
 
     await tapText(tester, 'Pipe leak');
@@ -890,10 +1023,8 @@ void main() {
       ),
     ]);
     await reachSignIn(tester, session.state);
-    await tapText(tester, 'Sign in as provider');
+    await submitStaffName(tester, 'Sign in as provider', 'Karachi Plumbers');
     await tapText(tester, 'VERIFY');
-    await pumpAsync(tester);
-    await tapText(tester, 'Karachi Plumbers');
     await pumpAsync(tester);
     final requestType = tester.widget<Text>(find.text('Other'));
     final requestNote = tester.widget<Text>(find.text('ac'));
@@ -1100,21 +1231,16 @@ void main() {
     expect(find.text('Sign in as driver'), findsOneWidget);
     expect(find.text('Sign in as provider'), findsOneWidget);
     expect(find.text('Create account'), findsOneWidget);
-    await tapText(tester, 'Sign in as provider');
+    await submitStaffName(tester, 'Sign in as provider', 'Karachi Plumbers');
     await tapText(tester, 'VERIFY');
     await pumpAsync(tester);
 
-    expect(find.text('Select a provider to test.'), findsOneWidget);
+    expect(find.text('Provider dashboard'), findsOneWidget);
+    expect(find.text('Karachi Plumbers'), findsOneWidget);
+    expect(find.text('Select a provider to test.'), findsNothing);
+    expect(find.text('Demo: act as a provider'), findsNothing);
     expect(
       find.text('Demo only. Anyone can open any provider here.'),
-      findsNothing,
-    );
-    expect(find.text('Karachi Plumbers'), findsOneWidget);
-    expect(find.text('Plumber'), findsOneWidget);
-    expect(find.textContaining('Rs.'), findsNothing);
-    expect(find.text('Provider dashboard'), findsNothing);
-    expect(
-      find.text('Requests booked with you will show up here.'),
       findsNothing,
     );
   });
@@ -1184,6 +1310,8 @@ class FakeEmergencyService extends EmergencyService {
   String? portalStatus;
   final jobs = <DomesticBooking>[];
   final listeners = <void Function(DomesticBooking booking)>[];
+  EmergencyRequestResult? scriptedEmergencyResult;
+  Exception? scriptedEmergencyError;
 
   final ambulances = [
     const AmbulanceRow(
@@ -1263,6 +1391,16 @@ class FakeEmergencyService extends EmergencyService {
     String? additionalDetails,
   }) async {
     emergencyPosts += 1;
+    final error = scriptedEmergencyError;
+    if(error != null) {
+      scriptedEmergencyError = null;
+      throw error;
+    }
+    final scripted = scriptedEmergencyResult;
+    if(scripted != null) {
+      scriptedEmergencyResult = null;
+      return scripted;
+    }
     throw ApiException('Tests must not send an emergency request.');
   }
 
@@ -1519,6 +1657,69 @@ Future<void> pumpAsync(WidgetTester tester) async {
   await tester.pump();
 }
 
+Future<TestSession> reachAmbulanceRequest(WidgetTester tester) async {
+  final session = testSession();
+  await tester.pumpWidget(MyApp(requestState: session.state));
+  await tester.tap(find.text('GET STARTED'));
+  await tester.pump();
+  await tester.tap(find.text('CONTINUE'));
+  await tester.pump();
+  await tester.tap(find.text('CONTINUE'));
+  await tester.pump();
+  await tester.tap(find.text('VERIFY'));
+  await tester.pump();
+  await tester.tap(find.text('Emergency help'));
+  await tester.pump();
+  await tester.tap(find.text('Ambulance'));
+  await tester.pump();
+  session.state.setTestAmbulanceRequest(
+    latitude: 24.8138,
+    longitude: 67.0300,
+    address: 'Clifton Block 5',
+    incident: 'Accident',
+    people: 2,
+  );
+  await tester.pump();
+  await tester.ensureVisible(find.text('CONTINUE'));
+  await tester.pump();
+  await tester.tap(find.text('CONTINUE'));
+  await tester.pump();
+  session.state.goTo(EmergencyScreen.emergencyDetails);
+  await tester.pump();
+  await tester.tap(find.text('CONTINUE NOW'));
+  await tester.pump();
+  expect(find.text('REQUEST NOW'), findsOneWidget);
+  return session;
+}
+
+void addHassanAli(FakeEmergencyService api) {
+  api.ambulances.add(
+    const AmbulanceRow(
+      id: 'amb-2',
+      label: 'A-02',
+      status: 'FREE',
+      driverId: 'drv-2',
+      driverName: 'Hassan Ali',
+      driverPhone: '+92 301 1234567',
+    ),
+  );
+}
+
+Future<void> submitStaffName(
+  WidgetTester tester,
+  String link,
+  String name,
+) async {
+  await tapText(tester, link);
+  await tester.enterText(
+    find.widgetWithText(TextField, 'Name or phone number'),
+    name,
+  );
+  await tester.pump();
+  await tapText(tester, 'CONTINUE');
+  await pumpAsync(tester);
+}
+
 Future<void> reachSignIn(
   WidgetTester tester,
   EmergencyRequestState state,
@@ -1535,15 +1736,8 @@ Future<void> reachDriverCall(
   EmergencyRequestState state,
 ) async {
   await reachSignIn(tester, state);
-  await tester.tap(find.text('Create account'));
-  await tester.pump();
-  await tester.tap(find.text('Register as Driver'));
-  await tester.pump();
-  await tester.tap(find.text('Continue'));
-  await tester.pump();
+  await submitStaffName(tester, 'Sign in as driver', 'Sara Khan');
   await tester.tap(find.text('VERIFY'));
-  await pumpAsync(tester);
-  await tester.tap(find.text('A-01 · Sara Khan'));
   await pumpAsync(tester);
 }
 
