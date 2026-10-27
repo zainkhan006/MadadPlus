@@ -1292,7 +1292,9 @@ async function findProviderNameMatches(name, specialisationId) {
       "s.id as specialisationId",
       "s.name as specialisationName"
     )
-    .where("p.specialisation_id", specialisationId);
+    .modify((query) => {
+      if (specialisationId) query.where("p.specialisation_id", specialisationId);
+    });
 
   const exact = rows.some((row) => normalizeName(row.name) === typed);
   const matches = exact
@@ -1313,19 +1315,23 @@ const existingNameMessage = "A user already exists with that name.";
 app.post("/api/v1/providers/name-check", async (req, res) => {
   const name = String(req.body.name || "").trim();
   const trade = String(req.body.trade || "").trim();
-  if (!name || !trade) {
-    return res.status(400).json({ error: "name and trade are required" });
+  if (!name) {
+    return res.status(400).json({ error: "name is required" });
   }
 
   try {
-    const specialisation = await db("specialisations")
-      .select("id")
-      .whereRaw("lower(name) = lower(?)", [trade])
-      .first();
-    if (!specialisation) {
-      return res.status(404).json({ error: `No trade called ${trade} was found` });
+    let specialisationId = null;
+    if (trade) {
+      const specialisation = await db("specialisations")
+        .select("id")
+        .whereRaw("lower(name) = lower(?)", [trade])
+        .first();
+      if (!specialisation) {
+        return res.status(404).json({ error: `No trade called ${trade} was found` });
+      }
+      specialisationId = specialisation.id;
     }
-    const { exact, matches } = await findProviderNameMatches(name, specialisation.id);
+    const { exact, matches } = await findProviderNameMatches(name, specialisationId);
     if (exact) {
       return res.status(409).json({ error: existingNameMessage });
     }
