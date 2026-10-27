@@ -1245,6 +1245,96 @@ app.get("/api/v1/providers", async (req, res) => {
   }
 });
 
+function normalizeName(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function editDistance(a, b) {
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost);
+    }
+    previous = current;
+  }
+  return previous[b.length];
+}
+
+function isPartialNameMatch(typed, saved) {
+  if (saved.includes(typed) || typed.includes(saved)) return true;
+  if (typed.length < 8 || saved.length < 8) return false;
+  return editDistance(typed, saved) <= 2;
+}
+
+function maskCnic(cnic) {
+  let seen = 0;
+  return String(cnic || "").replace(/\d/g, (digit) => {
+    seen += 1;
+    return seen <= 5 ? digit : "x";
+  });
+}
+
+async function findProviderNameMatches(name, specialisationId) {
+  const typed = normalizeName(name);
+  const rows = await db("providers as p")
+    .leftJoin("specialisations as s", "s.id", "p.specialisation_id")
+    .select(
+      "p.id",
+      "p.name",
+      "p.phone",
+      "p.cnic",
+      "p.status",
+      "p.rating",
+      "p.inspection_fee as inspectionFee",
+      "s.id as specialisationId",
+      "s.name as specialisationName"
+    )
+    .where("p.specialisation_id", specialisationId);
+
+  const exact = rows.some((row) => normalizeName(row.name) === typed);
+  const matches = exact
+    ? []
+    : rows
+        .filter((row) => isPartialNameMatch(typed, normalizeName(row.name)))
+        .map((row) => ({
+          ...row,
+          cnic: maskCnic(row.cnic),
+          rating: Number(row.rating),
+          inspectionFee: Number(row.inspectionFee)
+        }));
+  return { exact, matches };
+}
+
+const existingNameMessage = "A user already exists with that name.";
+
+app.post("/api/v1/providers/name-check", async (req, res) => {
+  const name = String(req.body.name || "").trim();
+  const trade = String(req.body.trade || "").trim();
+  if (!name || !trade) {
+    return res.status(400).json({ error: "name and trade are required" });
+  }
+
+  try {
+    const specialisation = await db("specialisations")
+      .select("id")
+      .whereRaw("lower(name) = lower(?)", [trade])
+      .first();
+    if (!specialisation) {
+      return res.status(404).json({ error: `No trade called ${trade} was found` });
+    }
+    const { exact, matches } = await findProviderNameMatches(name, specialisation.id);
+    if (exact) {
+      return res.status(409).json({ error: existingNameMessage });
+    }
+    res.json({ matches });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to check provider name" });
+  }
+});
+
 app.post("/api/v1/providers", async (req, res) => {
   const name = String(req.body.name || "").trim();
   const phone = String(req.body.phone || "").trim();
@@ -1261,6 +1351,10 @@ app.post("/api/v1/providers", async (req, res) => {
       .first();
     if (!specialisation) {
       return res.status(404).json({ error: `No trade called ${trade} was found` });
+    }
+    const { exact } = await findProviderNameMatches(name, specialisation.id);
+    if (exact) {
+      return res.status(409).json({ error: existingNameMessage });
     }
     const takenPhone = await db("providers").select("id").where("phone", phone).first();
     if (takenPhone) {
