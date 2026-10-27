@@ -1248,9 +1248,10 @@ app.get("/api/v1/providers", async (req, res) => {
 app.post("/api/v1/providers", async (req, res) => {
   const name = String(req.body.name || "").trim();
   const phone = String(req.body.phone || "").trim();
+  const cnic = String(req.body.cnic || "").trim();
   const trade = String(req.body.trade || "").trim();
-  if (!name || !phone || !trade) {
-    return res.status(400).json({ error: "name, phone, and trade are required" });
+  if (!name || !phone || !cnic || !trade) {
+    return res.status(400).json({ error: "name, phone, cnic, and trade are required" });
   }
 
   try {
@@ -1261,9 +1262,13 @@ app.post("/api/v1/providers", async (req, res) => {
     if (!specialisation) {
       return res.status(404).json({ error: `No trade called ${trade} was found` });
     }
-    const taken = await db("providers").select("id").where("phone", phone).first();
-    if (taken) {
+    const takenPhone = await db("providers").select("id").where("phone", phone).first();
+    if (takenPhone) {
       return res.status(409).json({ error: "That phone number is already registered" });
+    }
+    const takenCnic = await db("providers").select("id").where("cnic", cnic).first();
+    if (takenCnic) {
+      return res.status(409).json({ error: "That CNIC is already registered" });
     }
 
     const [provider] = await db("providers")
@@ -1271,6 +1276,7 @@ app.post("/api/v1/providers", async (req, res) => {
         auth_user_id: crypto.randomUUID(),
         name,
         phone,
+        cnic,
         status: "ONLINE",
         designation: specialisation.name,
         specialisation_id: specialisation.id,
