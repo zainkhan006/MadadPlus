@@ -8,6 +8,7 @@ import 'package:madad_plus_mobile/services/emergency_outcome.dart';
 import 'package:madad_plus_mobile/services/emergency_request_state.dart';
 import 'package:madad_plus_mobile/services/emergency_service.dart';
 import 'package:madad_plus_mobile/services/emergency_socket_service.dart';
+import 'package:madad_plus_mobile/services/provider_notifier.dart';
 import 'package:madad_plus_mobile/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -929,15 +930,12 @@ void main() {
     await tapText(tester, 'Plumber');
     await tapText(tester, 'Yes, continue');
     await pumpAsync(tester);
-    final requestType = tester.widget<Text>(find.text('Pipe leak'));
-    final requestNote = tester.widget<Text>(
-      find.text('Water leak\nKitchen sink leak'),
-    );
-    expect(requestType.style?.fontWeight, FontWeight.w700);
-    expect(requestNote.style?.fontWeight, FontWeight.w400);
-    expect(requestNote.style?.fontFamily, requestType.style?.fontFamily);
-    expect(requestNote.style?.fontSize, requestType.style?.fontSize);
-    await tapText(tester, 'Pipe leak');
+    await tapText(tester, 'Incoming requests');
+    expect(find.text('Pipe leak'), findsOneWidget);
+    expect(find.text('Clifton Block 5'), findsOneWidget);
+    expect(find.text('Water leak\nKitchen sink leak'), findsOneWidget);
+    providerSession.openJob('dom-1');
+    await tester.pump();
     expect(find.text('Customer: Test User'), findsOneWidget);
     expect(find.text('Customer: Hal Jordan'), findsNothing);
 
@@ -1058,8 +1056,11 @@ void main() {
     expect(find.text('Demo: act as a provider'), findsNothing);
     expect(find.text('What work do you do?'), findsNothing);
     expect(find.text('Available'), findsOneWidget);
+    expect(find.text('Incoming requests'), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
 
-    await tapText(tester, 'Pipe leak');
+    session.state.openJob('job-1');
+    await tester.pump();
     expect(find.text('Customer: Test User'), findsOneWidget);
 
     await tapText(tester, 'Accept job');
@@ -1085,12 +1086,175 @@ void main() {
     expect(find.text('No finished jobs.'), findsOneWidget);
     expect(find.text('Ongoing'), findsNothing);
 
-    await tapText(tester, 'Tap install');
+    session.state.openJob('job-2');
+    await tester.pump();
     expect(
       find.text('Finish the active job before taking this one.'),
       findsOneWidget,
     );
     expect(find.text('Accept job'), findsNothing);
+  });
+
+  testWidgets('the incoming requests count follows arrivals and cancels', (
+    WidgetTester tester,
+  ) async {
+    final api = FakeEmergencyService();
+    final notifier = RecordingNotifier();
+    final state = EmergencyRequestState(
+      emergencyService: api,
+      socketService: SilentSocketService(relay: api),
+      providerNotifier: notifier,
+      demoUserId: 'user-1',
+    );
+    api.seedJobs([
+      api.booking(requestId: 'job-1', description: 'Pipe leak', address: 'Clifton'),
+      api.booking(
+        requestId: 'job-2',
+        description: 'Tap install · Kitchen tap',
+        address: 'Gulshan-e-Iqbal',
+      ),
+    ]);
+    void emit(DomesticBooking booking) {
+      for(final listener in List.of(api.listeners)) {
+        listener(booking);
+      }
+    }
+
+    await reachSignIn(tester, state);
+    await submitStaffName(tester, 'Sign in as provider', 'Karachi Plumbers');
+    await tapText(tester, 'VERIFY');
+    await pumpAsync(tester);
+
+    expect(notifier.started, 1);
+    expect(find.text('Incoming requests'), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
+    expect(notifier.banners, 0);
+
+    emit(api.booking(requestId: 'job-3', description: 'Fan', address: 'DHA'));
+    await tester.pump();
+    expect(find.text('3'), findsOneWidget);
+    expect(notifier.banners, 1);
+
+    await tapText(tester, 'Incoming requests');
+    expect(state.currentScreen, EmergencyScreen.providerIncoming);
+    expect(find.text('Accept'), findsNWidgets(3));
+    expect(find.text('Decline'), findsNWidgets(3));
+    expect(find.text('Tap install'), findsOneWidget);
+    expect(find.text('Gulshan-e-Iqbal'), findsOneWidget);
+    expect(find.text('Kitchen tap'), findsOneWidget);
+
+    await tester.tap(find.text('Accept').first);
+    await tester.pump();
+    expect(state.incomingJobs.length, 3);
+
+    state.declineIncomingJob('job-1');
+    await pumpAsync(tester);
+    expect(api.cancelCalls, 1);
+    expect(state.currentScreen, EmergencyScreen.providerIncoming);
+    expect(find.text('Pipe leak'), findsNothing);
+    expect(state.incomingJobs.length, 2);
+
+    emit(api.booking(requestId: 'job-4', description: 'Wire', address: 'Defence'));
+    await tester.pump();
+    expect(find.text('Accept'), findsNWidgets(3));
+    expect(notifier.banners, 1);
+
+    emit(
+      api.booking(
+        requestId: 'job-1',
+        description: 'Pipe leak',
+        address: 'Clifton',
+        status: 'CANCELLED',
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Accept'), findsNWidgets(3));
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pump();
+    expect(find.text('Provider dashboard'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+
+    notifier.tap?.call();
+    await tester.pump();
+    expect(state.currentScreen, EmergencyScreen.providerIncoming);
+  });
+
+  testWidgets('cancelling a pending request tells the server', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    await reachHome(tester, session.state);
+    await tapText(tester, 'Services');
+    await tapText(tester, 'Plumber');
+    await pumpAsync(tester);
+    await tapText(tester, 'Karachi Plumbers');
+    await tapText(tester, 'Book plumber');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Describe your service problem'),
+      'Kitchen sink leak',
+    );
+    await tester.pump();
+    await tapText(tester, 'Continue');
+    session.state.setDomesticPin(
+      latitude: 24.8138,
+      longitude: 67.0300,
+      address: 'Clifton Block 5',
+    );
+    await tester.pump();
+    await tapText(tester, 'Continue');
+    await tapText(tester, 'Continue');
+    await tapText(tester, 'Confirm');
+    await pumpAsync(tester);
+    expect(find.text('Finding a plumber'), findsOneWidget);
+
+    await tapText(tester, 'Cancel request');
+    await pumpAsync(tester);
+    expect(session.api.cancelCalls, 1);
+    expect(session.api.jobs.single.status, 'CANCELLED');
+  });
+
+  testWidgets('a provider decline sends the caller back to services', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    await reachHome(tester, session.state);
+    await tapText(tester, 'Services');
+    await tapText(tester, 'Plumber');
+    await pumpAsync(tester);
+    await tapText(tester, 'Karachi Plumbers');
+    await tapText(tester, 'Book plumber');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Describe your service problem'),
+      'Kitchen sink leak',
+    );
+    await tester.pump();
+    await tapText(tester, 'Continue');
+    session.state.setDomesticPin(
+      latitude: 24.8138,
+      longitude: 67.0300,
+      address: 'Clifton Block 5',
+    );
+    await tester.pump();
+    await tapText(tester, 'Continue');
+    await tapText(tester, 'Continue');
+    await tapText(tester, 'Confirm');
+    await pumpAsync(tester);
+    expect(find.text('Finding a plumber'), findsOneWidget);
+
+    final declined = session.api.booking(
+      requestId: 'dom-1',
+      description: 'Pipe leak',
+      address: 'Clifton Block 5',
+      status: 'CANCELLED',
+    );
+    for(final listener in List.of(session.api.listeners)) {
+      listener(declined);
+    }
+    await tester.pump();
+
+    expect(session.state.currentScreen, EmergencyScreen.services);
+    expect(find.text('What do you need fixed?'), findsOneWidget);
   });
 
   testWidgets('part prices add up and send only the parts total', (
@@ -1153,12 +1317,8 @@ void main() {
     await submitStaffName(tester, 'Sign in as provider', 'Karachi Plumbers');
     await tapText(tester, 'VERIFY');
     await pumpAsync(tester);
-    final requestType = tester.widget<Text>(find.text('Other'));
-    final requestNote = tester.widget<Text>(find.text('ac'));
-    expect(requestType.style?.fontWeight, FontWeight.w700);
-    expect(requestNote.style?.fontWeight, FontWeight.w400);
-    expect(requestNote.style?.fontFamily, requestType.style?.fontFamily);
-    expect(requestNote.style?.fontSize, requestType.style?.fontSize);
+    expect(find.text('Other'), findsNothing);
+    expect(find.text('ac'), findsNothing);
     final finishedType = tester.widget<Text>(find.text('Pipe leak'));
     final finishedNote = tester.widget<Text>(find.text('Kitchen sink leak'));
     expect(finishedType.style?.fontWeight, FontWeight.w600);
@@ -1201,7 +1361,8 @@ void main() {
     expect(find.text('Fan'), findsNothing);
     expect(find.text('Wire'), findsNothing);
     expect(find.text('No finished jobs.'), findsOneWidget);
-    await tapText(tester, 'Other');
+    session.state.openJob('job-1');
+    await tester.pump();
     await tapText(tester, 'Accept job');
     await pumpAsync(tester);
 
@@ -1273,7 +1434,8 @@ void main() {
     await tapText(tester, 'Plumber');
     await tapText(tester, 'Yes, continue');
     await pumpAsync(tester);
-    await tapText(tester, 'Pipe leak');
+    providerSession.openJob('dom-1');
+    await tester.pump();
     await tapText(tester, 'Accept job');
     await pumpAsync(tester);
 
@@ -1478,6 +1640,23 @@ void main() {
   });
 }
 
+class RecordingNotifier extends ProviderNotifier {
+  var started = 0;
+  var banners = 0;
+  VoidCallback? tap;
+
+  @override
+  Future<void> start({required VoidCallback onTap}) async {
+    started += 1;
+    tap = onTap;
+  }
+
+  @override
+  Future<void> showNewJobs() async {
+    banners += 1;
+  }
+}
+
 class SilentSocketService extends EmergencySocketService {
   SilentSocketService({this.relay});
 
@@ -1534,6 +1713,7 @@ class SilentSocketService extends EmergencySocketService {
 class FakeEmergencyService extends EmergencyService {
   var emergencyPosts = 0;
   var domesticPosts = 0;
+  var cancelCalls = 0;
   var reassignCalls = 0;
   double? reassignLat;
   double? reassignLng;
@@ -1863,6 +2043,24 @@ class FakeEmergencyService extends EmergencyService {
     );
     jobs[index] = accepted;
     return accepted;
+  }
+
+  @override
+  Future<DomesticBooking> cancelDomesticRequest(String requestId) async {
+    cancelCalls += 1;
+    final index = jobs.indexWhere((job) => job.requestId == requestId);
+    final current = jobs[index];
+    final cancelled = booking(
+      requestId: requestId,
+      description: current.description,
+      address: current.address,
+      status: 'CANCELLED',
+    );
+    jobs[index] = cancelled;
+    for(final listener in List.of(listeners)) {
+      listener(cancelled);
+    }
+    return cancelled;
   }
 
   DomesticBooking withReceipt(

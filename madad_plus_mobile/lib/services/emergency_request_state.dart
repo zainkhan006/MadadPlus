@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'emergency_outcome.dart';
 import 'emergency_service.dart';
 import 'emergency_socket_service.dart';
+import 'provider_notifier.dart';
 
 enum EmergencyScreen {
   splash,
@@ -47,6 +48,7 @@ enum EmergencyScreen {
   domesticJob,
   costReview,
   providerDashboard,
+  providerIncoming,
   providerNameMatch,
   providerRequest,
   providerAccepted,
@@ -87,9 +89,11 @@ class EmergencyRequestState extends ChangeNotifier {
   EmergencyRequestState({
     EmergencyService? emergencyService,
     EmergencySocketService? socketService,
+    ProviderNotifier? providerNotifier,
     String? demoUserId,
   }) : _emergencyService = emergencyService ?? EmergencyService(),
        _emergencySocketService = socketService ?? EmergencySocketService(),
+       _providerNotifier = providerNotifier,
        demoUserId = demoUserId ?? const String.fromEnvironment('DEMO_USER_ID') {
     loadHomePlaces();
     _historyLoad = loadRequestHistory();
@@ -98,6 +102,7 @@ class EmergencyRequestState extends ChangeNotifier {
   late final Future<void> _historyLoad;
   final EmergencyService _emergencyService;
   final EmergencySocketService _emergencySocketService;
+  final ProviderNotifier? _providerNotifier;
   final String demoUserId;
 
   EmergencyScreen currentScreen = EmergencyScreen.splash;
@@ -1023,6 +1028,13 @@ class EmergencyRequestState extends ChangeNotifier {
     }
 
     domesticBooking = booking;
+    if(booking.status == 'CANCELLED') {
+      _emergencySocketService.disconnectDomestic();
+      domesticBooking = null;
+      domesticJob = DomesticJob.idle;
+      goTo(EmergencyScreen.services);
+      return;
+    }
     if(booking.status == 'ACCEPTED' && domesticJob == DomesticJob.searching) {
       domesticJob = DomesticJob.assigned;
     }
@@ -1076,7 +1088,20 @@ class EmergencyRequestState extends ChangeNotifier {
     goTo(EmergencyScreen.domesticJob);
   }
 
+  Future<void> _cancelPendingBooking(String requestId) async {
+    try {
+      await _emergencyService.cancelDomesticRequest(requestId);
+    }
+    catch(_) {
+      debugPrint('the server could not cancel that request');
+    }
+  }
+
   void cancelDomestic() {
+    final booking = domesticBooking;
+    if(booking != null && booking.status == 'PENDING') {
+      _cancelPendingBooking(booking.requestId);
+    }
     _emergencySocketService.disconnectDomestic();
     domesticBooking = null;
     domesticJob = DomesticJob.idle;
@@ -1258,7 +1283,15 @@ class EmergencyRequestState extends ChangeNotifier {
       providerId: provider.id,
       onBooking: _receiveProviderBooking,
     );
+    _providerNotifier?.start(onTap: openIncomingRequests);
     _restoreProviderJobs(provider.id);
+  }
+
+  void openIncomingRequests() {
+    if(providerProfile == null) {
+      return;
+    }
+    goTo(EmergencyScreen.providerIncoming);
   }
 
   Future<void> _readDeclinedJobs(String providerId) async {
@@ -1347,6 +1380,11 @@ class EmergencyRequestState extends ChangeNotifier {
     }
     else {
       providerJobs.insert(0, booking);
+      if(booking.status == 'PENDING' &&
+          !declinedJobIds.contains(booking.requestId) &&
+          currentScreen != EmergencyScreen.providerIncoming) {
+        _providerNotifier?.showNewJobs();
+      }
     }
     if(booking.finalTotal != null && booking.requestId == activeJobId) {
       costWaiting = false;
@@ -1440,15 +1478,25 @@ class EmergencyRequestState extends ChangeNotifier {
   }
 
   void declineJob() {
-    final requestId = openedJobId;
-    final providerId = providerProfile?.id;
-    if(requestId != null) {
-      declinedJobIds.add(requestId);
-      if(providerId != null) {
-        _writeDeclinedJobs(providerId);
-      }
-    }
+    _declineRequest(openedJobId);
     goTo(EmergencyScreen.providerDashboard);
+  }
+
+  void declineIncomingJob(String requestId) {
+    _declineRequest(requestId);
+    notifyListeners();
+  }
+
+  void _declineRequest(String? requestId) {
+    final providerId = providerProfile?.id;
+    if(requestId == null) {
+      return;
+    }
+    declinedJobIds.add(requestId);
+    if(providerId != null) {
+      _writeDeclinedJobs(providerId);
+    }
+    _cancelPendingBooking(requestId);
   }
 
   Future<void> acceptJob() async {
