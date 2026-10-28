@@ -774,6 +774,17 @@ class EmergencyService {
     return DomesticBooking.fromJson(Map<String, dynamic>.from(decoded as Map));
   }
 
+  Future<DomesticBooking> cancelDomesticRequest(String requestId) async {
+    final decoded = await _send(
+      http.patch(
+        Uri.parse('$baseUrl/api/v1/domestic-requests/$requestId/cancel'),
+        headers: _headers,
+      ),
+      'The request could not be cancelled.',
+    );
+    return DomesticBooking.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
   Future<DomesticBooking> submitRepairCost({
     required String providerId,
     required String requestId,

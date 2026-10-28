@@ -149,6 +149,7 @@ class EmergencySocketService {
     for(final eventName in [
       'domestic.requested',
       'domestic.accepted',
+      'domestic.cancelled',
       'domestic.cost_submitted',
       'domestic.cost_decided',
     ]) {
@@ -175,6 +176,7 @@ class EmergencySocketService {
     final domesticSocket = _joinRoom('join:domestic-request', requestId);
     for(final eventName in [
       'domestic.accepted',
+      'domestic.cancelled',
       'domestic.cost_submitted',
       'domestic.cost_decided',
     ]) {

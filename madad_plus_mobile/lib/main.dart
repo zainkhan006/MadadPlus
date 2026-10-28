@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'emergency_flow.dart';
 import 'services/emergency_request_state.dart';
+import 'services/provider_notifier.dart';
 
 void main() {
   runApp(const MyApp());
@@ -29,7 +30,7 @@ class MyApp extends StatelessWidget {
     }
 
     return ChangeNotifierProvider(
-      create: (_) => EmergencyRequestState(),
+      create: (_) => EmergencyRequestState(providerNotifier: ProviderNotifier()),
       child: app,
     );
   }

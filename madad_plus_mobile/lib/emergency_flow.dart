@@ -61,6 +61,8 @@ class EmergencyFlow extends StatelessWidget {
         return const _CostReviewScreen();
       case EmergencyScreen.providerDashboard:
         return const _ProviderDashboardScreen();
+      case EmergencyScreen.providerIncoming:
+        return const _ProviderIncomingScreen();
       case EmergencyScreen.providerNameMatch:
         return const _ProviderNameMatchScreen();
       case EmergencyScreen.providerRequest:
@@ -177,6 +179,25 @@ String finishedDayLabel(DateTime day) {
     return 'Today';
   }
   return fullDateLabel(date);
+}
+
+String _jobLines(String description) {
+  final parts = [
+    for(final part in description.split(' · '))
+      if(part.trim().isNotEmpty) part.trim(),
+  ];
+  if(parts.isEmpty) {
+    return description;
+  }
+  return parts.join('\n');
+}
+
+(String, String?) _typeAndNote(String description) {
+  final lines = _jobLines(description).split('\n');
+  if(lines.length < 2) {
+    return (lines.first, null);
+  }
+  return (lines.first, lines.skip(1).join('\n'));
 }
 
 Text _providerSectionLabel(BuildContext context, String label) {
@@ -4715,26 +4736,6 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
     );
   }
 
-  @override
-  String _jobLines(String description) {
-    final parts = [
-      for(final part in description.split(' · '))
-        if(part.trim().isNotEmpty) part.trim(),
-    ];
-    if(parts.isEmpty) {
-      return description;
-    }
-    return parts.join('\n');
-  }
-
-  (String, String?) _typeAndNote(String description) {
-    final lines = _jobLines(description).split('\n');
-    if(lines.length < 2) {
-      return (lines.first, null);
-    }
-    return (lines.first, lines.skip(1).join('\n'));
-  }
-
   bool _jobIsSettled(DomesticBooking job) {
     return job.finalTotal != null ||
         job.receiptStatus == 'ACCEPTED' ||
@@ -5018,44 +5019,25 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
             ),
           ],
           const SizedBox(height: AppSpacing.space5),
-          _providerSectionLabel(context, 'INCOMING REQUEST'),
-          const SizedBox(height: AppSpacing.space2),
-          if(offline)
+          if(offline) ...[
             Text(
               'You are offline.',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: AppColors.muted,
                 height: 1.4,
               ),
-            )
-          else if(state.providerJobsLoading && state.providerJobs.isEmpty)
-            const Center(child: CircularProgressIndicator())
-          else if(incoming.isEmpty)
-            Text(
-              'No new requests.',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: AppColors.muted,
-                height: 1.4,
+            ),
+            const SizedBox(height: AppSpacing.space2),
+          ],
+          _InsetGroup(
+            children: [
+              _InsetRow(
+                label: 'Incoming requests',
+                count: incoming.length,
+                onPressed: state.openIncomingRequests,
               ),
-            )
-          else
-            for(final job in incoming) ...[
-              _PressScale(
-                child: _ChoiceCard(
-                  quiet: true,
-                  icon: Icons.handyman_outlined,
-                  title: _typeAndNote(job.description).$1,
-                  note: _typeAndNote(job.description).$2,
-                  subtitle:
-                      '${job.address}\n${job.userName ?? 'Customer'}\nInspection fee Rs. ${(job.inspectionFee ?? provider.inspectionFee).toStringAsFixed(0)}',
-                  color: AppColors.green,
-                  onTap: () {
-                    state.openJob(job.requestId);
-                  },
-                ),
-              ),
-              const SizedBox(height: AppSpacing.space3),
             ],
+          ),
           const SizedBox(height: AppSpacing.space5),
           Row(
             children: [
@@ -5123,6 +5105,98 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
               _GroupedLink('Sign out', state.signOutProvider),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProviderIncomingScreen extends StatelessWidget {
+  const _ProviderIncomingScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final incoming = state.incomingJobs;
+    final textTheme = Theme.of(context).textTheme;
+
+    return _FlowFrame(
+      title: 'Incoming requests',
+      plainChrome: true,
+      onBack: () {
+        state.goTo(EmergencyScreen.providerDashboard);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if(incoming.isEmpty)
+            Text(
+              'No new requests.',
+              style: textTheme.bodyLarge?.copyWith(
+                color: AppColors.muted,
+                height: 1.4,
+              ),
+            ),
+          for(final job in incoming) ...[
+            Material(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(14),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.space4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _typeAndNote(job.description).$1,
+                      style: textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.space2),
+                    Text(
+                      job.address,
+                      style: textTheme.bodyLarge?.copyWith(height: 1.4),
+                    ),
+                    if(_typeAndNote(job.description).$2 != null) ...[
+                      const SizedBox(height: AppSpacing.space2),
+                      Text(
+                        _typeAndNote(job.description).$2!,
+                        style: textTheme.bodyLarge?.copyWith(
+                          color: AppColors.muted,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.space4),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _ActionButton(
+                            label: 'Accept',
+                            color: AppColors.green,
+                            onPressed: () {},
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.space3),
+                        Expanded(
+                          child: _PressScale(
+                            child: _SecondaryButton(
+                              label: 'Decline',
+                              onPressed: () {
+                                state.declineIncomingJob(job.requestId);
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.space3),
+          ],
         ],
       ),
     );
@@ -6663,9 +6737,11 @@ class _InsetRow extends StatelessWidget {
     this.status,
     this.statusColor,
     this.showChevron = true,
+    this.count,
   });
 
   final String label;
+  final int? count;
   final String? note;
   final String? dateLabel;
   final String? status;
@@ -6741,6 +6817,10 @@ class _InsetRow extends StatelessWidget {
       row = Row(
         children: [
           Expanded(child: text),
+          if(count != null) ...[
+            _CountCircle(count: count!),
+            const SizedBox(width: AppSpacing.space2),
+          ],
           const Icon(
             Icons.chevron_right_rounded,
             color: AppColors.muted,
@@ -6759,6 +6839,33 @@ class _InsetRow extends StatelessWidget {
             vertical: hasStatus ? AppSpacing.space3 : 0,
           ),
           child: row,
+        ),
+      ),
+    );
+  }
+}
+
+class _CountCircle extends StatelessWidget {
+  const _CountCircle({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space2),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: count == 0 ? AppColors.muted : AppColors.blue,
+        borderRadius: BorderRadius.circular(13),
+      ),
+      child: Text(
+        '$count',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: AppColors.surface,
+          fontWeight: FontWeight.w700,
+          fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),
     );
