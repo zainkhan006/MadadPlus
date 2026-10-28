@@ -3222,8 +3222,14 @@ class _TradeDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
     final plumber = state.domesticTrade == 'Plumber';
+    final electrician = state.domesticTrade == 'Electrician';
+    final carpenter = state.domesticTrade == 'Carpenter';
     final issues = plumber
         ? ['Pipe leak', 'Tap install', 'Water motor', 'Other']
+        : electrician
+        ? ['AC repair', 'Motor work', 'Generator work', 'Other']
+        : carpenter
+        ? ['Cabinet work', 'Door work', 'Kitchen work', 'Floor work', 'Other']
         : ['Other'];
 
     return _FlowFrame(
@@ -3258,7 +3264,22 @@ class _TradeDetailScreen extends StatelessWidget {
                 .toList(),
           ),
           const SizedBox(height: AppSpacing.space4),
-          Text('CHOOSE A PROVIDER', style: Theme.of(context).textTheme.labelSmall),
+          Row(
+            children: [
+              Text(
+                'CHOOSE A PROVIDER',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+              const Spacer(),
+              if(electrician)
+                _FilterButton(
+                  active: state.electricianFilters.isNotEmpty,
+                  onPressed: () {
+                    _showElectricianFilter(context, state);
+                  },
+                ),
+            ],
+          ),
           const SizedBox(height: AppSpacing.space2),
           if(state.providersLoading)
             const Center(child: CircularProgressIndicator()),
@@ -3304,6 +3325,121 @@ class _TradeDetailScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FilterButton extends StatelessWidget {
+  const _FilterButton({required this.active, required this.onPressed});
+
+  final bool active;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? AppColors.blue : AppColors.ink;
+    return _PressScale(
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space2),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.tune_rounded, size: 18, color: color),
+                const SizedBox(width: AppSpacing.space2),
+                Text(
+                  'Filter',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _showElectricianFilter(
+  BuildContext context,
+  EmergencyRequestState state,
+) {
+  final ticked = {...state.electricianFilters};
+  return showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          Widget row(String label, String trade) {
+            return InkWell(
+              onTap: () {
+                setDialogState(() {
+                  if(!ticked.add(trade)) {
+                    ticked.remove(trade);
+                  }
+                });
+              },
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 52),
+                child: Row(
+                  children: [
+                    IgnorePointer(
+                      child: Checkbox(
+                        value: ticked.contains(trade),
+                        onChanged: (_) {},
+                        activeColor: AppColors.blue,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.space2),
+                    Text(
+                      label,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          return Dialog(
+            backgroundColor: AppColors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.space4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  row('Electrician', 'electrician'),
+                  row('AC technician', 'ac technician'),
+                  const SizedBox(height: AppSpacing.space3),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: _ActionButton(
+                      label: 'Done',
+                      onPressed: () {
+                        state.setElectricianFilters(ticked);
+                        Navigator.pop(dialogContext);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
 }
 
 class _ServiceDescriptionScreen extends StatelessWidget {
@@ -5033,7 +5169,7 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
             children: [
               _InsetRow(
                 label: 'Incoming requests',
-                count: incoming.length,
+                count: incoming.isEmpty ? null : incoming.length,
                 onPressed: state.openIncomingRequests,
               ),
             ],
@@ -5175,7 +5311,9 @@ class _ProviderIncomingScreen extends StatelessWidget {
                           child: _ActionButton(
                             label: 'Accept',
                             color: AppColors.green,
-                            onPressed: () {},
+                            onPressed: () {
+                              state.acceptIncomingJob(job.requestId);
+                            },
                           ),
                         ),
                         const SizedBox(width: AppSpacing.space3),
