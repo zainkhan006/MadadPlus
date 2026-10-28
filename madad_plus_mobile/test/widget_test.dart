@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:madad_plus_mobile/emergency_flow.dart';
 import 'package:madad_plus_mobile/main.dart';
 import 'package:madad_plus_mobile/services/emergency_outcome.dart';
@@ -10,6 +11,7 @@ import 'package:madad_plus_mobile/services/emergency_service.dart';
 import 'package:madad_plus_mobile/services/emergency_socket_service.dart';
 import 'package:madad_plus_mobile/services/provider_notifier.dart';
 import 'package:madad_plus_mobile/theme/app_theme.dart';
+import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -48,6 +50,60 @@ void main() {
       findsOneWidget,
     );
     expect(session.state.pinLatitude, isNull);
+  });
+
+  testWidgets('Find my location gives up when no position arrives', (
+    WidgetTester tester,
+  ) async {
+    GeolocatorPlatform.instance = FakeGeolocator();
+    final session = testSession();
+    await reachHome(tester, session.state);
+    await tapText(tester, 'Karachi, DHA Phase 5');
+    await tapText(tester, 'Find my location');
+    await tester.pump(const Duration(seconds: 16));
+    await tester.pump();
+
+    expect(
+      find.text('Your location took too long to find. Type the address instead.'),
+      findsOneWidget,
+    );
+    expect(find.text('Where are you?'), findsOneWidget);
+    expect(session.state.homePlaces, isEmpty);
+  });
+
+  testWidgets('Find my location opens home with that address', (
+    WidgetTester tester,
+  ) async {
+    GeolocatorPlatform.instance = FakeGeolocator(
+      position: Position(
+        longitude: 67.03,
+        latitude: 24.8138,
+        timestamp: DateTime(2026, 10, 29),
+        accuracy: 5,
+        altitude: 0,
+        altitudeAccuracy: 0,
+        heading: 0,
+        headingAccuracy: 0,
+        speed: 0,
+        speedAccuracy: 0,
+      ),
+    );
+    final session = testSession();
+    await reachHome(tester, session.state);
+    await tapText(tester, 'Karachi, DHA Phase 5');
+    await tapText(tester, 'Find my location');
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('How can we help?'), findsOneWidget);
+    expect(find.text('Where are you?'), findsNothing);
+    expect(session.state.homePlaces.length, 1);
+    expect(session.state.homePlaces.first.address, 'Current location');
+    expect(session.state.homeAddress, 'Current location');
+    expect(find.text('Current location'), findsOneWidget);
   });
 
   testWidgets('a saved home location shows in the title and drops the pin', (
@@ -868,7 +924,7 @@ void main() {
     );
   });
 
-  testWidgets('a user books a plumber and accepts the repair total', (
+  testWidgets('electrician and carpenter issues stay on their own screens', (
     WidgetTester tester,
   ) async {
     final session = testSession();
@@ -880,6 +936,92 @@ void main() {
     expect(find.text('Mechanic'), findsNothing);
     expect(find.text('Painter'), findsNothing);
 
+    await tapText(tester, 'Electrician');
+    await pumpAsync(tester);
+    expect(find.text('AC repair'), findsOneWidget);
+    expect(find.text('Motor work'), findsOneWidget);
+    expect(find.text('Generator work'), findsOneWidget);
+    expect(find.text('Other'), findsOneWidget);
+    expect(find.text('Cabinet work'), findsNothing);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pump();
+    await tapText(tester, 'Carpenter');
+    await pumpAsync(tester);
+    expect(find.text('Cabinet work'), findsOneWidget);
+    expect(find.text('Door work'), findsOneWidget);
+    expect(find.text('Kitchen work'), findsOneWidget);
+    expect(find.text('Floor work'), findsOneWidget);
+    expect(find.text('AC repair'), findsNothing);
+    expect(find.text('AC technician'), findsNothing);
+  });
+
+  testWidgets('the electrician filter starts with both trades', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    session.api.providers.addAll([
+      const ProviderRow(
+        id: 'prov-elec',
+        name: 'Kashif electric wala',
+        status: 'ONLINE',
+        rating: 4.8,
+        inspectionFee: 2500,
+        specialisationId: 'spec-elec',
+        specialisationName: 'Electrician',
+      ),
+      const ProviderRow(
+        id: 'prov-ac',
+        name: 'muzammil ac repairs',
+        status: 'ONLINE',
+        rating: 4.8,
+        inspectionFee: 2500,
+        specialisationId: 'spec-ac',
+        specialisationName: 'AC Technician',
+      ),
+    ]);
+    await reachHome(tester, session.state);
+    await tapText(tester, 'Services');
+    await tapText(tester, 'Electrician');
+    await pumpAsync(tester);
+
+    expect(find.text('Kashif electric wala'), findsOneWidget);
+    expect(find.text('muzammil ac repairs'), findsOneWidget);
+
+    await tapText(tester, 'Filter');
+    expect(find.text('Done'), findsOneWidget);
+    await tester.tap(find.text('Electrician').last);
+    await tester.pump();
+    expect(find.text('muzammil ac repairs'), findsOneWidget);
+    await tapText(tester, 'Done');
+    await tester.pumpAndSettle();
+    expect(find.text('Kashif electric wala'), findsOneWidget);
+    expect(find.text('muzammil ac repairs'), findsNothing);
+
+    await tapText(tester, 'Filter');
+    await tester.tap(find.text('Electrician').last);
+    await tester.tap(find.text('AC technician').last);
+    await tester.pump();
+    await tapText(tester, 'Done');
+    await tester.pumpAndSettle();
+    expect(find.text('Kashif electric wala'), findsNothing);
+    expect(find.text('muzammil ac repairs'), findsOneWidget);
+
+    await tapText(tester, 'Filter');
+    await tester.tap(find.text('Electrician').last);
+    await tester.pump();
+    await tapText(tester, 'Done');
+    await tester.pumpAndSettle();
+    expect(find.text('Kashif electric wala'), findsOneWidget);
+    expect(find.text('muzammil ac repairs'), findsOneWidget);
+  });
+
+  testWidgets('a user books a plumber and accepts the repair total', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    await reachHome(tester, session.state);
+    await tapText(tester, 'Services');
     await tapText(tester, 'Plumber');
     await pumpAsync(tester);
     await tapText(tester, 'Karachi Plumbers');
@@ -1143,10 +1285,6 @@ void main() {
     expect(find.text('Gulshan-e-Iqbal'), findsOneWidget);
     expect(find.text('Kitchen tap'), findsOneWidget);
 
-    await tester.tap(find.text('Accept').first);
-    await tester.pump();
-    expect(state.incomingJobs.length, 3);
-
     state.declineIncomingJob('job-1');
     await pumpAsync(tester);
     expect(api.cancelCalls, 1);
@@ -1255,6 +1393,72 @@ void main() {
 
     expect(session.state.currentScreen, EmergencyScreen.services);
     expect(find.text('What do you need fixed?'), findsOneWidget);
+  });
+
+  testWidgets('accepting a request opens the usual screens', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession();
+    final empty = EmergencyRequestState(
+      emergencyService: session.api,
+      socketService: SilentSocketService(relay: session.api),
+      demoUserId: 'user-1',
+    );
+    await reachSignIn(tester, empty);
+    await submitStaffName(tester, 'Sign in as provider', 'Karachi Plumbers');
+    await tapText(tester, 'VERIFY');
+    await pumpAsync(tester);
+    expect(find.text('Incoming requests'), findsOneWidget);
+    expect(find.text('0'), findsNothing);
+
+    await reachHome(tester, session.state);
+    await tapText(tester, 'Services');
+    await tapText(tester, 'Plumber');
+    await pumpAsync(tester);
+    await tapText(tester, 'Karachi Plumbers');
+    await tapText(tester, 'Book plumber');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Describe your service problem'),
+      'Kitchen sink leak',
+    );
+    await tester.pump();
+    await tapText(tester, 'Continue');
+    session.state.setDomesticPin(
+      latitude: 24.8138,
+      longitude: 67.0300,
+      address: 'Clifton Block 5',
+    );
+    await tester.pump();
+    await tapText(tester, 'Continue');
+    await tapText(tester, 'Continue');
+    await tapText(tester, 'Confirm');
+    await pumpAsync(tester);
+    expect(find.text('Finding a plumber'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    final provider = EmergencyRequestState(
+      emergencyService: session.api,
+      socketService: SilentSocketService(relay: session.api),
+      demoUserId: 'user-1',
+    );
+    await reachSignIn(tester, provider);
+    await submitStaffName(tester, 'Sign in as provider', 'Karachi Plumbers');
+    await tapText(tester, 'VERIFY');
+    await pumpAsync(tester);
+    await tapText(tester, 'Incoming requests');
+    await tapText(tester, 'Accept');
+    await pumpAsync(tester);
+    expect(find.text('Job accepted'), findsOneWidget);
+    expect(provider.currentScreen, EmergencyScreen.providerAccepted);
+
+    await tester.pumpWidget(MyApp(requestState: session.state));
+    await tester.pump();
+    for(final listener in List.of(session.api.listeners)) {
+      listener(session.api.jobs.single);
+    }
+    await tester.pump();
+    expect(session.state.currentScreen, EmergencyScreen.domesticJob);
+    expect(find.text('Provider assigned'), findsOneWidget);
   });
 
   testWidgets('part prices add up and send only the parts total', (
@@ -1638,6 +1842,27 @@ void main() {
       findsNothing,
     );
   });
+}
+
+class FakeGeolocator extends GeolocatorPlatform with MockPlatformInterfaceMixin {
+  FakeGeolocator({this.position});
+
+  final Position? position;
+
+  @override
+  Future<bool> isLocationServiceEnabled() async => true;
+
+  @override
+  Future<LocationPermission> checkPermission() async => LocationPermission.always;
+
+  @override
+  Future<Position> getCurrentPosition({LocationSettings? locationSettings}) {
+    final found = position;
+    if(found == null) {
+      return Completer<Position>().future;
+    }
+    return Future.value(found);
+  }
 }
 
 class RecordingNotifier extends ProviderNotifier {

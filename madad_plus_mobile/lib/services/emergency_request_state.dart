@@ -112,6 +112,7 @@ class EmergencyRequestState extends ChangeNotifier {
 
   String domesticTrade = 'Plumber';
   String domesticIssue = 'Pipe leak';
+  Set<String> electricianFilters = {};
   String domesticSpecificIssue = 'Water leak';
   bool domesticPhotoAttached = false;
   String domesticDescription = '';
@@ -822,6 +823,7 @@ class EmergencyRequestState extends ChangeNotifier {
   void openTrade(String trade) {
     domesticTrade = trade;
     domesticIssue = trade == 'Plumber' ? 'Pipe leak' : 'Other';
+    electricianFilters = {};
     domesticSpecificIssue = 'Water leak';
     domesticPhotoAttached = false;
     chosenProvider = null;
@@ -834,7 +836,10 @@ class EmergencyRequestState extends ChangeNotifier {
     return providers.where((row) {
       final name = row.specialisationName?.toLowerCase() ?? '';
       if(trade == 'electrician') {
-        return name == 'electrician' || name == 'ac technician';
+        if(name != 'electrician' && name != 'ac technician') {
+          return false;
+        }
+        return electricianFilters.isEmpty || electricianFilters.contains(name);
       }
       return name == trade;
     }).toList();
@@ -936,6 +941,16 @@ class EmergencyRequestState extends ChangeNotifier {
 
   void selectDomesticIssue(String issue) {
     domesticIssue = issue;
+    notifyListeners();
+  }
+
+  void setElectricianFilters(Set<String> trades) {
+    electricianFilters = trades;
+    final chosen = chosenProvider;
+    if(chosen != null &&
+        !providersForTrade.any((row) => row.id == chosen.id)) {
+      chosenProvider = null;
+    }
     notifyListeners();
   }
 
@@ -1499,6 +1514,11 @@ class EmergencyRequestState extends ChangeNotifier {
     _cancelPendingBooking(requestId);
   }
 
+  void acceptIncomingJob(String requestId) {
+    openedJobId = requestId;
+    acceptJob();
+  }
+
   Future<void> acceptJob() async {
     final provider = providerProfile;
     final requestId = openedJobId;
@@ -1887,6 +1907,11 @@ class EmergencyRequestState extends ChangeNotifier {
     homeLongitude = longitude;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
+    await _writeHomePlaces(prefs);
+    await prefs.setString(_homeChosenKey, address);
+  }
+
+  Future<void> _writeHomePlaces(SharedPreferences prefs) async {
     await prefs.setString(
       _homePlacesKey,
       jsonEncode([
@@ -1898,7 +1923,6 @@ class EmergencyRequestState extends ChangeNotifier {
           },
       ]),
     );
-    await prefs.setString(_homeChosenKey, address);
   }
 
   Future<void> selectHomePlace(
@@ -1931,7 +1955,15 @@ class EmergencyRequestState extends ChangeNotifier {
       return null;
     }
 
-    final position = await Geolocator.getCurrentPosition();
+    final Position position;
+    try {
+      position = await Geolocator.getCurrentPosition().timeout(
+        const Duration(seconds: 15),
+      );
+    } on TimeoutException {
+      locationProblem = 'Your location took too long to find. Type the address instead.';
+      return null;
+    }
     final address = await labelForCoordinates(
       position.latitude,
       position.longitude,
