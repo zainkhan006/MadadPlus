@@ -1576,6 +1576,23 @@ app.patch("/api/v1/providers/:providerId/requests/:requestId/accept", async (req
   }
 });
 
+app.patch("/api/v1/domestic-requests/:requestId/cancel", async (req, res) => {
+  try {
+    const updated = await db("domestic_requests")
+      .where({ id: req.params.requestId, status: "PENDING" })
+      .update({ status: "CANCELLED", updated_at: db.fn.now() });
+    if (updated !== 1) {
+      return res.status(409).json({ error: "Only a request that is still pending can be cancelled" });
+    }
+    const payload = await getDomesticRequest(req.params.requestId);
+    emitDomesticRequest(payload, "domestic.cancelled");
+    res.json(payload);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to cancel domestic request" });
+  }
+});
+
 app.post("/api/v1/providers/:providerId/requests/:requestId/cost", async (req, res) => {
   const quotedTotal = req.body?.quotedTotal;
   const parsedQuotedTotal = quotedTotal == null ? null : money(quotedTotal);
