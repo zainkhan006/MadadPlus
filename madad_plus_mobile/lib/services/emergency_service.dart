@@ -85,6 +85,7 @@ class EmergencyRequestResult {
     required this.consideredNearest,
     this.pickupLatitude,
     this.pickupLongitude,
+    this.updatedAt,
   });
 
   final String requestId;
@@ -93,6 +94,7 @@ class EmergencyRequestResult {
   final AmbulanceAssignment? consideredNearest;
   final double? pickupLatitude;
   final double? pickupLongitude;
+  final DateTime? updatedAt;
 
   factory EmergencyRequestResult.fromJson(Map<String, dynamic> json) {
     final pickup = _point(json['pickupLocation']);
@@ -101,6 +103,7 @@ class EmergencyRequestResult {
       status: json['status'] as String,
       pickupLatitude: pickup?.lat,
       pickupLongitude: pickup?.lng,
+      updatedAt: _time(json['updatedAt']),
       assignedAmbulance: json['assignedAmbulance'] == null
           ? null
           : AmbulanceAssignment.fromJson(
@@ -168,6 +171,7 @@ class EmergencyCall {
     this.hospitalLatitude,
     this.hospitalLongitude,
     this.additionalDetails,
+    this.updatedAt,
   });
 
   final String requestId;
@@ -186,6 +190,7 @@ class EmergencyCall {
   final double? ambulanceLongitude;
   final double? hospitalLatitude;
   final double? hospitalLongitude;
+  final DateTime? updatedAt;
 
   factory EmergencyCall.fromJson(Map<String, dynamic> json) {
     final hospital = json['hospital'];
@@ -214,6 +219,7 @@ class EmergencyCall {
       hospitalLatitude: hospitalPoint?.lat,
       hospitalLongitude: hospitalPoint?.lng,
       additionalDetails: json['additionalDetails'] as String?,
+      updatedAt: _time(json['updatedAt']),
     );
   }
 }

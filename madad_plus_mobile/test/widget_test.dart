@@ -346,6 +346,77 @@ void main() {
     expect(find.text('No active call'), findsNothing);
   });
 
+  testWidgets('a driver who signs back in keeps the user trip clock', (
+    WidgetTester tester,
+  ) async {
+    final started = DateTime.now().subtract(const Duration(seconds: 20));
+    final session = testSession(withCall: false);
+    session.api.portalCall = EmergencyCall(
+      requestId: 'req-1',
+      status: 'ASSIGNED',
+      pickupAddress: 'Clifton Block 5',
+      emergencyDescription: 'Accident',
+      peopleCount: 2,
+      callerPhone: '+92 300 0000000',
+      hospitalName: null,
+      hospitalAddress: null,
+      assignedDriverId: 'drv-1',
+      ambulanceLatitude: 24.86,
+      ambulanceLongitude: 67.05,
+      pickupLatitude: 24.81,
+      pickupLongitude: 67.03,
+      updatedAt: started,
+    );
+    final user = EmergencyRequestState(
+      emergencyService: session.api,
+      socketService: SilentSocketService(),
+      demoUserId: 'user-1',
+    );
+    user.beginCallerLeg(
+      EmergencyRequestResult(
+        requestId: 'req-1',
+        status: 'ASSIGNED',
+        assignedAmbulance: const AmbulanceAssignment(
+          id: 'amb-1',
+          label: 'A-01',
+          latitude: 24.86,
+          longitude: 67.05,
+        ),
+        consideredNearest: null,
+        pickupLatitude: 24.81,
+        pickupLongitude: 67.03,
+        updatedAt: started,
+      ),
+    );
+
+    session.state.chooseDriverAmbulance(session.api.ambulances.first);
+    await tester.pump();
+    await tester.pump();
+
+    expect(session.state.routeStartedAt, started);
+    expect(user.routeStartedAt, started);
+    expect(
+      session.state.routeProgress(),
+      closeTo(user.routeProgress(), 0.02),
+    );
+    expect(session.state.routeProgress(), greaterThan(0.2));
+
+    session.state.signOutDriver();
+    expect(session.state.routeStartedAt, isNull);
+
+    session.state.chooseDriverAmbulance(session.api.ambulances.first);
+    await tester.pump();
+    await tester.pump();
+
+    expect(session.state.routeStartedAt, started);
+    expect(
+      session.state.routeProgress(),
+      closeTo(user.routeProgress(), 0.02),
+    );
+    session.state.dispose();
+    user.dispose();
+  });
+
   testWidgets('driver registration does not ask which ambulance', (
     WidgetTester tester,
   ) async {
