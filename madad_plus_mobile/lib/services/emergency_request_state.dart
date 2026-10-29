@@ -53,6 +53,7 @@ enum EmergencyScreen {
   providerRequest,
   providerAccepted,
   providerJob,
+  providerPaid,
 }
 
 enum AccountPath { signIn, driver, user, provider }
@@ -126,6 +127,8 @@ class EmergencyRequestState extends ChangeNotifier {
   String? settledCostRequestId;
   String? domesticNotice;
   String? amountOwed;
+  String? providerPaidText;
+  String? providerPaidBy;
   final List<({
     String id,
     String trade,
@@ -1099,7 +1102,7 @@ class EmergencyRequestState extends ChangeNotifier {
       ));
     }
     saveDomesticHistory();
-    domesticJob = accepted ? DomesticJob.complete : DomesticJob.refused;
+    domesticJob = DomesticJob.complete;
     goTo(EmergencyScreen.domesticJob);
   }
 
@@ -1157,10 +1160,16 @@ class EmergencyRequestState extends ChangeNotifier {
     );
   }
 
-  Future<void> submitRepairTotal(String typedTotal) async {
+  Future<void> submitRepairTotal(
+    String typedTotal, {
+    required List<({String name, double price})> components,
+  }) async {
     final provider = providerProfile;
     final requestId = activeJobId;
     final total = double.tryParse(typedTotal.trim());
+    if(costWaiting) {
+      return;
+    }
     if(provider == null || requestId == null) {
       showDomesticNotice('There is no active job to send a repair total for.');
       return;
@@ -1179,6 +1188,7 @@ class EmergencyRequestState extends ChangeNotifier {
         providerId: provider.id,
         requestId: requestId,
         quotedTotal: total,
+        components: components,
       );
       _receiveProviderBooking(submitted);
     } on ApiException catch (error) {
@@ -1220,17 +1230,19 @@ class EmergencyRequestState extends ChangeNotifier {
     goTo(screen);
   }
 
-  Future<void> submitProviderRating(int stars) async {
-    final provider = chosenProvider;
-    if(provider == null || stars < 1 || stars > 5) {
-      return;
+  Future<bool> submitProviderRating(int stars) async {
+    final providerId = chosenProvider?.id ?? domesticBooking?.providerId;
+    if(providerId == null || stars < 1 || stars > 5) {
+      showDomesticNotice('Choose a star from 1 to 5.');
+      return false;
     }
     try {
       final saved = await _emergencyService.setProviderRating(
-        providerId: provider.id,
+        providerId: providerId,
         rating: stars,
       );
-      _applyProviderRating(provider.id, saved);
+      _applyProviderRating(providerId, saved);
+      return true;
     } on ApiException catch (error) {
       showDomesticNotice(error.message);
     } on TimeoutException {
@@ -1238,6 +1250,7 @@ class EmergencyRequestState extends ChangeNotifier {
     } catch (_) {
       showDomesticNotice('The rating could not be saved. Try again.');
     }
+    return false;
   }
 
   void _applyProviderRating(String providerId, double rating) {
@@ -1401,13 +1414,20 @@ class EmergencyRequestState extends ChangeNotifier {
         _providerNotifier?.showNewJobs();
       }
     }
+    if(booking.requestId == activeJobId &&
+        booking.quotedTotal != null &&
+        booking.finalTotal == null) {
+      costWaiting = false;
+    }
     if(booking.finalTotal != null && booking.requestId == activeJobId) {
       costWaiting = false;
       amountOwed = 'Amount owed: Rs. ${booking.finalTotal!.toStringAsFixed(0)}';
+      providerPaidText =
+          'You were paid Rs. ${booking.finalTotal!.toStringAsFixed(0)}';
+      final paidBy = booking.userName?.trim();
+      providerPaidBy = paidBy == null || paidBy.isEmpty ? null : paidBy;
       _finishProviderJob();
-      if(booking.receiptStatus == 'ACCEPTED') {
-        goTo(EmergencyScreen.providerDashboard);
-      }
+      goTo(EmergencyScreen.providerPaid);
     }
     notifyListeners();
   }
