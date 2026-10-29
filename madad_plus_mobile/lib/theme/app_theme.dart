@@ -14,6 +14,7 @@ class AppColors {
   static const Color page = Color(0xFFEDF1F6);
   static const Color soft = Color(0xFFF7F9FC);
   static const Color focus = Color(0xFF005FCC);
+  static const Color gold = Color(0xFFE8A317);
   static const Color electricianChip = Color(0xFFF5C518);
   static const Color plumberChip = Color(0xFF0C7AB0);
   static const Color carpenterChip = Color(0xFF7A4E2D);

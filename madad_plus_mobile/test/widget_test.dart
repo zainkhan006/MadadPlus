@@ -138,11 +138,16 @@ void main() {
     WidgetTester tester,
   ) async {
     SharedPreferences.setMockInitialValues({
-      'emergencyRequests':
+      'emergencyRequests:user-demo':
           '[{"id":"req-9","address":"Clifton Block 5","happened":"Accident",'
           '"people":3,"status":"COMPLETED"}]',
-      'domesticHistory':
+      'domesticHistory:user-demo':
           '[{"label":"Plumber · Completed","owed":"Amount owed: Rs. 2500"}]',
+      'emergencyRequests':
+          '[{"id":"req-shared","address":"Shared road","happened":"Cardiac",'
+          '"people":1,"status":"COMPLETED"}]',
+      'domesticHistory':
+          '[{"label":"Electrician · Completed","owed":"Amount owed: Rs. 9000"}]',
     });
     final session = testSession();
     await reachHome(tester, session.state);
@@ -162,6 +167,52 @@ void main() {
     expect(find.text('Amount owed'), findsOneWidget);
     expect(find.text('Rs. 2500'), findsOneWidget);
     expect(find.text('Problem'), findsNothing);
+    expect(find.text('Cardiac'), findsNothing);
+    expect(find.text('Electrician'), findsNothing);
+    expect(find.text('Shared road'), findsNothing);
+  });
+
+  testWidgets('a request stays on the account that made it', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'emergencyRequests:user-demo':
+          '[{"id":"req-hal","address":"Clifton Block 5","happened":"Accident",'
+          '"people":2,"status":"COMPLETED"}]',
+      'domesticHistory:user-demo':
+          '[{"id":"dom-hal","trade":"Plumber","status":"Completed","issue":"Leak",'
+          '"address":"Clifton Block 5","owed":"Amount owed: Rs. 2500"}]',
+      'emergencyRequests:user-ibad':
+          '[{"id":"req-ibad","address":"DHA Phase 5","happened":"Cardiac",'
+          '"people":1,"status":"COMPLETED"}]',
+      'domesticHistory:user-ibad':
+          '[{"id":"dom-ibad","trade":"Electrician","status":"Completed",'
+          '"issue":"Wiring","address":"DHA Phase 5","owed":"Amount owed: Rs. 1800"}]',
+    });
+    final session = testSession();
+    session.api.callers.add(
+      const CallerRow(
+        id: 'user-ibad',
+        name: 'Ibad Khan',
+        phone: '+92 300 0000002',
+      ),
+    );
+    await reachHome(tester, session.state);
+    await pumpAsync(tester);
+
+    await tapText(tester, 'Requests');
+    expect(find.text('Accident'), findsOneWidget);
+    expect(find.text('Cardiac'), findsNothing);
+
+    await tapText(tester, 'Profile');
+    await tapText(tester, 'Sign out');
+    await submitCallerName(tester, 'Ibad Khan');
+    await tapText(tester, 'VERIFY');
+    await tapText(tester, 'Requests');
+    expect(find.text('Cardiac'), findsOneWidget);
+    expect(find.text('Accident'), findsNothing);
+    expect(find.text('DHA Phase 5'), findsOneWidget);
+    expect(find.text('Clifton Block 5'), findsNothing);
   });
 
   testWidgets('customer can reach the ambulance confirmation screen', (
@@ -227,7 +278,7 @@ void main() {
     await tapText(tester, 'REQUEST NOW');
     await pumpAsync(tester);
 
-    expect(find.text('A-01 is coming'), findsOneWidget);
+    expect(find.text('Ambulance is on its way'), findsOneWidget);
     expect(find.text('Finding help'), findsNothing);
     expect(find.text('FINDING HELP NOW'), findsNothing);
     expect(session.api.emergencyPosts, 1);
@@ -511,9 +562,12 @@ void main() {
     await pumpAsync(tester);
 
     expect(find.text('Drop-off'), findsOneWidget);
-    expect(find.text('Slide to the end to confirm.'), findsOneWidget);
+    expect(find.text('Swipe to confirm'), findsOneWidget);
 
-    tester.widget<Slider>(find.byType(Slider)).onChanged!(1);
+    await tester.drag(
+      find.byKey(const Key('arrival-swipe')),
+      const Offset(800, 0),
+    );
     await pumpAsync(tester);
 
     expect(find.text('Patient dropped off'), findsOneWidget);
@@ -703,7 +757,7 @@ void main() {
       expect(find.text('Your ambulance has changed to A-02.'), findsOneWidget);
     }
 
-    expect(find.text('Ambulance has arrived'), findsOneWidget);
+    expect(find.text('You are on your way'), findsOneWidget);
     expect(find.text('RETURN TO HOME'), findsNothing);
     expect(find.text('BACK TO HOME'), findsNothing);
 
@@ -1048,7 +1102,11 @@ void main() {
     await tapText(tester, 'Continue');
 
     expect(find.text('Confirm your request'), findsOneWidget);
-    expect(find.text('Plumber · Pipe leak'), findsOneWidget);
+    expect(find.text('Plumber'), findsOneWidget);
+    expect(
+      find.text('Pipe leak\nClifton Block 5\nAs soon as possible'),
+      findsOneWidget,
+    );
     expect(find.textContaining('Rs. 500'), findsOneWidget);
 
     await tapText(tester, 'Confirm');
@@ -1080,8 +1138,7 @@ void main() {
 
     await tapText(tester, 'Accept job');
     await pumpAsync(tester);
-    await tapText(tester, 'Start job');
-    await tapText(tester, 'Complete job');
+    await confirmArrival(tester);
     expect(find.text('Waiting for the repair total.'), findsOneWidget);
 
     await fillPart(tester, 0, 'Pipe joint', '2000');
@@ -1114,10 +1171,25 @@ void main() {
     await tapText(tester, 'Accept');
     await pumpAsync(tester);
 
-    expect(find.text('How was Karachi Plumbers?'), findsOneWidget);
+    expect(find.text('Job underway.'), findsOneWidget);
     expect(session.state.amountOwed, 'Amount owed: Rs. 2500');
     expect(session.state.requestId, isNull);
     expect(session.state.isRequesting, isFalse);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(MyApp(requestState: providerSession));
+    await tester.pump();
+    expect(find.text('Job accepted'), findsOneWidget);
+    expect(find.text('Address'), findsNothing);
+    await tapText(tester, 'Start job');
+    await tapText(tester, 'Complete job');
+    expect(find.text('You were paid Rs. 2500'), findsOneWidget);
+    expect(find.text('From Test User'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(MyApp(requestState: session.state));
+    await tester.pump();
+    expect(find.text('How was Karachi Plumbers?'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Rate 5 stars'));
     await tester.pump();
@@ -1143,8 +1215,6 @@ void main() {
     await tester.pumpWidget(MyApp(requestState: providerSession));
     await tester.pump();
     expect(find.text('Payment received'), findsOneWidget);
-    expect(find.text('You were paid Rs. 2500'), findsOneWidget);
-    expect(find.text('From Test User'), findsOneWidget);
     expect(find.text('Provider dashboard'), findsNothing);
     await tapText(tester, 'Back to home');
     expect(find.text('Provider dashboard'), findsOneWidget);
@@ -1168,7 +1238,7 @@ void main() {
     expect(finishedNote.style?.fontSize, finishedType.style?.fontSize);
     await tapText(tester, 'Pipe leak');
     expect(find.text('Finished job'), findsOneWidget);
-    expect(find.text('Pipe leak · Water leak · Kitchen sink leak'), findsOneWidget);
+    expect(find.text('Pipe leak\nWater leak\nKitchen sink leak'), findsOneWidget);
     expect(find.text('Price: Rs. 2500'), findsOneWidget);
     expect(find.text('Start job'), findsNothing);
     expect(find.text('Navigate to customer'), findsNothing);
@@ -1220,17 +1290,9 @@ void main() {
 
     await tapText(tester, 'Accept job');
     await pumpAsync(tester);
-    expect(find.text('Clifton'), findsOneWidget);
-    expect(find.text('Pipe leak'), findsOneWidget);
-    expect(find.text('Note'), findsNothing);
-    expect(find.text('Customer notified'), findsNothing);
-
-    await tapText(tester, 'Start job');
-    expect(find.text('Active job'), findsOneWidget);
-    expect(find.text('Provider notes'), findsOneWidget);
-    expect(find.text('Upload photos'), findsOneWidget);
-    expect(find.text('Complete job'), findsOneWidget);
-    expect(session.state.domesticJob, DomesticJob.inProgress);
+    expect(find.text('Arrived'), findsOneWidget);
+    expect(find.text('Start job'), findsNothing);
+    expect(session.state.providerDuty, ProviderDuty.onJob);
 
     await tester.tap(find.byTooltip('Back'));
     await tester.pump();
@@ -1461,8 +1523,8 @@ void main() {
     await tapText(tester, 'Incoming requests');
     await tapText(tester, 'Accept');
     await pumpAsync(tester);
-    expect(find.text('Job accepted'), findsOneWidget);
-    expect(provider.currentScreen, EmergencyScreen.providerAccepted);
+    expect(find.text('Arrived'), findsOneWidget);
+    expect(provider.currentScreen, EmergencyScreen.providerEnRoute);
 
     await tester.pumpWidget(MyApp(requestState: session.state));
     await tester.pump();
@@ -1582,12 +1644,7 @@ void main() {
     await tester.pump();
     await tapText(tester, 'Accept job');
     await pumpAsync(tester);
-
-    expect(find.text('Other'), findsOneWidget);
-    expect(find.text('ac'), findsOneWidget);
-
-    await tapText(tester, 'Start job');
-    await tapText(tester, 'Complete job');
+    await confirmArrival(tester);
     expect(find.text('Repair total'), findsNothing);
     expect(find.text('Inspection fee: Rs. 2500'), findsOneWidget);
     final feeTop = tester.getTopLeft(find.text('Inspection fee: Rs. 2500')).dy;
@@ -1660,8 +1717,7 @@ void main() {
 
     expect(find.text('Complete job'), findsNothing);
 
-    await tapText(tester, 'Start job');
-    await tapText(tester, 'Complete job');
+    await confirmArrival(tester);
     await fillPart(tester, 0, 'Pipe joint', '1500');
     await tapText(tester, 'Submit');
     await pumpAsync(tester);
@@ -1905,9 +1961,27 @@ class SilentSocketService extends EmergencySocketService {
   @override
   void connectProvider({
     required String providerId,
-    required void Function(DomesticBooking booking) onBooking,
+    required void Function(DomesticBooking booking, [String event]) onBooking,
   }) {
     relay?.listeners.add(onBooking);
+  }
+
+  @override
+  void relayDomestic(String event, String requestId) {
+    final jobs = relay?.jobs ?? const <DomesticBooking>[];
+    DomesticBooking? match;
+    for(final job in jobs) {
+      if(job.requestId == requestId) {
+        match = job;
+        break;
+      }
+    }
+    if(match == null) {
+      return;
+    }
+    for(final listener in List.of(relay!.listeners)) {
+      listener(match, event);
+    }
   }
 
   @override
@@ -1916,7 +1990,7 @@ class SilentSocketService extends EmergencySocketService {
   @override
   void connectDomestic({
     required String requestId,
-    required void Function(DomesticBooking booking) onBooking,
+    required void Function(DomesticBooking booking, [String event]) onBooking,
   }) {
     relay?.listeners.add(onBooking);
   }
@@ -1952,7 +2026,7 @@ class FakeEmergencyService extends EmergencyService {
   EmergencyCall? portalCall;
   String? portalStatus;
   final jobs = <DomesticBooking>[];
-  final listeners = <void Function(DomesticBooking booking)>[];
+  final listeners = <void Function(DomesticBooking booking, [String event])>[];
   EmergencyRequestResult? scriptedEmergencyResult;
   Exception? scriptedEmergencyError;
 
@@ -1993,6 +2067,8 @@ class FakeEmergencyService extends EmergencyService {
     required String description,
     required String address,
     String status = 'PENDING',
+    double? lat,
+    double? lng,
   }) {
     return DomesticBooking(
       requestId: requestId,
@@ -2004,6 +2080,11 @@ class FakeEmergencyService extends EmergencyService {
       providerRating: 4.6,
       inspectionFee: 500,
       specialisationName: 'Plumber',
+      lat: lat,
+      lng: lng,
+      providerLat: 24.86222,
+      providerLng: 67.02968,
+      updatedAt: DateTime.utc(2026, 10, 29, 12),
     );
   }
 
@@ -2040,6 +2121,7 @@ class FakeEmergencyService extends EmergencyService {
     required int peopleCount,
     required String inputMethod,
     String? additionalDetails,
+    String? callerPhone,
   }) async {
     emergencyPosts += 1;
     final error = scriptedEmergencyError;
@@ -2161,6 +2243,8 @@ class FakeEmergencyService extends EmergencyService {
     required String phone,
     required String cnic,
     required String trade,
+    String addressLine1 = '',
+    String addressLine2 = '',
   }) async {
     providerInserts += 1;
     final created = ProviderRow(
@@ -2238,12 +2322,16 @@ class FakeEmergencyService extends EmergencyService {
     required String specialisationId,
     required String description,
     required String address,
+    double? lat,
+    double? lng,
   }) async {
     domesticPosts += 1;
     final created = booking(
       requestId: 'dom-$domesticPosts',
       description: description,
       address: address,
+      lat: lat,
+      lng: lng,
     );
     jobs.add(created);
     return created;
@@ -2271,6 +2359,11 @@ class FakeEmergencyService extends EmergencyService {
       providerRating: current.providerRating,
       inspectionFee: current.inspectionFee,
       specialisationName: current.specialisationName,
+      lat: current.lat,
+      lng: current.lng,
+      providerLat: current.providerLat,
+      providerLng: current.providerLng,
+      updatedAt: current.updatedAt,
     );
     jobs[index] = accepted;
     return accepted;
@@ -2319,6 +2412,11 @@ class FakeEmergencyService extends EmergencyService {
       receiptStatus: receiptStatus,
       finishedAt: current.finishedAt,
       components: components ?? current.components,
+      lat: current.lat,
+      lng: current.lng,
+      providerLat: current.providerLat,
+      providerLng: current.providerLng,
+      updatedAt: current.updatedAt,
     );
     jobs[index] = updated;
     for(final listener in List.of(listeners)) {
@@ -2396,6 +2494,16 @@ TestSession testSession({
 
 Future<void> pumpAsync(WidgetTester tester) async {
   await tester.pump();
+  await tester.pump();
+}
+
+Future<void> confirmArrival(WidgetTester tester) async {
+  await tapText(tester, 'Arrived');
+  await tester.pump();
+  await tester.drag(
+    find.byKey(const Key('arrival-swipe')),
+    const Offset(800, 0),
+  );
   await tester.pump();
 }
 
