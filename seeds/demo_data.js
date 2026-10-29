@@ -120,7 +120,12 @@ exports.seed = async function (knex) {
         specialisation_id: specialisationByName.Electrician,
         rating: 4.8,
         inspection_fee: 2500,
-        services_provided_count: 64
+        services_provided_count: 64,
+        address_line1: "Gulshan-e-Iqbal center",
+        location: trx.raw(
+          "ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography",
+          [67.08132, 24.91644]
+        )
       },
       {
         auth_user_id: "00000000-0000-0000-0000-000000000013",
@@ -132,7 +137,13 @@ exports.seed = async function (knex) {
         specialisation_id: specialisationByName.Carpenter,
         rating: 4.5,
         inspection_fee: 1000,
-        services_provided_count: 52
+        services_provided_count: 52,
+        address_line1: "Empress Market",
+        address_line2: "Saddar",
+        location: trx.raw(
+          "ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography",
+          [67.02968, 24.86222]
+        )
       },
       {
         auth_user_id: "00000000-0000-0000-0000-000000000011",
@@ -144,7 +155,12 @@ exports.seed = async function (knex) {
         specialisation_id: specialisationByName.Plumber,
         rating: 4.2,
         inspection_fee: 500,
-        services_provided_count: 37
+        services_provided_count: 37,
+        address_line1: "Malir Cantt town center",
+        location: trx.raw(
+          "ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography",
+          [67.20591, 24.94343]
+        )
       },
       {
         auth_user_id: "00000000-0000-0000-0000-000000000014",
@@ -156,7 +172,12 @@ exports.seed = async function (knex) {
         specialisation_id: specialisationByName["AC Technician"],
         rating: 4.8,
         inspection_fee: 2500,
-        services_provided_count: 0
+        services_provided_count: 0,
+        address_line1: "Gulshan-e-Iqbal Block 5",
+        location: trx.raw(
+          "ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography",
+          [67.089652, 24.919573]
+        )
       },
       {
         auth_user_id: "00000000-0000-0000-0000-000000000015",
@@ -168,7 +189,13 @@ exports.seed = async function (knex) {
         specialisation_id: specialisationByName.Plumber,
         rating: 4.2,
         inspection_fee: 500,
-        services_provided_count: 0
+        services_provided_count: 0,
+        address_line1: "Zamzama Commercial",
+        address_line2: "DHA Phase 5",
+        location: trx.raw(
+          "ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography",
+          [67.040895, 24.817138]
+        )
       },
       {
         auth_user_id: "00000000-0000-0000-0000-000000000016",
@@ -180,7 +207,12 @@ exports.seed = async function (knex) {
         specialisation_id: specialisationByName.Carpenter,
         rating: 4.5,
         inspection_fee: 1000,
-        services_provided_count: 0
+        services_provided_count: 0,
+        address_line1: "Gulistan-e-Johar center",
+        location: trx.raw(
+          "ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography",
+          [67.13774, 24.92374]
+        )
       }
     ]);
   });
