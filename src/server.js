@@ -28,10 +28,33 @@ io.on("connection", (socket) => {
   socket.on("join:driver", (driverId) => socket.join(`driver:${driverId}`));
   socket.on("join:provider", (providerId) => socket.join(`provider:${providerId}`));
   socket.on("join:domestic-request", (requestId) => socket.join(`domestic:${requestId}`));
+  socket.on("domestic.inspecting", (requestId) => {
+    relayDomestic(requestId, "domestic.inspecting");
+  });
+  socket.on("domestic.work_finished", (requestId) => {
+    relayDomestic(requestId, "domestic.work_finished");
+  });
 });
 
 function validCoordinates(lat, lng) {
   return Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
+}
+
+function coordinate(value) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function relayDomestic(requestId, event) {
+  if (!requestId) return;
+  getDomesticRequest(requestId)
+    .then((payload) => {
+      if (payload) emitDomesticRequest(payload, event);
+    })
+    .catch((error) => {
+      console.error(error.message);
+    });
 }
 
 function point(trx, lat, lng) {
@@ -102,6 +125,8 @@ function domesticRequestPayload(request, components = []) {
     status: request.status,
     description: request.description,
     address: request.address,
+    lat: coordinate(request.lat),
+    lng: coordinate(request.lng),
     createdAt: request.created_at,
     updatedAt: request.updated_at,
     specialisation: request.specialisation_id
@@ -116,7 +141,9 @@ function domesticRequestPayload(request, components = []) {
           name: request.provider_name,
           phone: request.provider_phone,
           rating: Number(request.provider_rating),
-          inspectionFee: Number(request.provider_inspection_fee)
+          inspectionFee: Number(request.provider_inspection_fee),
+          lat: coordinate(request.provider_lat),
+          lng: coordinate(request.provider_lng)
         }
       : null,
     quotedTotal: request.quoted_total == null ? null : Number(request.quoted_total),
@@ -178,6 +205,10 @@ async function getDomesticRequest(requestId) {
       "p.phone as provider_phone",
       "p.rating as provider_rating",
       "p.inspection_fee as provider_inspection_fee",
+      db.raw("ST_Y(r.location::geometry) as lat"),
+      db.raw("ST_X(r.location::geometry) as lng"),
+      db.raw("ST_Y(p.location::geometry) as provider_lat"),
+      db.raw("ST_X(p.location::geometry) as provider_lng"),
       "receipt.quoted_total",
       "receipt.inspection_fee as receipt_inspection_fee",
       "receipt.final_total",
@@ -1253,7 +1284,9 @@ app.get("/api/v1/providers", async (req, res) => {
         "p.inspection_fee as inspectionFee",
         "p.services_provided_count as servicesProvidedCount",
         "s.id as specialisationId",
-        "s.name as specialisationName"
+        "s.name as specialisationName",
+        db.raw("ST_Y(p.location::geometry) as lat"),
+        db.raw("ST_X(p.location::geometry) as lng")
       )
       .modify((query) => {
         if (req.query.specialisationId) {
@@ -1268,7 +1301,9 @@ app.get("/api/v1/providers", async (req, res) => {
     res.json(providers.map((provider) => ({
       ...provider,
       rating: Number(provider.rating),
-      inspectionFee: Number(provider.inspectionFee)
+      inspectionFee: Number(provider.inspectionFee),
+      lat: coordinate(provider.lat),
+      lng: coordinate(provider.lng)
     })));
   } catch (error) {
     console.error(error.message);
@@ -1599,6 +1634,10 @@ app.get("/api/v1/providers/:providerId/requests", async (req, res) => {
         "p.phone as provider_phone",
         "p.rating as provider_rating",
         "p.inspection_fee as provider_inspection_fee",
+        db.raw("ST_Y(r.location::geometry) as lat"),
+        db.raw("ST_X(r.location::geometry) as lng"),
+        db.raw("ST_Y(p.location::geometry) as provider_lat"),
+        db.raw("ST_X(p.location::geometry) as provider_lng"),
         "receipt.quoted_total",
         "receipt.inspection_fee as receipt_inspection_fee",
         "receipt.final_total",
