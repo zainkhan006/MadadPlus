@@ -96,7 +96,7 @@ function money(value) {
   return Number.isFinite(amount) && amount >= 0 ? amount : null;
 }
 
-function domesticRequestPayload(request) {
+function domesticRequestPayload(request, components = []) {
   return {
     requestId: request.id,
     status: request.status,
@@ -124,8 +124,32 @@ function domesticRequestPayload(request) {
       ? null
       : Number(request.receipt_inspection_fee),
     finalTotal: request.final_total == null ? null : Number(request.final_total),
-    receiptStatus: request.receipt_status || null
+    receiptStatus: request.receipt_status || null,
+    components: components.map((row) => ({
+      name: row.name,
+      price: Number(row.price)
+    }))
   };
+}
+
+function sameMoney(left, right) {
+  return Math.round(Number(left) * 100) === Math.round(Number(right) * 100);
+}
+
+async function componentsForRequests(requestIds) {
+  const ids = requestIds.filter(Boolean);
+  const grouped = new Map();
+  if (!ids.length) return grouped;
+  const rows = await db("receipt_components as component")
+    .join("receipts as receipt", "receipt.id", "component.receipt_id")
+    .select("receipt.request_id", "component.name", "component.price", "component.position")
+    .whereIn("receipt.request_id", ids)
+    .orderBy("component.position");
+  for (const row of rows) {
+    if (!grouped.has(row.request_id)) grouped.set(row.request_id, []);
+    grouped.get(row.request_id).push(row);
+  }
+  return grouped;
 }
 
 async function getDomesticRequest(requestId) {
@@ -159,7 +183,9 @@ async function getDomesticRequest(requestId) {
     .where("r.id", requestId)
     .first();
 
-  return request ? domesticRequestPayload(request) : null;
+  if (!request) return null;
+  const grouped = await componentsForRequests([request.id]);
+  return domesticRequestPayload(request, grouped.get(request.id) || []);
 }
 
 function emitDomesticRequest(request, event) {
@@ -1574,7 +1600,8 @@ app.get("/api/v1/providers/:providerId/requests", async (req, res) => {
       .leftJoin("receipts as receipt", "receipt.request_id", "r.id")
       .where("r.provider_id", req.params.providerId)
       .orderBy("r.created_at", "desc");
-    res.json(requests.map(domesticRequestPayload));
+    const grouped = await componentsForRequests(requests.map((row) => row.id));
+    res.json(requests.map((row) => domesticRequestPayload(row, grouped.get(row.id) || [])));
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Unable to load provider requests" });
@@ -1621,6 +1648,22 @@ app.post("/api/v1/providers/:providerId/requests/:requestId/cost", async (req, r
   if (parsedQuotedTotal == null) {
     return res.status(400).json({ error: "quotedTotal must be a non-negative number" });
   }
+  if (req.body?.components != null && !Array.isArray(req.body.components)) {
+    return res.status(400).json({ error: "components must be a list" });
+  }
+  const parsedComponents = [];
+  for (const row of req.body?.components || []) {
+    const name = typeof row?.name === "string" ? row.name.trim() : "";
+    const price = money(row?.price);
+    if (!name || price == null) {
+      return res.status(400).json({ error: "Each component needs a name and a price" });
+    }
+    parsedComponents.push({ name, price });
+  }
+  const componentSum = parsedComponents.reduce((sum, row) => sum + row.price, 0);
+  if (!sameMoney(componentSum, parsedQuotedTotal)) {
+    return res.status(400).json({ error: "Component prices must add up to the quoted total" });
+  }
 
   try {
     const result = await db.transaction(async (trx) => {
@@ -1648,7 +1691,7 @@ app.post("/api/v1/providers/:providerId/requests/:requestId/cost", async (req, r
         .first();
       if (!provider) return { statusCode: 404, error: "Provider not found" };
 
-      await trx("receipts").insert({
+      const [receipt] = await trx("receipts").insert({
         request_id: request.id,
         provider_id: request.provider_id,
         user_id: request.user_id,
@@ -1656,7 +1699,15 @@ app.post("/api/v1/providers/:providerId/requests/:requestId/cost", async (req, r
         quoted_total: parsedQuotedTotal,
         final_total: null,
         status: "NEGOTIABLE"
-      });
+      }).returning("id");
+      if (parsedComponents.length) {
+        await trx("receipt_components").insert(parsedComponents.map((row, index) => ({
+          receipt_id: receipt.id,
+          name: row.name,
+          price: row.price,
+          position: index
+        })));
+      }
       return { statusCode: 200 };
     });
 
