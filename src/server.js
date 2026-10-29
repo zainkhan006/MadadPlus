@@ -1283,6 +1283,8 @@ app.get("/api/v1/providers", async (req, res) => {
         "p.rating",
         "p.inspection_fee as inspectionFee",
         "p.services_provided_count as servicesProvidedCount",
+        "p.address_line1 as addressLine1",
+        "p.address_line2 as addressLine2",
         "s.id as specialisationId",
         "s.name as specialisationName",
         db.raw("ST_Y(p.location::geometry) as lat"),
@@ -1412,6 +1414,8 @@ app.post("/api/v1/providers", async (req, res) => {
   const phone = String(req.body.phone || "").trim();
   const cnic = String(req.body.cnic || "").trim();
   const trade = String(req.body.trade || "").trim();
+  const addressLine1 = String(req.body.addressLine1 || "").trim();
+  const addressLine2 = String(req.body.addressLine2 || "").trim();
   if (!name || !phone || !cnic || !trade) {
     return res.status(400).json({ error: "name, phone, cnic, and trade are required" });
   }
@@ -1448,11 +1452,15 @@ app.post("/api/v1/providers", async (req, res) => {
         specialisation_id: specialisation.id,
         rating: 0,
         inspection_fee: 0,
-        services_provided_count: 0
+        services_provided_count: 0,
+        address_line1: addressLine1 || null,
+        address_line2: addressLine2 || null
       })
       .returning(["id", "name", "phone", "status"]);
     res.status(201).json({
       ...provider,
+      addressLine1: addressLine1 || null,
+      addressLine2: addressLine2 || null,
       rating: 0,
       inspectionFee: 0,
       specialisationId: specialisation.id,
