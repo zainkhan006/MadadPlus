@@ -378,6 +378,7 @@ class EmergencyRequestState extends ChangeNotifier {
       fromLng: ambulance?.longitude,
       toLat: incoming.pickupLatitude,
       toLng: incoming.pickupLongitude,
+      startedAt: incoming.updatedAt,
     );
   }
 
@@ -405,6 +406,7 @@ class EmergencyRequestState extends ChangeNotifier {
       fromLng: call.ambulanceLongitude ?? driverAmbulanceLng,
       toLat: call.pickupLatitude,
       toLng: call.pickupLongitude,
+      startedAt: call.updatedAt,
     );
   }
 
@@ -2797,6 +2799,7 @@ class EmergencyRequestState extends ChangeNotifier {
             consideredNearest: current.consideredNearest,
             pickupLatitude: current.pickupLatitude,
             pickupLongitude: current.pickupLongitude,
+            updatedAt: current.updatedAt,
           );
           rememberEmergencyRequest();
         }
@@ -2820,6 +2823,7 @@ class EmergencyRequestState extends ChangeNotifier {
         consideredNearest: current.consideredNearest,
         pickupLatitude: current.pickupLatitude,
         pickupLongitude: current.pickupLongitude,
+        updatedAt: current.updatedAt,
       );
     }
     notifyListeners();
@@ -2878,10 +2882,11 @@ class EmergencyRequestState extends ChangeNotifier {
   void _startArrivalSimulation() {
     _arrivalTimer?.cancel();
     final durationMs = routeDurationMs;
-    remainingSeconds = (durationMs / 1000).ceil();
-    var lastElapsedMs = 0;
+    final started = routeStartedAt ?? DateTime.now();
+    var lastElapsedMs = DateTime.now().difference(started).inMilliseconds;
+    remainingSeconds = math.max(0, ((durationMs - lastElapsedMs) / 1000).ceil());
     _arrivalTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      final elapsedMs = timer.tick * 100;
+      final elapsedMs = DateTime.now().difference(started).inMilliseconds;
       final leftMs = durationMs - elapsedMs;
       final enRouteAtMs = durationMs * 3 / 15;
       final reachedEnRoute = lastElapsedMs < enRouteAtMs && elapsedMs >= enRouteAtMs;
