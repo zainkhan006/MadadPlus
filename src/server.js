@@ -142,9 +142,13 @@ async function componentsForRequests(requestIds) {
   if (!ids.length) return grouped;
   const rows = await db("receipt_components as component")
     .join("receipts as receipt", "receipt.id", "component.receipt_id")
-    .select("receipt.request_id", "component.name", "component.price", "component.position")
+    .select(
+      "receipt.request_id",
+      "component.component_name as name",
+      "component.component_price as price"
+    )
     .whereIn("receipt.request_id", ids)
-    .orderBy("component.position");
+    .orderBy("component.created_at");
   for (const row of rows) {
     if (!grouped.has(row.request_id)) grouped.set(row.request_id, []);
     grouped.get(row.request_id).push(row);
@@ -1531,6 +1535,9 @@ app.post("/api/v1/domestic-requests", async (req, res) => {
     emitDomesticRequest(payload, "domestic.requested");
     res.status(201).json(payload);
   } catch (error) {
+    // #region agent log
+    fetch('http://127.0.0.1:7305/ingest/3123ab15-a865-40c1-9544-a2717b4e7d1d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d93d70'},body:JSON.stringify({sessionId:'d93d70',hypothesisId:'B',location:'server.js:create',message:'create domestic failed',data:{code:error.code||null,detail:String(error.message||'').slice(0,180)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     console.error(error.message);
     res.status(500).json({ error: "Unable to create domestic request" });
   }
@@ -1581,6 +1588,9 @@ app.get("/api/v1/providers/:providerId/requests", async (req, res) => {
     const grouped = await componentsForRequests(requests.map((row) => row.id));
     res.json(requests.map((row) => domesticRequestPayload(row, grouped.get(row.id) || [])));
   } catch (error) {
+    // #region agent log
+    fetch('http://127.0.0.1:7305/ingest/3123ab15-a865-40c1-9544-a2717b4e7d1d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d93d70'},body:JSON.stringify({sessionId:'d93d70',hypothesisId:'B',location:'server.js:list',message:'load provider requests failed',data:{code:error.code||null,detail:String(error.message||'').slice(0,180)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     console.error(error.message);
     res.status(500).json({ error: "Unable to load provider requests" });
   }
@@ -1679,11 +1689,13 @@ app.post("/api/v1/providers/:providerId/requests/:requestId/cost", async (req, r
         status: "NEGOTIABLE"
       }).returning("id");
       if (parsedComponents.length) {
-        await trx("receipt_components").insert(parsedComponents.map((row, index) => ({
+        await trx("receipt_components").insert(parsedComponents.map((row) => ({
           receipt_id: receipt.id,
-          name: row.name,
-          price: row.price,
-          position: index
+          component_name: row.name,
+          component_price: row.price,
+          charge_type: "component",
+          created_at: trx.fn.now(),
+          updated_at: trx.fn.now()
         })));
       }
       return { statusCode: 200 };
