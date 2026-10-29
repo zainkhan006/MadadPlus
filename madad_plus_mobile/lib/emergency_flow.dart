@@ -71,6 +71,8 @@ class EmergencyFlow extends StatelessWidget {
         return const _ProviderAcceptedScreen();
       case EmergencyScreen.providerJob:
         return const _ProviderJobScreen();
+      case EmergencyScreen.providerPaid:
+        return const _ProviderPaidScreen();
       case EmergencyScreen.home:
         return const _HomeScreen();
       case EmergencyScreen.homeLocation:
@@ -4321,11 +4323,22 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
               border: OutlineInputBorder(),
             ),
           ),
+          if(state.domesticNotice != null) ...[
+            const SizedBox(height: AppSpacing.space3),
+            Text(
+              state.domesticNotice!,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
           const SizedBox(height: AppSpacing.space5),
           _ActionButton(
             label: 'Submit rating',
             onPressed: () async {
-              await state.submitProviderRating(stars);
+              final saved = await state.submitProviderRating(stars);
+              if(!saved || !context.mounted) {
+                return;
+              }
               state.finishDomestic(EmergencyScreen.home);
             },
           ),
@@ -4379,10 +4392,9 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
       (row) => row.name.isEmpty != row.price.isEmpty,
     );
     final provider = state.costFromProvider;
-    final decided = provider && state.amountOwed != null;
-    final showField = provider && !state.costWaiting && !decided;
     final booking = state.domesticBooking;
-    final quoted = provider ? null : booking?.quotedTotal;
+    final source = provider ? state.activeJob : booking;
+    final showField = provider && source?.quotedTotal == null;
     final receiptFee = booking?.receiptInspectionFee;
     double? decidedFee;
     if(provider) {
@@ -4397,9 +4409,12 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
         ? 'Rs. ${feeNumber.toStringAsFixed(0)}'
         : state.inspectionFeeText;
     final feeValue = feeNumber ?? state.currentInspectionFee;
-    final shownTotal = provider
-        ? (anyComplete ? '$partsTotal' : null)
-        : quoted?.toStringAsFixed(0);
+    final serviceCharges = source?.quotedTotal ?? 0;
+    final inspectionCharges =
+        source?.receiptInspectionFee ?? source?.inspectionFee ?? feeValue ?? 0;
+    final issue = provider
+        ? _typeAndNote(source?.description ?? '').$1
+        : state.domesticIssue;
 
     return _FlowFrame(
       title: 'Confirm final cost',
@@ -4408,30 +4423,19 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Review before payment',
-            style: Theme.of(context).textTheme.headlineLarge,
-          ),
-          const SizedBox(height: AppSpacing.space4),
-          if(showField)
+          if(showField) ...[
+            Text(
+              'Review before payment',
+              style: Theme.of(context).textTheme.headlineLarge,
+            ),
+            const SizedBox(height: AppSpacing.space4),
             Text(
               'This amount does not include the inspection fee.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
-          if(!showField && shownTotal != null)
-            Text(
-              'Repair total: $shownTotal',
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-          const SizedBox(height: AppSpacing.space3),
-          Text(
-            'Inspection fee: $feeText',
-            style: Theme.of(context).textTheme.labelLarge,
-          ),
-          if(!provider && quoted != null && receiptFee != null) ...[
             const SizedBox(height: AppSpacing.space3),
             Text(
-              'Total: Rs. ${(quoted + receiptFee).toStringAsFixed(0)}',
+              'Inspection fee: $feeText',
               style: Theme.of(context).textTheme.labelLarge,
             ),
           ],
@@ -4494,13 +4498,15 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
               ),
             ],
           ],
-          if(decided) ...[
-            const SizedBox(height: AppSpacing.space3),
-            Text(
-              state.amountOwed!,
-              style: Theme.of(context).textTheme.headlineSmall,
+          if(!showField)
+            _PaymentReceipt(
+              issue: issue,
+              providerName: source?.providerName ?? '',
+              customerName: source?.userName ?? '',
+              lines: source?.components ?? const [],
+              serviceCharges: serviceCharges,
+              inspectionCharges: inspectionCharges,
             ),
-          ],
           if(state.domesticNotice != null) ...[
             const SizedBox(height: AppSpacing.space3),
             Text(
@@ -4509,32 +4515,52 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
             ),
           ],
           const SizedBox(height: AppSpacing.space5),
-          if(provider && state.costWaiting)
-            const Center(child: CircularProgressIndicator()),
+          if(!showField && provider)
+            Text(
+              'Waiting for the customer.',
+              style: Theme.of(context).textTheme.bodyLarge
+                  ?.copyWith(color: AppColors.muted),
+            ),
           if(showField && anyComplete && !anyHalf) ...[
             _ActionButton(
               label: 'Submit',
               color: AppColors.green,
-              onPressed: () {
-                state.submitRepairTotal('$partsTotal');
-              },
+              onPressed: state.costWaiting
+                  ? null
+                  : () {
+                      state.submitRepairTotal(
+                        '$partsTotal',
+                        components: [
+                          for(final row in rows)
+                            if(row.name.isNotEmpty && row.price.isNotEmpty)
+                              (
+                                name: row.name,
+                                price: double.parse(row.price),
+                              ),
+                        ],
+                      );
+                    },
             ),
             const SizedBox(height: AppSpacing.space3),
           ],
-          if(!provider) ...[
-            _ActionButton(
-              label: 'Accept',
-              color: AppColors.green,
-              onPressed: () {
-                state.decideRepairTotal(accept: true);
-              },
+          if(!showField && !provider) ...[
+            _PressScale(
+              child: _ActionButton(
+                label: 'Accept',
+                color: AppColors.green,
+                onPressed: () {
+                  state.decideRepairTotal(accept: true);
+                },
+              ),
             ),
             const SizedBox(height: AppSpacing.space3),
-            _SecondaryButton(
-              label: 'Refuse',
-              onPressed: () {
-                state.decideRepairTotal(accept: false);
-              },
+            _PressScale(
+              child: _SecondaryButton(
+                label: 'Refuse',
+                onPressed: () {
+                  state.decideRepairTotal(accept: false);
+                },
+              ),
             ),
           ],
           if(showField)
@@ -4544,6 +4570,151 @@ class _CostReviewScreenState extends State<_CostReviewScreen> {
                 state.showDomesticNotice('The issue was saved on this phone.');
               },
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentReceipt extends StatelessWidget {
+  const _PaymentReceipt({
+    required this.issue,
+    required this.providerName,
+    required this.customerName,
+    required this.lines,
+    required this.serviceCharges,
+    required this.inspectionCharges,
+  });
+
+  final String issue;
+  final String providerName;
+  final String customerName;
+  final List<({String name, double price})> lines;
+  final double serviceCharges;
+  final double inspectionCharges;
+
+  String rupees(num amount) {
+    return 'Rs. ${amount.toStringAsFixed(0)}';
+  }
+
+  Widget party(BuildContext context, String label, String name) {
+    final base = Theme.of(context).textTheme.bodyLarge;
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: '$label: ',
+            style: base?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          TextSpan(
+            text: name,
+            style: base?.copyWith(fontWeight: FontWeight.w400),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget moneyRow(
+    BuildContext context,
+    String label,
+    String amount, {
+    bool strong = false,
+    bool muted = false,
+  }) {
+    final style = Theme.of(context).textTheme.bodyLarge?.copyWith(
+      fontWeight: strong ? FontWeight.w700 : FontWeight.w400,
+      color: muted ? AppColors.muted : AppColors.ink,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.line)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.space2),
+        child: Row(
+          children: [
+            Expanded(child: Text(label, style: style)),
+            Text(amount, style: style),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = serviceCharges + inspectionCharges;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1417365D),
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.space4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(issue, style: _largeTitle(context)),
+            const SizedBox(height: AppSpacing.space3),
+            party(context, 'Performed by', providerName),
+            const SizedBox(height: AppSpacing.space1),
+            party(context, 'To', customerName),
+            const SizedBox(height: AppSpacing.space4),
+            moneyRow(context, 'Component', 'Price', muted: true),
+            for(final line in lines)
+              moneyRow(context, line.name, rupees(line.price)),
+            const SizedBox(height: AppSpacing.space3),
+            moneyRow(context, 'Service charges', rupees(serviceCharges)),
+            moneyRow(context, 'Inspection charges', rupees(inspectionCharges)),
+            moneyRow(context, 'Total', rupees(total), strong: true),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProviderPaidScreen extends StatelessWidget {
+  const _ProviderPaidScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final name = state.providerPaidBy;
+    return _FlowFrame(
+      title: 'Payment received',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            state.providerPaidText ?? '',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          if(name != null) ...[
+            const SizedBox(height: AppSpacing.space2),
+            Text(
+              'From $name',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+          const SizedBox(height: AppSpacing.space5),
+          _ActionButton(
+            label: 'Back to home',
+            onPressed: () {
+              state.goTo(EmergencyScreen.providerDashboard);
+            },
+          ),
         ],
       ),
     );

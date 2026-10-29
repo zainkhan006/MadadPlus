@@ -378,6 +378,8 @@ class DomesticBooking {
     this.finalTotal,
     this.receiptStatus,
     this.finishedAt,
+    this.providerId,
+    this.components = const [],
   });
 
   final String requestId;
@@ -394,6 +396,8 @@ class DomesticBooking {
   final double? finalTotal;
   final String? receiptStatus;
   final DateTime? finishedAt;
+  final String? providerId;
+  final List<({String name, double price})> components;
 
   factory DomesticBooking.fromJson(Map<String, dynamic> json) {
     final user = json['user'];
@@ -406,6 +410,7 @@ class DomesticBooking {
       address: json['address'] as String? ?? '',
       userName: user is Map ? user['name'] as String? : null,
       providerName: provider is Map ? provider['name'] as String? : null,
+      providerId: provider is Map ? provider['id'] as String? : null,
       providerRating: provider is Map
           ? (provider['rating'] as num?)?.toDouble()
           : null,
@@ -420,6 +425,14 @@ class DomesticBooking {
       finalTotal: (json['finalTotal'] as num?)?.toDouble(),
       receiptStatus: json['receiptStatus'] as String?,
       finishedAt: _time(json['finishedAt']),
+      components: [
+        for(final row in json['components'] as List? ?? const [])
+          if(row is Map && row['name'] is String && row['price'] is num)
+            (
+              name: row['name'] as String,
+              price: (row['price'] as num).toDouble(),
+            ),
+      ],
     );
   }
 }
@@ -789,6 +802,7 @@ class EmergencyService {
     required String providerId,
     required String requestId,
     required double quotedTotal,
+    required List<({String name, double price})> components,
   }) async {
     final decoded = await _send(
       http.post(
@@ -796,7 +810,13 @@ class EmergencyService {
           '$baseUrl/api/v1/providers/$providerId/requests/$requestId/cost',
         ),
         headers: _headers,
-        body: jsonEncode({'quotedTotal': quotedTotal}),
+        body: jsonEncode({
+          'quotedTotal': quotedTotal,
+          'components': [
+            for(final row in components)
+              {'name': row.name, 'price': row.price},
+          ],
+        }),
       ),
       'The repair total could not be sent.',
     );

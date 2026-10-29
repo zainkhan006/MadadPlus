@@ -1065,12 +1065,9 @@ void main() {
       socketService: SilentSocketService(relay: session.api),
       demoUserId: 'user-1',
     );
-    await reachHome(tester, providerSession);
-    await tapText(tester, 'Profile');
-    await tapText(tester, 'Switch to provider mode');
-    await pumpAsync(tester);
-    await tapText(tester, 'Plumber');
-    await tapText(tester, 'Yes, continue');
+    await reachSignIn(tester, providerSession);
+    await submitStaffName(tester, 'Sign in as provider', 'Karachi Plumbers');
+    await tapText(tester, 'VERIFY');
     await pumpAsync(tester);
     await tapText(tester, 'Incoming requests');
     expect(find.text('Pipe leak'), findsOneWidget);
@@ -1093,7 +1090,10 @@ void main() {
 
     await tapText(tester, 'Submit');
     await pumpAsync(tester);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Waiting for the customer.'), findsOneWidget);
+    expect(find.text('Pipe joint'), findsOneWidget);
+    expect(find.text('Service charges'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.text('Accept'), findsNothing);
     expect(find.text('Refuse'), findsNothing);
     expect(find.byType(TextField), findsNothing);
@@ -1101,9 +1101,14 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(MyApp(requestState: session.state));
     await tester.pump();
-    expect(find.text('Review before payment'), findsOneWidget);
-    expect(find.text('Repair total: 2000'), findsOneWidget);
-    expect(find.text('Total: Rs. 2500'), findsOneWidget);
+    expect(find.text('Pipe leak'), findsOneWidget);
+    expect(find.text('Pipe joint'), findsOneWidget);
+    expect(find.text('Service charges'), findsOneWidget);
+    expect(find.text('Inspection charges'), findsOneWidget);
+    expect(find.text('Rs. 2500'), findsOneWidget);
+    expect(find.text('Accept'), findsOneWidget);
+    expect(find.text('Refuse'), findsOneWidget);
+    expect(find.text('Review before payment'), findsNothing);
     expect(find.byType(TextField), findsNothing);
 
     await tapText(tester, 'Accept');
@@ -1114,8 +1119,11 @@ void main() {
     expect(session.state.requestId, isNull);
     expect(session.state.isRequesting, isFalse);
 
+    await tester.tap(find.byTooltip('Rate 5 stars'));
+    await tester.pump();
     await tapText(tester, 'Submit rating');
     expect(find.text('How can we help?'), findsOneWidget);
+    expect(session.state.chosenProvider?.rating, 4.8);
 
     await tapText(tester, 'Requests');
     expect(find.text('No emergency request yet.'), findsOneWidget);
@@ -1134,6 +1142,11 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(MyApp(requestState: providerSession));
     await tester.pump();
+    expect(find.text('Payment received'), findsOneWidget);
+    expect(find.text('You were paid Rs. 2500'), findsOneWidget);
+    expect(find.text('From Test User'), findsOneWidget);
+    expect(find.text('Provider dashboard'), findsNothing);
+    await tapText(tester, 'Back to home');
     expect(find.text('Provider dashboard'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.text('Amount owed: Rs. 2500'), findsNothing);
@@ -1596,6 +1609,11 @@ void main() {
     await tapText(tester, 'Submit');
     await pumpAsync(tester);
     expect(session.api.jobs.first.quotedTotal, 350);
+    expect(session.api.jobs.first.components.length, 2);
+    expect(session.api.jobs.first.components.first.name, 'Capacitor');
+    expect(session.api.jobs.first.components.first.price, 100);
+    expect(session.api.jobs.first.components[1].name, 'Fan');
+    expect(session.api.jobs.first.components[1].price, 250);
   });
 
   testWidgets('refusing the repair total leaves only the inspection fee', (
@@ -1631,12 +1649,9 @@ void main() {
       socketService: SilentSocketService(relay: session.api),
       demoUserId: 'user-1',
     );
-    await reachHome(tester, providerSession);
-    await tapText(tester, 'Profile');
-    await tapText(tester, 'Switch to provider mode');
-    await pumpAsync(tester);
-    await tapText(tester, 'Plumber');
-    await tapText(tester, 'Yes, continue');
+    await reachSignIn(tester, providerSession);
+    await submitStaffName(tester, 'Sign in as provider', 'Karachi Plumbers');
+    await tapText(tester, 'VERIFY');
     await pumpAsync(tester);
     providerSession.openJob('dom-1');
     await tester.pump();
@@ -1650,39 +1665,30 @@ void main() {
     await fillPart(tester, 0, 'Pipe joint', '1500');
     await tapText(tester, 'Submit');
     await pumpAsync(tester);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Waiting for the customer.'), findsOneWidget);
     expect(find.text('Refuse'), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(MyApp(requestState: session.state));
     await tester.pump();
-    expect(find.text('Total: Rs. 2000'), findsOneWidget);
+    expect(find.text('Rs. 2000'), findsOneWidget);
     await tapText(tester, 'Refuse');
     await pumpAsync(tester);
 
-    expect(find.text('Amount owed: Rs. 500'), findsOneWidget);
+    expect(find.text('How was Karachi Plumbers?'), findsOneWidget);
+    expect(session.state.amountOwed, 'Amount owed: Rs. 500');
     expect(find.text('Cash'), findsNothing);
     expect(find.text('JazzCash'), findsNothing);
     expect(find.text('Other'), findsNothing);
 
-    await tapText(tester, 'Back to services');
-    expect(find.text('What do you need fixed?'), findsOneWidget);
-
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(MyApp(requestState: providerSession));
     await tester.pump();
+    expect(find.text('You were paid Rs. 500'), findsOneWidget);
+    expect(find.text('From Test User'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.text('Amount owed: Rs. 500'), findsNothing);
-    expect(find.text('Inspection fee: Rs. 500'), findsOneWidget);
-    expect(find.text('Inspection fee: x'), findsNothing);
-
-    await tester.tap(find.byTooltip('Back'));
-    await tester.pump();
-    expect(find.text('Amount owed: Rs. 500'), findsNothing);
-    expect(
-      find.text('Accepted · Pipe leak · Water leak · Kitchen sink leak'),
-      findsOneWidget,
-    );
+    await tapText(tester, 'Back to home');
+    expect(find.text('Provider dashboard'), findsOneWidget);
   });
 
   testWidgets('a new provider registers with a trade and confirms that business', (
@@ -2293,6 +2299,7 @@ class FakeEmergencyService extends EmergencyService {
     required String receiptStatus,
     double? quotedTotal,
     double? finalTotal,
+    List<({String name, double price})>? components,
   }) {
     final index = jobs.indexWhere((job) => job.requestId == requestId);
     final current = jobs[index];
@@ -2311,6 +2318,7 @@ class FakeEmergencyService extends EmergencyService {
       finalTotal: finalTotal,
       receiptStatus: receiptStatus,
       finishedAt: current.finishedAt,
+      components: components ?? current.components,
     );
     jobs[index] = updated;
     for(final listener in List.of(listeners)) {
@@ -2324,11 +2332,13 @@ class FakeEmergencyService extends EmergencyService {
     required String providerId,
     required String requestId,
     required double quotedTotal,
+    required List<({String name, double price})> components,
   }) async {
     return withReceipt(
       requestId,
       receiptStatus: 'NEGOTIABLE',
       quotedTotal: quotedTotal,
+      components: components,
     );
   }
 
