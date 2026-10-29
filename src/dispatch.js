@@ -170,6 +170,7 @@ async function requestPayload(trx, requestId) {
       "r.hospital_id",
       "r.hospital_address",
       "r.assigned_ambulance_id",
+      "r.updated_at",
       "h.name as hospital_name",
       "a.label as ambulance_label",
       "d.id as driver_id",
@@ -194,6 +195,7 @@ async function requestPayload(trx, requestId) {
   return {
     requestId: request.request_id,
     status: request.status,
+    updatedAt: request.updated_at,
     phase: request.current_phase,
     type: request.type,
     callerPhone: request.caller_phone,
