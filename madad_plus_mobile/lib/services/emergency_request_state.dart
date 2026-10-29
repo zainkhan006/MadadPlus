@@ -52,6 +52,7 @@ enum EmergencyScreen {
   providerNameMatch,
   providerRequest,
   providerAccepted,
+  providerEnRoute,
   providerJob,
   providerPaid,
 }
@@ -136,6 +137,7 @@ class EmergencyRequestState extends ChangeNotifier {
     String issue,
     String address,
     String owed,
+    DateTime? madeAt,
   })> domesticHistory = [];
   final List<({
     String id,
@@ -143,7 +145,10 @@ class EmergencyRequestState extends ChangeNotifier {
     String? happened,
     int? people,
     String status,
+    DateTime? madeAt,
+    String? details,
   })> emergencyRequests = [];
+  String _historyOwnerId = '';
 
   List<ProviderRow> providers = [];
   bool providersLoading = false;
@@ -152,6 +157,7 @@ class EmergencyRequestState extends ChangeNotifier {
   String? callerSignInNotice;
   String? signedInUserId;
   String? signedInUserName;
+  String? signedInUserPhone;
   String? registerNotice;
   bool registerBusy = false;
   bool callerSignInBusy = false;
@@ -185,6 +191,8 @@ class EmergencyRequestState extends ChangeNotifier {
   String pendingProviderName = '';
   String pendingProviderPhone = '';
   String pendingProviderCnic = '';
+  String pendingProviderAddressLine1 = '';
+  String pendingProviderAddressLine2 = '';
   bool staffSignInBusy = false;
 
   final List<({String address, double latitude, double longitude})>
@@ -276,6 +284,7 @@ class EmergencyRequestState extends ChangeNotifier {
     required double? fromLng,
     required double? toLat,
     required double? toLng,
+    DateTime? startedAt,
   }) {
     if(leg == 1 && routeLeg == 1) {
       return;
@@ -295,17 +304,33 @@ class EmergencyRequestState extends ChangeNotifier {
     routeToLng = toLng;
     routePoints = [LatLng(fromLat, fromLng), LatLng(toLat, toLng)];
     routeDurationMs = driveDurationMs(fromLat, fromLng, toLat, toLng);
-    final startedAt = DateTime.now();
-    routeStartedAt = startedAt;
+    final started = startedAt ?? DateTime.now();
+    routeStartedAt = started;
     routeError = null;
-    _routeTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
-      if(routeProgress() >= 1) {
-        timer.cancel();
-      }
-      notifyListeners();
-    });
+    if(leg != 3 || Platform.environment['FLUTTER_TEST'] != 'true') {
+      _routeTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
+        if(routeProgress() >= 1) {
+          timer.cancel();
+        }
+        notifyListeners();
+      });
+    }
     notifyListeners();
-    _loadRoadRoute(startedAt, fromLat, fromLng, toLat, toLng);
+    _loadRoadRoute(started, fromLat, fromLng, toLat, toLng);
+  }
+
+  void startDomesticTrip(DomesticBooking booking) {
+    if(routeLeg == 3 && routeStartedAt != null) {
+      return;
+    }
+    startRouteLeg(
+      leg: 3,
+      fromLat: booking.providerLat,
+      fromLng: booking.providerLng,
+      toLat: booking.lat,
+      toLng: booking.lng,
+      startedAt: booking.updatedAt,
+    );
   }
 
   Future<void> _loadRoadRoute(
@@ -422,6 +447,7 @@ class EmergencyRequestState extends ChangeNotifier {
     callerSignInBusy = true;
     signedInUserId = null;
     signedInUserName = null;
+    signedInUserPhone = null;
     notifyListeners();
     try {
       final callers = await _emergencyService.listCallers();
@@ -439,6 +465,8 @@ class EmergencyRequestState extends ChangeNotifier {
       }
       signedInUserId = match.id;
       signedInUserName = match.name;
+      signedInUserPhone = match.phone;
+      await switchRequestHistory(match.id);
       accountPath = AccountPath.signIn;
       otpFromRegistration = false;
       goTo(EmergencyScreen.otp);
@@ -633,6 +661,8 @@ class EmergencyRequestState extends ChangeNotifier {
       );
       signedInUserId = created.id;
       signedInUserName = created.name;
+      signedInUserPhone = created.phone;
+      await switchRequestHistory(created.id);
       continueRegistration();
     } on ApiException catch (error) {
       registerNotice = error.message;
@@ -683,13 +713,21 @@ class EmergencyRequestState extends ChangeNotifier {
     }
   }
 
-  Future<void> registerProvider(String name, String phone, String cnic) async {
+  Future<void> registerProvider(
+    String name,
+    String phone,
+    String cnic, [
+    String addressLine1 = '',
+    String addressLine2 = '',
+  ]) async {
     if(registerBusy) {
       return;
     }
     final typedName = name.trim();
     final typedPhone = phone.trim();
     final typedCnic = cnic.trim();
+    final typedLine1 = addressLine1.trim();
+    final typedLine2 = addressLine2.trim();
     registerNotice = null;
     if(typedName.isEmpty || typedPhone.isEmpty || typedCnic.isEmpty) {
       registerNotice = 'Enter your name, phone number, and CNIC.';
@@ -708,12 +746,20 @@ class EmergencyRequestState extends ChangeNotifier {
         pendingProviderName = typedName;
         pendingProviderPhone = typedPhone;
         pendingProviderCnic = typedCnic;
+        pendingProviderAddressLine1 = typedLine1;
+        pendingProviderAddressLine2 = typedLine2;
         providerNameMatches = matches;
         providerMatchCanCreate = true;
         goTo(EmergencyScreen.providerNameMatch);
         return;
       }
-      await _createProvider(typedName, typedPhone, typedCnic);
+      await _createProvider(
+        typedName,
+        typedPhone,
+        typedCnic,
+        typedLine1,
+        typedLine2,
+      );
     } on ApiException catch (error) {
       registerNotice = error.message;
     } on TimeoutException {
@@ -727,12 +773,20 @@ class EmergencyRequestState extends ChangeNotifier {
     }
   }
 
-  Future<void> _createProvider(String name, String phone, String cnic) async {
+  Future<void> _createProvider(
+    String name,
+    String phone,
+    String cnic,
+    String addressLine1,
+    String addressLine2,
+  ) async {
     matchedProvider = await _emergencyService.registerProvider(
       name: name,
       phone: phone,
       cnic: cnic,
       trade: registerTrade,
+      addressLine1: addressLine1,
+      addressLine2: addressLine2,
     );
     continueRegistration();
   }
@@ -749,6 +803,8 @@ class EmergencyRequestState extends ChangeNotifier {
         pendingProviderName,
         pendingProviderPhone,
         pendingProviderCnic,
+        pendingProviderAddressLine1,
+        pendingProviderAddressLine2,
       );
     } on ApiException catch (error) {
       registerNotice = error.message;
@@ -1002,6 +1058,8 @@ class EmergencyRequestState extends ChangeNotifier {
         specialisationId: provider.specialisationId!,
         description: domesticRequestText,
         address: domesticAddress.trim(),
+        lat: domesticPinLatitude,
+        lng: domesticPinLongitude,
       );
       domesticBooking = booking;
       final existing = domesticHistory.indexWhere(
@@ -1014,6 +1072,9 @@ class EmergencyRequestState extends ChangeNotifier {
         issue: domesticRequestText,
         address: domesticAddress.trim(),
         owed: '',
+        madeAt: existing >= 0
+            ? domesticHistory[existing].madeAt
+            : DateTime.now(),
       );
       if(existing >= 0) {
         domesticHistory[existing] = ongoing;
@@ -1040,12 +1101,25 @@ class EmergencyRequestState extends ChangeNotifier {
     }
   }
 
-  void _receiveUserBooking(DomesticBooking booking) {
-    if(booking.requestId != domesticBooking?.requestId) {
+  void _receiveUserBooking(DomesticBooking booking, [String event = '']) {
+    if(domesticBooking != null && booking.requestId != domesticBooking!.requestId) {
       return;
     }
 
     domesticBooking = booking;
+    if(event == 'domestic.inspecting') {
+      if(domesticJob == DomesticJob.assigned || domesticJob == DomesticJob.searching) {
+        domesticJob = DomesticJob.enRoute;
+        goTo(EmergencyScreen.domesticJob);
+      }
+      notifyListeners();
+      return;
+    }
+    if(event == 'domestic.work_finished') {
+      domesticJob = DomesticJob.complete;
+      goTo(EmergencyScreen.domesticJob);
+      return;
+    }
     if(booking.status == 'CANCELLED') {
       _emergencySocketService.disconnectDomestic();
       domesticBooking = null;
@@ -1053,8 +1127,11 @@ class EmergencyRequestState extends ChangeNotifier {
       goTo(EmergencyScreen.services);
       return;
     }
-    if(booking.status == 'ACCEPTED' && domesticJob == DomesticJob.searching) {
+    if(booking.status == 'ACCEPTED' &&
+        domesticJob == DomesticJob.searching &&
+        booking.receiptStatus == null) {
       domesticJob = DomesticJob.assigned;
+      startDomesticTrip(booking);
     }
     if(booking.finalTotal != null) {
       _settleUserCost(booking);
@@ -1089,6 +1166,7 @@ class EmergencyRequestState extends ChangeNotifier {
         issue: current.issue,
         address: current.address,
         owed: amountOwed!,
+        madeAt: current.madeAt,
       );
     }
     else {
@@ -1099,9 +1177,15 @@ class EmergencyRequestState extends ChangeNotifier {
         issue: domesticRequestText,
         address: domesticAddress.trim(),
         owed: amountOwed!,
+        madeAt: DateTime.now(),
       ));
     }
     saveDomesticHistory();
+    if(accepted) {
+      domesticJob = DomesticJob.inProgress;
+      goTo(EmergencyScreen.domesticJob);
+      return;
+    }
     domesticJob = DomesticJob.complete;
     goTo(EmergencyScreen.domesticJob);
   }
@@ -1129,11 +1213,6 @@ class EmergencyRequestState extends ChangeNotifier {
   void cancelAssignedProvider() {
     _finishProviderJob();
     cancelDomestic();
-  }
-
-  void trackProvider() {
-    domesticJob = DomesticJob.enRoute;
-    goTo(EmergencyScreen.domesticJob);
   }
 
   void startProviderWork() {
@@ -1399,7 +1478,36 @@ class EmergencyRequestState extends ChangeNotifier {
     }
   }
 
-  void _receiveProviderBooking(DomesticBooking booking) {
+  void _rememberProviderPayment(DomesticBooking booking) {
+    amountOwed = 'Amount owed: Rs. ${booking.finalTotal!.toStringAsFixed(0)}';
+    providerPaidText =
+        'You were paid Rs. ${booking.finalTotal!.toStringAsFixed(0)}';
+    final paidBy = booking.userName?.trim();
+    providerPaidBy = paidBy == null || paidBy.isEmpty ? null : paidBy;
+  }
+
+  void confirmProviderArrival() {
+    clearRoute();
+    openCostReview(fromProvider: true);
+    final requestId = activeJobId;
+    if(requestId != null) {
+      _emergencySocketService.relayDomestic('domestic.inspecting', requestId);
+    }
+  }
+
+  void finishProviderWork() {
+    final job = activeJob;
+    if(job == null || job.finalTotal == null) {
+      return;
+    }
+    _rememberProviderPayment(job);
+    final requestId = job.requestId;
+    _finishProviderJob();
+    goTo(EmergencyScreen.providerPaid);
+    _emergencySocketService.relayDomestic('domestic.work_finished', requestId);
+  }
+
+  void _receiveProviderBooking(DomesticBooking booking, [String event = '']) {
     final index = providerJobs.indexWhere(
       (job) => job.requestId == booking.requestId,
     );
@@ -1419,15 +1527,31 @@ class EmergencyRequestState extends ChangeNotifier {
         booking.finalTotal == null) {
       costWaiting = false;
     }
+    if(event == 'domestic.inspecting') {
+      notifyListeners();
+      return;
+    }
+    if(event == 'domestic.work_finished') {
+      if(currentScreen != EmergencyScreen.providerPaid && booking.finalTotal != null) {
+        _rememberProviderPayment(booking);
+        _finishProviderJob();
+        goTo(EmergencyScreen.providerPaid);
+      }
+      notifyListeners();
+      return;
+    }
     if(booking.finalTotal != null && booking.requestId == activeJobId) {
       costWaiting = false;
-      amountOwed = 'Amount owed: Rs. ${booking.finalTotal!.toStringAsFixed(0)}';
-      providerPaidText =
-          'You were paid Rs. ${booking.finalTotal!.toStringAsFixed(0)}';
-      final paidBy = booking.userName?.trim();
-      providerPaidBy = paidBy == null || paidBy.isEmpty ? null : paidBy;
-      _finishProviderJob();
-      goTo(EmergencyScreen.providerPaid);
+      _rememberProviderPayment(booking);
+      if(booking.receiptStatus == 'DECLINED') {
+        _finishProviderJob();
+        goTo(EmergencyScreen.providerPaid);
+      }
+      else if(booking.receiptStatus == 'ACCEPTED' &&
+          currentScreen != EmergencyScreen.providerJob &&
+          currentScreen != EmergencyScreen.providerPaid) {
+        goTo(EmergencyScreen.providerAccepted);
+      }
     }
     notifyListeners();
   }
@@ -1559,8 +1683,8 @@ class EmergencyRequestState extends ChangeNotifier {
       }
       activeJobId = accepted.requestId;
       providerDuty = ProviderDuty.onJob;
-      domesticJob = DomesticJob.assigned;
-      goTo(EmergencyScreen.providerAccepted);
+      startDomesticTrip(accepted);
+      goTo(EmergencyScreen.providerEnRoute);
     } on ApiException catch (error) {
       showDomesticNotice(error.message);
     } on TimeoutException {
@@ -2155,6 +2279,7 @@ class EmergencyRequestState extends ChangeNotifier {
         peopleCount: peopleCount,
         inputMethod: detailsFromSpeech ? 'VOICE' : 'MANUAL',
         additionalDetails: additionalDetails,
+        callerPhone: signedInUserPhone,
       );
       updateRequest(
         requestId: result!.requestId,
@@ -2198,14 +2323,19 @@ class EmergencyRequestState extends ChangeNotifier {
     if(sent == null) {
       return;
     }
+    final index = emergencyRequests.indexWhere((item) => item.id == sent.requestId);
+    final typed = additionalDetails?.trim() ?? '';
     final entry = (
       id: sent.requestId,
       address: resolvedAddress,
       happened: selectedDetail,
       people: peopleNeedingHelp,
       status: sent.status,
+      madeAt: index >= 0 ? emergencyRequests[index].madeAt : DateTime.now(),
+      details: typed.isNotEmpty
+          ? typed
+          : (index >= 0 ? emergencyRequests[index].details : null),
     );
-    final index = emergencyRequests.indexWhere((item) => item.id == sent.requestId);
     if(index >= 0) {
       emergencyRequests[index] = entry;
     }
@@ -2222,6 +2352,7 @@ class EmergencyRequestState extends ChangeNotifier {
     String issue,
     String address,
     String owed,
+    DateTime? madeAt,
   })? _domesticHistoryEntry(Object? item) {
     if(item is! Map) {
       return null;
@@ -2236,6 +2367,7 @@ class EmergencyRequestState extends ChangeNotifier {
         issue: item['issue'] is String ? item['issue'] as String : '',
         address: item['address'] is String ? item['address'] as String : '',
         owed: item['owed'] is String ? item['owed'] as String : '',
+        madeAt: _savedTime(item['madeAt']),
       );
     }
     final label = item['label'];
@@ -2251,48 +2383,121 @@ class EmergencyRequestState extends ChangeNotifier {
       issue: '',
       address: '',
       owed: owed,
+      madeAt: null,
     );
+  }
+
+  DateTime? _savedTime(Object? value) {
+    if(value is! String || value.isEmpty) {
+      return null;
+    }
+    return DateTime.tryParse(value);
+  }
+
+  String _scopedEmergencyKey(String userId) {
+    return '$_emergencyRequestsKey:$userId';
+  }
+
+  String _scopedDomesticKey(String userId) {
+    return '$_domesticHistoryKey:$userId';
+  }
+
+  Future<void> switchRequestHistory(String userId) async {
+    await _historyLoad;
+    final next = userId.trim();
+    if(next.isEmpty || next == _historyOwnerId) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    if(_historyOwnerId.isNotEmpty) {
+      await _writeEmergencyHistory(prefs, _historyOwnerId);
+      await _writeDomesticHistory(prefs, _historyOwnerId);
+    }
+    _historyOwnerId = next;
+    emergencyRequests.clear();
+    domesticHistory.clear();
+    _readEmergencyHistory(prefs, next);
+    _readDomesticHistory(prefs, next);
+    notifyListeners();
   }
 
   Future<void> loadRequestHistory() async {
     final prefs = await SharedPreferences.getInstance();
-    final rawEmergency = prefs.getString(_emergencyRequestsKey);
-    final decodedEmergency = rawEmergency == null ? null : jsonDecode(rawEmergency);
-    if(decodedEmergency is List) {
-      final stored = [
-        for(final item in decodedEmergency)
-          if(item is Map &&
-              item['id'] is String &&
-              item['status'] is String &&
-              !emergencyRequests.any((request) => request.id == item['id']))
-            (
-              id: item['id'] as String,
-              address: item['address'] is String ? item['address'] as String : null,
-              happened: item['happened'] is String ? item['happened'] as String : null,
-              people: item['people'] is int ? item['people'] as int : null,
-              status: item['status'] as String,
-            ),
-      ];
-      emergencyRequests.insertAll(0, stored);
-    }
+    // final rawEmergency = prefs.getString(_emergencyRequestsKey);
+    // final decodedEmergency = rawEmergency == null ? null : jsonDecode(rawEmergency);
+    // if(decodedEmergency is List) {
+    //   final stored = [
+    //     for(final item in decodedEmergency)
+    //       if(item is Map &&
+    //           item['id'] is String &&
+    //           item['status'] is String &&
+    //           !emergencyRequests.any((request) => request.id == item['id']))
+    //         (
+    //           id: item['id'] as String,
+    //           address: item['address'] is String ? item['address'] as String : null,
+    //           happened: item['happened'] is String ? item['happened'] as String : null,
+    //           people: item['people'] is int ? item['people'] as int : null,
+    //           status: item['status'] as String,
+    //         ),
+    //   ];
+    //   emergencyRequests.insertAll(0, stored);
+    // }
 
-    final rawDomestic = prefs.getString(_domesticHistoryKey);
-    final decodedDomestic = rawDomestic == null ? null : jsonDecode(rawDomestic);
-    if(decodedDomestic is List) {
-      final stored = [
-        for(final item in decodedDomestic)
-          ?_domesticHistoryEntry(item),
-      ];
-      domesticHistory.insertAll(0, stored);
-    }
-    notifyListeners();
+    // final rawDomestic = prefs.getString(_domesticHistoryKey);
+    // final decodedDomestic = rawDomestic == null ? null : jsonDecode(rawDomestic);
+    // if(decodedDomestic is List) {
+    //   final stored = [
+    //     for(final item in decodedDomestic)
+    //       ?_domesticHistoryEntry(item),
+    //   ];
+    //   domesticHistory.insertAll(0, stored);
+    // }
+    // notifyListeners();
+    await prefs.remove(_emergencyRequestsKey);
+    await prefs.remove(_domesticHistoryKey);
   }
 
-  Future<void> saveEmergencyRequests() async {
-    await _historyLoad;
-    final prefs = await SharedPreferences.getInstance();
+  void _readEmergencyHistory(SharedPreferences prefs, String userId) {
+    final rawEmergency = prefs.getString(_scopedEmergencyKey(userId));
+    final decodedEmergency = rawEmergency == null ? null : jsonDecode(rawEmergency);
+    if(decodedEmergency is! List) {
+      return;
+    }
+    final stored = [
+      for(final item in decodedEmergency)
+        if(item is Map &&
+            item['id'] is String &&
+            item['status'] is String &&
+            !emergencyRequests.any((request) => request.id == item['id']))
+          (
+            id: item['id'] as String,
+            address: item['address'] is String ? item['address'] as String : null,
+            happened: item['happened'] is String ? item['happened'] as String : null,
+            people: item['people'] is int ? item['people'] as int : null,
+            status: item['status'] as String,
+            madeAt: _savedTime(item['madeAt']),
+            details: item['details'] is String ? item['details'] as String : null,
+          ),
+    ];
+    emergencyRequests.insertAll(0, stored);
+  }
+
+  void _readDomesticHistory(SharedPreferences prefs, String userId) {
+    final rawDomestic = prefs.getString(_scopedDomesticKey(userId));
+    final decodedDomestic = rawDomestic == null ? null : jsonDecode(rawDomestic);
+    if(decodedDomestic is! List) {
+      return;
+    }
+    final stored = [
+      for(final item in decodedDomestic)
+        if(_domesticHistoryEntry(item) case final entry?) entry,
+    ];
+    domesticHistory.insertAll(0, stored);
+  }
+
+  Future<void> _writeEmergencyHistory(SharedPreferences prefs, String userId) async {
     await prefs.setString(
-      _emergencyRequestsKey,
+      _scopedEmergencyKey(userId),
       jsonEncode([
         for(final request in emergencyRequests)
           {
@@ -2301,16 +2506,16 @@ class EmergencyRequestState extends ChangeNotifier {
             'happened': request.happened,
             'people': request.people,
             'status': request.status,
+            'madeAt': request.madeAt?.toIso8601String(),
+            'details': request.details,
           },
       ]),
     );
   }
 
-  Future<void> saveDomesticHistory() async {
-    await _historyLoad;
-    final prefs = await SharedPreferences.getInstance();
+  Future<void> _writeDomesticHistory(SharedPreferences prefs, String userId) async {
     await prefs.setString(
-      _domesticHistoryKey,
+      _scopedDomesticKey(userId),
       jsonEncode([
         for(final entry in domesticHistory)
           {
@@ -2320,9 +2525,30 @@ class EmergencyRequestState extends ChangeNotifier {
             'issue': entry.issue,
             'address': entry.address,
             'owed': entry.owed,
+            'madeAt': entry.madeAt?.toIso8601String(),
           },
       ]),
     );
+  }
+
+  Future<void> saveEmergencyRequests() async {
+    await _historyLoad;
+    final owner = _historyOwnerId;
+    if(owner.isEmpty) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await _writeEmergencyHistory(prefs, owner);
+  }
+
+  Future<void> saveDomesticHistory() async {
+    await _historyLoad;
+    final owner = _historyOwnerId;
+    if(owner.isEmpty) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await _writeDomesticHistory(prefs, owner);
   }
 
   void reset() {

@@ -28,10 +28,33 @@ io.on("connection", (socket) => {
   socket.on("join:driver", (driverId) => socket.join(`driver:${driverId}`));
   socket.on("join:provider", (providerId) => socket.join(`provider:${providerId}`));
   socket.on("join:domestic-request", (requestId) => socket.join(`domestic:${requestId}`));
+  socket.on("domestic.inspecting", (requestId) => {
+    relayDomestic(requestId, "domestic.inspecting");
+  });
+  socket.on("domestic.work_finished", (requestId) => {
+    relayDomestic(requestId, "domestic.work_finished");
+  });
 });
 
 function validCoordinates(lat, lng) {
   return Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
+}
+
+function coordinate(value) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function relayDomestic(requestId, event) {
+  if (!requestId) return;
+  getDomesticRequest(requestId)
+    .then((payload) => {
+      if (payload) emitDomesticRequest(payload, event);
+    })
+    .catch((error) => {
+      console.error(error.message);
+    });
 }
 
 function point(trx, lat, lng) {
@@ -102,6 +125,8 @@ function domesticRequestPayload(request, components = []) {
     status: request.status,
     description: request.description,
     address: request.address,
+    lat: coordinate(request.lat),
+    lng: coordinate(request.lng),
     createdAt: request.created_at,
     updatedAt: request.updated_at,
     specialisation: request.specialisation_id
@@ -116,7 +141,9 @@ function domesticRequestPayload(request, components = []) {
           name: request.provider_name,
           phone: request.provider_phone,
           rating: Number(request.provider_rating),
-          inspectionFee: Number(request.provider_inspection_fee)
+          inspectionFee: Number(request.provider_inspection_fee),
+          lat: coordinate(request.provider_lat),
+          lng: coordinate(request.provider_lng)
         }
       : null,
     quotedTotal: request.quoted_total == null ? null : Number(request.quoted_total),
@@ -178,6 +205,10 @@ async function getDomesticRequest(requestId) {
       "p.phone as provider_phone",
       "p.rating as provider_rating",
       "p.inspection_fee as provider_inspection_fee",
+      db.raw("ST_Y(r.location::geometry) as lat"),
+      db.raw("ST_X(r.location::geometry) as lng"),
+      db.raw("ST_Y(p.location::geometry) as provider_lat"),
+      db.raw("ST_X(p.location::geometry) as provider_lng"),
       "receipt.quoted_total",
       "receipt.inspection_fee as receipt_inspection_fee",
       "receipt.final_total",
@@ -1252,8 +1283,12 @@ app.get("/api/v1/providers", async (req, res) => {
         "p.rating",
         "p.inspection_fee as inspectionFee",
         "p.services_provided_count as servicesProvidedCount",
+        "p.address_line1 as addressLine1",
+        "p.address_line2 as addressLine2",
         "s.id as specialisationId",
-        "s.name as specialisationName"
+        "s.name as specialisationName",
+        db.raw("ST_Y(p.location::geometry) as lat"),
+        db.raw("ST_X(p.location::geometry) as lng")
       )
       .modify((query) => {
         if (req.query.specialisationId) {
@@ -1268,7 +1303,9 @@ app.get("/api/v1/providers", async (req, res) => {
     res.json(providers.map((provider) => ({
       ...provider,
       rating: Number(provider.rating),
-      inspectionFee: Number(provider.inspectionFee)
+      inspectionFee: Number(provider.inspectionFee),
+      lat: coordinate(provider.lat),
+      lng: coordinate(provider.lng)
     })));
   } catch (error) {
     console.error(error.message);
@@ -1377,6 +1414,8 @@ app.post("/api/v1/providers", async (req, res) => {
   const phone = String(req.body.phone || "").trim();
   const cnic = String(req.body.cnic || "").trim();
   const trade = String(req.body.trade || "").trim();
+  const addressLine1 = String(req.body.addressLine1 || "").trim();
+  const addressLine2 = String(req.body.addressLine2 || "").trim();
   if (!name || !phone || !cnic || !trade) {
     return res.status(400).json({ error: "name, phone, cnic, and trade are required" });
   }
@@ -1413,11 +1452,15 @@ app.post("/api/v1/providers", async (req, res) => {
         specialisation_id: specialisation.id,
         rating: 0,
         inspection_fee: 0,
-        services_provided_count: 0
+        services_provided_count: 0,
+        address_line1: addressLine1 || null,
+        address_line2: addressLine2 || null
       })
       .returning(["id", "name", "phone", "status"]);
     res.status(201).json({
       ...provider,
+      addressLine1: addressLine1 || null,
+      addressLine2: addressLine2 || null,
       rating: 0,
       inspectionFee: 0,
       specialisationId: specialisation.id,
@@ -1599,6 +1642,10 @@ app.get("/api/v1/providers/:providerId/requests", async (req, res) => {
         "p.phone as provider_phone",
         "p.rating as provider_rating",
         "p.inspection_fee as provider_inspection_fee",
+        db.raw("ST_Y(r.location::geometry) as lat"),
+        db.raw("ST_X(r.location::geometry) as lng"),
+        db.raw("ST_Y(p.location::geometry) as provider_lat"),
+        db.raw("ST_X(p.location::geometry) as provider_lng"),
         "receipt.quoted_total",
         "receipt.inspection_fee as receipt_inspection_fee",
         "receipt.final_total",

@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:ui' show ImageFilter;
 
-import 'package:flutter/gestures.dart' show VelocityTracker;
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'services/emergency_request_state.dart';
 import 'services/emergency_service.dart';
@@ -69,6 +69,8 @@ class EmergencyFlow extends StatelessWidget {
         return const _ProviderRequestScreen();
       case EmergencyScreen.providerAccepted:
         return const _ProviderAcceptedScreen();
+      case EmergencyScreen.providerEnRoute:
+        return const _ProviderEnRouteScreen();
       case EmergencyScreen.providerJob:
         return const _ProviderJobScreen();
       case EmergencyScreen.providerPaid:
@@ -616,6 +618,8 @@ class _RegisterScreenState extends State<_RegisterScreen> {
   final _phone = TextEditingController();
   final _ambulance = TextEditingController();
   final _cnic = TextEditingController();
+  final _addressLine1 = TextEditingController();
+  final _addressLine2 = TextEditingController();
 
   @override
   void dispose() {
@@ -623,6 +627,8 @@ class _RegisterScreenState extends State<_RegisterScreen> {
     _phone.dispose();
     _ambulance.dispose();
     _cnic.dispose();
+    _addressLine1.dispose();
+    _addressLine2.dispose();
     super.dispose();
   }
 
@@ -686,12 +692,26 @@ class _RegisterScreenState extends State<_RegisterScreen> {
               if(provider)
                 TextField(
                   controller: _cnic,
-                  textInputAction: TextInputAction.done,
+                  textInputAction: TextInputAction.next,
                   style: const TextStyle(
                     letterSpacing: -0.2,
                     fontFeatures: [FontFeature.tabularFigures()],
                   ),
                   decoration: _registerField('CNIC'),
+                ),
+              if(provider)
+                TextField(
+                  controller: _addressLine1,
+                  textInputAction: TextInputAction.next,
+                  style: const TextStyle(letterSpacing: -0.2),
+                  decoration: _registerField('Address line 1'),
+                ),
+              if(provider)
+                TextField(
+                  controller: _addressLine2,
+                  textInputAction: TextInputAction.done,
+                  style: const TextStyle(letterSpacing: -0.2),
+                  decoration: _registerField('Address line 2'),
                 ),
             ],
           ),
@@ -727,7 +747,13 @@ class _RegisterScreenState extends State<_RegisterScreen> {
                       state.registerDriver(_name.text, _phone.text, _ambulance.text);
                     }
                     else {
-                      state.registerProvider(_name.text, _phone.text, _cnic.text);
+                      state.registerProvider(
+                        _name.text,
+                        _phone.text,
+                        _cnic.text,
+                        _addressLine1.text,
+                        _addressLine2.text,
+                      );
                     }
                   },
           ),
@@ -1136,63 +1162,10 @@ class _DriverJobScreen extends StatefulWidget {
   State<_DriverJobScreen> createState() => _DriverJobScreenState();
 }
 
-class _DriverJobScreenState extends State<_DriverJobScreen>
-    with SingleTickerProviderStateMixin {
-  double slide = 0;
-  bool dropoffSending = false;
-  double slideWidth = 1;
-  VelocityTracker? slideTracker;
-  late final AnimationController slideBack = AnimationController.unbounded(
-    vsync: this,
-  )..addListener(() {
-      setState(() {
-        slide = slideBack.value.clamp(0.0, 1.0);
-      });
-    });
-
-  @override
-  void dispose() {
-    slideBack.dispose();
-    super.dispose();
-  }
-
-  void releaseSlide(double value) {
-    if(value >= 1 || dropoffSending) {
-      return;
-    }
-    if(MediaQuery.disableAnimationsOf(context)) {
-      setState(() {
-        slide = 0;
-      });
-      return;
-    }
-    final fingerSpeed =
-        (slideTracker?.getVelocity().pixelsPerSecond.dx ?? 0) / slideWidth;
-    slideBack.value = value;
-    slideBack.animateWith(
-      SpringSimulation(_settleSpring, value, 0, fingerSpeed),
-    );
-  }
-
-  Future<void> slideTo(EmergencyRequestState state, double value) async {
-    slideBack.stop();
-    setState(() {
-      slide = value;
-    });
-    if(value < 1 || dropoffSending) {
-      return;
-    }
-
-    dropoffSending = true;
+class _DriverJobScreenState extends State<_DriverJobScreen> {
+  Future<void> confirmDropoff(EmergencyRequestState state) async {
     final sent = await state.sendDriverUpdate('dropoff');
-    if(!mounted) {
-      return;
-    }
-    setState(() {
-      slide = 0;
-      dropoffSending = false;
-    });
-    if(!sent) {
+    if(!mounted || !sent) {
       return;
     }
 
@@ -1359,46 +1332,12 @@ class _DriverJobScreenState extends State<_DriverJobScreen>
                       state.sendDriverUpdate('hospital');
                     },
             ),
-          if(atDropoff) ...[
-            Text(
-              'Dropped off',
-              style: Theme.of(context).textTheme.labelSmall,
-            ),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                slideWidth = (constraints.maxWidth - 48).clamp(1.0, double.infinity);
-                return Listener(
-                  onPointerDown: (event) {
-                    slideBack.stop();
-                    slideTracker = VelocityTracker.withKind(event.kind)
-                      ..addPosition(event.timeStamp, event.position);
-                  },
-                  onPointerMove: (event) {
-                    slideTracker?.addPosition(event.timeStamp, event.position);
-                  },
-                  child: Slider(
-                    value: slide,
-                    label: 'Dropped off',
-                    onChanged: busy
-                        ? null
-                        : (value) {
-                            slideTo(state, value);
-                          },
-                    onChangeEnd: busy
-                        ? null
-                        : (value) {
-                            releaseSlide(value);
-                          },
-                  ),
-                );
+          if(atDropoff)
+            _ArrivalSwipe(
+              onConfirmed: () {
+                confirmDropoff(state);
               },
             ),
-            Text(
-              'Slide to the end to confirm.',
-              style: Theme.of(context).textTheme.bodyMedium
-                  ?.copyWith(color: AppColors.muted),
-            ),
-          ],
           if(call == null && status == 'FREE')
             _SecondaryButton(
               label: 'Mark as unavailable',
@@ -2332,7 +2271,7 @@ class _EmergencyConfirmScreen extends StatelessWidget {
           const SizedBox(height: AppSpacing.space3),
           _InfoCard(
             title:
-                '${state.selectedDetail} · ${state.peopleNeedingHelp == 4 ? '4+' : state.peopleNeedingHelp} person${state.peopleNeedingHelp == 1 ? '' : 's'}',
+                '${state.selectedDetail}\n${state.peopleNeedingHelp == 4 ? '4+' : state.peopleNeedingHelp} person${state.peopleNeedingHelp == 1 ? '' : 's'}',
             subtitle: state.additionalDetails == null ||
                     state.additionalDetails!.isEmpty
                 ? 'This goes with your request.'
@@ -2426,8 +2365,10 @@ class _EmergencyAssignedScreen extends StatelessWidget {
           const _StatusPill(label: 'Ambulance found', color: AppColors.green),
           const SizedBox(height: AppSpacing.space3),
           Text(
-            '${assignment.label} is coming',
-            style: Theme.of(context).textTheme.headlineLarge,
+            'Ambulance is on its way',
+            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: AppSpacing.space3),
           _InfoCard(
@@ -2464,6 +2405,8 @@ class _EmergencyAssignedScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyMedium
                 ?.copyWith(color: AppColors.muted),
           ),
+          const SizedBox(height: AppSpacing.space3),
+          _AboutDriverRow(assignment: assignment),
           if(state.hospitalError != null) ...[
             const SizedBox(height: AppSpacing.space4),
             _ErrorNotice(message: state.hospitalError!),
@@ -2538,7 +2481,14 @@ class _EmergencyEnRouteScreen extends StatelessWidget {
           const _StatusPill(label: 'En route', color: AppColors.blue),
           const SizedBox(height: AppSpacing.space3),
           Text(
-            '${assignment.label} · City Emergency Services',
+            'Ambulance is on its way',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space2),
+          Text(
+            '${assignment.label}\nCity Emergency Services',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           if(state.callerMessage != null) ...[
@@ -2558,6 +2508,8 @@ class _EmergencyEnRouteScreen extends StatelessWidget {
             textAlign: TextAlign.center,
             style: _sectionTitle(context)?.copyWith(color: AppColors.red),
           ),
+          const SizedBox(height: AppSpacing.space3),
+          _AboutDriverRow(assignment: assignment),
           if(state.hospitalError != null) ...[
             const SizedBox(height: AppSpacing.space4),
             _ErrorNotice(message: state.hospitalError!),
@@ -2625,13 +2577,15 @@ class _EmergencyApproachingScreen extends StatelessWidget {
           if(state.remainingSeconds <= 0) ...[
             const SizedBox(height: AppSpacing.space4),
             Text(
-              'Your ambulance is here',
+              'Ambulance has arrived',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineSmall,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
-            const SizedBox(height: AppSpacing.space3),
-            _AboutDriverRow(assignment: state.result?.assignedAmbulance),
           ],
+          const SizedBox(height: AppSpacing.space3),
+          _AboutDriverRow(assignment: state.result?.assignedAmbulance),
           if(state.hospitalError != null) ...[
             const SizedBox(height: AppSpacing.space4),
             _ErrorNotice(message: state.hospitalError!),
@@ -2761,9 +2715,9 @@ class _EmergencyArrivedScreen extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.space3),
             Text(
-              'Ambulance has arrived',
+              state.routeProgress() >= 1 ? 'You have arrived' : 'You are on your way',
               textAlign: TextAlign.center,
-              style: _largeTitle(context),
+              style: _largeTitle(context)?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: AppSpacing.space2),
             Text(
@@ -2772,6 +2726,8 @@ class _EmergencyArrivedScreen extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyLarge
                   ?.copyWith(color: AppColors.muted),
             ),
+            const SizedBox(height: AppSpacing.space3),
+            _AboutDriverRow(assignment: assignment),
             const SizedBox(height: AppSpacing.space5),
             if(state.isCompleting)
               const Center(
@@ -3141,7 +3097,7 @@ String _scheduleLabel(BuildContext context, DateTime? scheduledAt) {
   final time = localizations.formatTimeOfDay(
     TimeOfDay.fromDateTime(scheduledAt),
   );
-  return '${localizations.formatMediumDate(scheduledAt)} · $time';
+  return '${localizations.formatMediumDate(scheduledAt)}\n$time';
 }
 
 class _ServicesScreen extends StatelessWidget {
@@ -3299,14 +3255,10 @@ class _TradeDetailScreen extends StatelessWidget {
                   ?.copyWith(color: AppColors.muted),
             ),
           for(final provider in state.providersForTrade) ...[
-            _ChoiceCard(
-              icon: Icons.person_rounded,
-              title: provider.name,
-              subtitle:
-                  '${provider.specialisationName ?? state.domesticTrade} · ★ ${provider.rating.toStringAsFixed(1)} · Inspection fee Rs. ${provider.inspectionFee.toStringAsFixed(0)}',
-              color: state.chosenProvider?.id == provider.id
-                  ? AppColors.green
-                  : AppColors.muted,
+            _ProviderCard(
+              provider: provider,
+              job: provider.specialisationName ?? state.domesticTrade,
+              selected: state.chosenProvider?.id == provider.id,
               onTap: () {
                 state.chooseProvider(provider);
               },
@@ -3883,23 +3835,30 @@ class _ServiceConfirmScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.space4),
           _InfoCard(
-            title: '${state.domesticTrade} · ${state.domesticIssue}',
+            title: state.domesticTrade,
             subtitle:
-                '${state.domesticAddress.trim()} · ${_scheduleLabel(context, state.domesticScheduledAt)}',
+                '${state.domesticIssue}\n${state.domesticAddress.trim()}\n${_scheduleLabel(context, state.domesticScheduledAt)}',
             icon: Icons.handyman_rounded,
           ),
           if(state.chosenProvider != null) ...[
             const SizedBox(height: AppSpacing.space3),
             _InfoCard(
               title: state.chosenProvider!.name,
-              subtitle: '★ ${state.chosenProvider!.rating.toStringAsFixed(1)}',
+              subtitle: '',
+              subtitleChild: _StarRating(
+                rating: state.chosenProvider!.rating,
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: AppColors.muted),
+              ),
               icon: Icons.person_rounded,
             ),
           ],
           const SizedBox(height: AppSpacing.space4),
           Text(
             'Inspection fee: ${state.inspectionFeeText}. Repair cost is set after the visit.',
-            style: Theme.of(context).textTheme.bodyLarge,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
           if(state.domesticNotice != null) ...[
             const SizedBox(height: AppSpacing.space3),
@@ -3953,10 +3912,17 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
         state.domesticTrade;
   }
 
-  String providerRating(EmergencyRequestState state) {
-    final rating =
-        state.domesticBooking?.providerRating ?? state.chosenProvider?.rating;
-    return rating == null ? 'No rating yet' : '★ ${rating.toStringAsFixed(1)}';
+  double? providerRating(EmergencyRequestState state) {
+    return state.domesticBooking?.providerRating ?? state.chosenProvider?.rating;
+  }
+
+  String? providerPhone(EmergencyRequestState state) {
+    final phone = state.domesticBooking?.providerPhone ??
+        state.chosenProvider?.phone;
+    if(phone == null || phone.trim().isEmpty) {
+      return null;
+    }
+    return phone.trim();
   }
 
   @override
@@ -3998,8 +3964,16 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
         Expanded(
           child: _SecondaryButton(
             label: 'Call',
-            onPressed: () {
-              state.showDomesticNotice('No call was placed.');
+            onPressed: () async {
+              final phone = providerPhone(state);
+              if(phone == null) {
+                state.showDomesticNotice('This provider has no phone number saved.');
+                return;
+              }
+              final opened = await launchUrl(Uri(scheme: 'tel', path: phone));
+              if(!opened) {
+                state.showDomesticNotice('The phone app could not be opened.');
+              }
             },
           ),
         ),
@@ -4075,12 +4049,12 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
           const SizedBox(height: AppSpacing.space3),
           _InfoCard(
             title: providerName(state),
-            subtitle: '${providerRating(state)} · ${providerTrade(state)}',
+            subtitle: providerTrade(state),
             icon: Icons.person_rounded,
           ),
-          const SizedBox(height: AppSpacing.space3),
-          Text(
-            'Other providers no longer see this request.',
+          const SizedBox(height: AppSpacing.space2),
+          _StarRating(
+            rating: providerRating(state),
             style: Theme.of(context).textTheme.bodyLarge,
           ),
           const SizedBox(height: AppSpacing.space2),
@@ -4090,10 +4064,7 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
           ),
           notice(context, state),
           const SizedBox(height: AppSpacing.space5),
-          _ActionButton(
-            label: 'Track on map',
-            onPressed: state.trackProvider,
-          ),
+          const _BikeTripMap(height: 280),
           const SizedBox(height: AppSpacing.space3),
           callAndChat(state),
           const SizedBox(height: AppSpacing.space3),
@@ -4150,8 +4121,36 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
             style: Theme.of(context).textTheme.bodyLarge
                 ?.copyWith(color: AppColors.muted),
           ),
+          Center(
+            child: _StarRating(
+              rating: providerRating(state),
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget enRoute(BuildContext context, EmergencyRequestState _) {
+    return _FlowFrame(
+      title: 'Provider assigned',
+      tab: _UserTab.services,
+      fill: true,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 64,
+            height: 64,
+            child: CircularProgressIndicator(
+              color: AppColors.green,
+              strokeWidth: 6,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space4),
           Text(
-            providerRating(state),
+            'Wait for the provider to finish inspecting.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyLarge,
           ),
@@ -4160,79 +4159,27 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
     );
   }
 
-  Widget enRoute(BuildContext context, EmergencyRequestState state) {
-    return _FlowFrame(
-      title: 'Provider en route',
-      tab: _UserTab.services,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _InfoCard(
-            title: '${providerName(state)} · ${providerTrade(state)}',
-            subtitle: state.domesticIssue,
-            icon: Icons.person_rounded,
-          ),
-          const SizedBox(height: AppSpacing.space3),
-          const _MapBlock(),
-          notice(context, state),
-          const SizedBox(height: AppSpacing.space3),
-          callAndChat(state),
-          const SizedBox(height: AppSpacing.space3),
-          Text(
-            'The provider marks arrival from the provider sign-in.',
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: AppColors.muted),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget inProgress(BuildContext context, EmergencyRequestState state) {
+  Widget inProgress(BuildContext context, EmergencyRequestState _) {
     return _FlowFrame(
       title: 'Service in progress',
       tab: _UserTab.services,
+      fill: true,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const SizedBox(height: AppSpacing.space5),
-          const Icon(
-            Icons.handyman_rounded,
-            color: AppColors.green,
-            size: 52,
-          ),
-          const SizedBox(height: AppSpacing.space3),
-          Text(
-            '${providerName(state)} has started work',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.headlineLarge,
-          ),
-          const SizedBox(height: AppSpacing.space2),
-          Text(
-            state.domesticIssue,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: AppColors.muted),
+          const SizedBox(
+            width: 48,
+            height: 48,
+            child: CircularProgressIndicator(
+              color: AppColors.blue,
+              strokeWidth: 5,
+            ),
           ),
           const SizedBox(height: AppSpacing.space4),
-          const _InfoCard(
-            title: 'Need help?',
-            subtitle: 'Contact support if something is wrong.',
-            icon: Icons.support_agent_rounded,
-          ),
-          notice(context, state),
-          const SizedBox(height: AppSpacing.space3),
           Text(
-            'The provider completes the job from the provider sign-in.',
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(color: AppColors.muted),
-          ),
-          const SizedBox(height: AppSpacing.space5),
-          _SecondaryButton(
-            label: 'Contact support',
-            onPressed: () {
-              state.showDomesticNotice('Support was not contacted.');
-            },
+            'Job underway.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineLarge,
           ),
         ],
       ),
@@ -4692,12 +4639,21 @@ class _ProviderPaidScreen extends StatelessWidget {
     final name = state.providerPaidBy;
     return _FlowFrame(
       title: 'Payment received',
+      fill: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const Spacer(),
+          const Icon(
+            Icons.check_circle_rounded,
+            color: AppColors.green,
+            size: 64,
+          ),
+          const SizedBox(height: AppSpacing.space4),
           Text(
             state.providerPaidText ?? '',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
@@ -4705,15 +4661,18 @@ class _ProviderPaidScreen extends StatelessWidget {
             const SizedBox(height: AppSpacing.space2),
             Text(
               'From $name',
+              textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyLarge,
             ),
           ],
-          const SizedBox(height: AppSpacing.space5),
-          _ActionButton(
-            label: 'Back to home',
-            onPressed: () {
-              state.goTo(EmergencyScreen.providerDashboard);
-            },
+          const Spacer(),
+          _PressScale(
+            child: _ActionButton(
+              label: 'Back to home',
+              onPressed: () {
+                state.goTo(EmergencyScreen.providerDashboard);
+              },
+            ),
           ),
         ],
       ),
@@ -4790,9 +4749,35 @@ class _RequestsScreenState extends State<_RequestsScreen>
     );
   }
 
+  List<T> newestFirst<T>(List<T> items, DateTime? Function(T item) madeAt) {
+    final indexed = items.indexed.toList();
+    indexed.sort((left, right) {
+      final leftAt = madeAt(left.$2);
+      final rightAt = madeAt(right.$2);
+      if(leftAt != null && rightAt != null) {
+        return rightAt.compareTo(leftAt);
+      }
+      if(leftAt != null) {
+        return -1;
+      }
+      if(rightAt != null) {
+        return 1;
+      }
+      return right.$1.compareTo(left.$1);
+    });
+    return [for(final item in indexed) item.$2];
+  }
+
   List<Widget> emergencyCards(EmergencyRequestState state) {
+    final shown = newestFirst(
+      [
+        for(final request in state.emergencyRequests)
+          if(request.status == 'COMPLETED' || request.status == 'QUEUED') request,
+      ],
+      (request) => request.madeAt,
+    );
     return [
-      for(final request in state.emergencyRequests)
+      for(final request in shown)
         _EmergencyRequestCard(
           title: request.happened?.trim().isNotEmpty == true
               ? request.happened!.trim()
@@ -4800,19 +4785,29 @@ class _RequestsScreenState extends State<_RequestsScreen>
           status: request.status,
           people: request.people,
           address: request.address ?? '',
+          madeAt: request.madeAt,
+          details: request.details,
         ),
     ];
   }
 
   List<Widget> domesticCards(EmergencyRequestState state) {
+    final shown = newestFirst(
+      [
+        for(final entry in state.domesticHistory)
+          if(entry.status != 'Ongoing') entry,
+      ],
+      (entry) => entry.madeAt,
+    );
     return [
-      for(final entry in state.domesticHistory)
+      for(final entry in shown)
         _DomesticRequestCard(
           trade: entry.trade,
           status: entry.status,
           issue: entry.issue,
           address: entry.address,
           owed: entry.owed,
+          madeAt: entry.madeAt,
         ),
     ];
   }
@@ -4966,7 +4961,7 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
           if(!waiting && matches.length == 1) ...[
             _ProfileRow(
               label:
-                  '${matches.first.name} · ${matches.first.specialisationName ?? 'Provider'}',
+                  '${matches.first.name}\n${matches.first.specialisationName ?? 'Provider'}',
               trailing: '',
             ),
             const SizedBox(height: AppSpacing.space3),
@@ -5202,11 +5197,17 @@ class _ProviderDashboardScreenState extends State<_ProviderDashboardScreen> {
                     Text(provider.name, style: _sectionTitle(context)),
                     const SizedBox(height: AppSpacing.space1),
                     Text(
-                      '${provider.specialisationName ?? 'Provider'}\n${provider.rating.toStringAsFixed(1)} rating',
+                      provider.specialisationName ?? 'Provider',
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: AppColors.muted,
                         height: 1.35,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    _StarRating(
+                      rating: provider.rating,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: AppColors.muted,
+                        height: 1.35,
                       ),
                     ),
                   ],
@@ -5553,7 +5554,7 @@ class _ProviderRequestScreen extends StatelessWidget {
             const SizedBox(height: AppSpacing.space3),
             _InfoCard(
               title: 'Problem',
-              subtitle: job.description,
+              subtitle: _jobLines(job.description),
               icon: Icons.description_outlined,
             ),
             const SizedBox(height: AppSpacing.space3),
@@ -5604,18 +5605,13 @@ class _ProviderAcceptedScreen extends StatelessWidget {
     final state = context.watch<EmergencyRequestState>();
     final job = state.activeJob;
     final pieces = job?.description.split(' · ') ?? const <String>[];
-    final note = pieces.skip(1).join(' · ');
+    final note = pieces.skip(1).join('\n');
 
     return _FlowFrame(
       title: 'Job accepted',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _InfoCard(
-            title: 'Address',
-            subtitle: job?.address ?? 'This job is no longer on this phone.',
-            icon: Icons.location_on_rounded,
-          ),
           if(pieces.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.space3),
             _InfoCard(
@@ -5670,14 +5666,14 @@ class _ProviderJobScreenState extends State<_ProviderJobScreen> {
               title: finishedJob?.specialisationName ?? 'Job',
               subtitle: finishedJob == null
                   ? 'This job is no longer on this phone.'
-                  : '${finishedJob.userName ?? 'Customer'} · ${finishedJob.address}',
+                  : '${finishedJob.userName ?? 'Customer'}\n${finishedJob.address}',
               icon: Icons.handyman_rounded,
             ),
             if(finishedJob != null) ...[
               const SizedBox(height: AppSpacing.space3),
               _InfoCard(
                 title: 'Problem',
-                subtitle: finishedJob.description,
+                subtitle: _jobLines(finishedJob.description),
                 icon: Icons.description_outlined,
               ),
               if(finishedJob.finalTotal != null) ...[
@@ -5718,9 +5714,7 @@ class _ProviderJobScreenState extends State<_ProviderJobScreen> {
           _ActionButton(
             label: 'Complete job',
             color: AppColors.green,
-            onPressed: () {
-              state.openCostReview(fromProvider: true);
-            },
+            onPressed: state.finishProviderWork,
           ),
         ],
       ),
@@ -5728,23 +5722,315 @@ class _ProviderJobScreenState extends State<_ProviderJobScreen> {
   }
 }
 
-class _MapBlock extends StatelessWidget {
-  const _MapBlock();
+class _ProviderEnRouteScreen extends StatefulWidget {
+  const _ProviderEnRouteScreen();
+
+  @override
+  State<_ProviderEnRouteScreen> createState() => _ProviderEnRouteScreenState();
+}
+
+class _ProviderEnRouteScreenState extends State<_ProviderEnRouteScreen> {
+  var showSwipe = false;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 190,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: AppColors.page,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.line, width: 2),
+    final state = context.watch<EmergencyRequestState>();
+    return _FlowFrame(
+      title: 'On the way',
+      onBack: () {
+        state.goTo(EmergencyScreen.providerDashboard);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _BikeTripMap(height: 360),
+          const SizedBox(height: AppSpacing.space4),
+          if(!showSwipe)
+            _PressScale(
+              child: _ActionButton(
+                label: 'Arrived',
+                color: AppColors.green,
+                onPressed: () {
+                  setState(() {
+                    showSwipe = true;
+                  });
+                },
+              ),
+            )
+          else
+            _ArrivalSwipe(onConfirmed: state.confirmProviderArrival),
+        ],
       ),
-      child: const Icon(
-        Icons.location_on_rounded,
-        color: AppColors.blue,
-        size: 42,
+    );
+  }
+}
+
+class _ArrivalSwipe extends StatefulWidget {
+  const _ArrivalSwipe({required this.onConfirmed});
+
+  final VoidCallback onConfirmed;
+
+  @override
+  State<_ArrivalSwipe> createState() => _ArrivalSwipeState();
+}
+
+class _ArrivalSwipeState extends State<_ArrivalSwipe>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController motion = AnimationController.unbounded(
+    vsync: this,
+  );
+  var confirmed = false;
+
+  @override
+  void dispose() {
+    motion.dispose();
+    super.dispose();
+  }
+
+  void settle(double target) {
+    motion.animateWith(
+      SpringSimulation(_pressSpring, motion.value, target, motion.velocity),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final travel = (MediaQuery.sizeOf(context).width - (AppSpacing.space4 * 2) - 56)
+        .clamp(1.0, double.infinity);
+    return SizedBox(
+      key: const Key('arrival-swipe'),
+      height: 56,
+      child: GestureDetector(
+            onHorizontalDragStart: (_) {
+              if(confirmed) {
+                return;
+              }
+              motion.stop();
+            },
+            onHorizontalDragUpdate: (details) {
+              if(confirmed) {
+                return;
+              }
+              motion.value = (motion.value + details.delta.dx).clamp(0.0, travel).toDouble();
+            },
+            onHorizontalDragEnd: (_) {
+              if(confirmed) {
+                return;
+              }
+              if(motion.value >= travel * 0.85) {
+                confirmed = true;
+                settle(travel.toDouble());
+                widget.onConfirmed();
+                return;
+              }
+              settle(0);
+            },
+            child: AnimatedBuilder(
+              animation: motion,
+              builder: (context, _) {
+                final shift = motion.value.clamp(0.0, travel).toDouble();
+                return DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.page,
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    border: Border.all(color: AppColors.line),
+                  ),
+                  child: Stack(
+                    children: [
+                      Center(
+                        child: Text(
+                          'Swipe to confirm',
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(color: AppColors.muted),
+                        ),
+                      ),
+                      Positioned(
+                        left: shift,
+                        top: 4,
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppColors.green,
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                          ),
+                          child: const Icon(
+                            Icons.chevron_right_rounded,
+                            color: AppColors.surface,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+    );
+  }
+}
+
+class _BikeTripMap extends StatefulWidget {
+  const _BikeTripMap({this.height});
+
+  final double? height;
+
+  @override
+  State<_BikeTripMap> createState() => _BikeTripMapState();
+}
+
+class _BikeTripMapState extends State<_BikeTripMap> {
+  final _mapController = MapController();
+  var _fitted = false;
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final fromLat = state.routeFromLat;
+    final fromLng = state.routeFromLng;
+    final toLat = state.routeToLat;
+    final toLng = state.routeToLng;
+    final map = fromLat == null ||
+            fromLng == null ||
+            toLat == null ||
+            toLng == null
+        ? _emptyMap(state.routeError)
+        : _liveMap(
+            LatLng(fromLat, fromLng),
+            LatLng(toLat, toLng),
+            state.routePoints,
+            state.routeProgress(),
+          );
+    if(widget.height == null) {
+      return map;
+    }
+    return SizedBox(height: widget.height, child: map);
+  }
+
+  Widget _emptyMap(String? error) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppColors.page,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: AppColors.line, width: 2),
+            ),
+            child: const Icon(
+              Icons.location_on_rounded,
+              color: AppColors.blue,
+              size: 42,
+            ),
+          ),
+        ),
+        if(error != null) ...[
+          const SizedBox(height: AppSpacing.space3),
+          _ErrorNotice(message: error),
+        ],
+      ],
+    );
+  }
+
+  Widget _liveMap(
+    LatLng start,
+    LatLng destination,
+    List<LatLng>? routePoints,
+    double progress,
+  ) {
+    final points = routePoints ?? [start, destination];
+    final bike = _pointAlongRoute(points, progress);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.line, width: 2),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        child: FlutterMap(
+          mapController: _mapController,
+          options: MapOptions(
+            initialCenter: bike,
+            initialZoom: 13,
+            interactionOptions: InteractionOptions(
+              flags: InteractiveFlag.drag | InteractiveFlag.flingAnimation,
+              cursorKeyboardRotationOptions:
+                  CursorKeyboardRotationOptions.disabled(),
+              keyboardOptions: KeyboardOptions(
+                enableQERotating: false,
+                enableRFZooming: false,
+              ),
+            ),
+            onMapReady: () {
+              if(_fitted || Platform.environment['FLUTTER_TEST'] == 'true') {
+                _fitted = true;
+                return;
+              }
+              _fitted = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if(!mounted) {
+                  return;
+                }
+                _mapController.fitCamera(
+                  CameraFit.coordinates(
+                    coordinates: points,
+                    padding: const EdgeInsets.all(36),
+                  ),
+                );
+              });
+            },
+          ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.madadplus.madad_plus_mobile',
+              tileProvider: Platform.environment['FLUTTER_TEST'] == 'true'
+                  ? _TestTileProvider()
+                  : NetworkTileProvider(),
+            ),
+            PolylineLayer(
+              polylines: [
+                Polyline(
+                  points: points,
+                  strokeWidth: 4,
+                  color: AppColors.blue,
+                ),
+              ],
+            ),
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: bike,
+                  width: 41,
+                  height: 41,
+                  child: Image.asset(
+                    'assets/bike.png',
+                    width: 41,
+                    height: 41,
+                  ),
+                ),
+                Marker(
+                  point: destination,
+                  width: 36,
+                  height: 36,
+                  child: const Icon(
+                    Icons.location_on,
+                    color: AppColors.blue,
+                    size: 36,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -6028,6 +6314,159 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
+class _StarRating extends StatelessWidget {
+  const _StarRating({required this.rating, this.style});
+
+  final double? rating;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    final textStyle = (style ?? Theme.of(context).textTheme.bodyMedium)?.copyWith(
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    if(rating == null) {
+      return Text('No rating yet', style: textStyle);
+    }
+    final value = rating!.toStringAsFixed(1);
+    final size = (textStyle?.fontSize ?? 14) * 1.2;
+    return Semantics(
+      label: 'Rated $value out of 5',
+      excludeSemantics: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.star_rounded, color: AppColors.gold, size: size),
+          const SizedBox(width: AppSpacing.space1),
+          Text(value, style: textStyle),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProviderCard extends StatelessWidget {
+  const _ProviderCard({
+    required this.provider,
+    required this.job,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final ProviderRow provider;
+  final String job;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context).textTheme;
+    final line1 = (provider.addressLine1 ?? '').trim();
+    final line2 = (provider.addressLine2 ?? '').trim();
+    final addressLines = [
+      if(line1.isNotEmpty) line1,
+      if(line2.isNotEmpty) line2,
+    ];
+    if(addressLines.isEmpty) {
+      addressLines.add('Address not added');
+    }
+    final radius = BorderRadius.circular(AppRadius.md);
+    final calm = MediaQuery.of(context).disableAnimations;
+    final detail = theme.bodyMedium?.copyWith(
+      color: AppColors.muted,
+      height: 1.4,
+    );
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: _PressScale(
+        child: Material(
+          color: Colors.transparent,
+          child: Ink(
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.green.withValues(alpha: 0.06)
+                  : AppColors.surface,
+              borderRadius: radius,
+              border: Border.all(
+                color: selected ? AppColors.green : AppColors.line,
+                width: selected ? 2 : 1,
+              ),
+            ),
+            child: InkWell(
+              borderRadius: radius,
+              onTap: onTap,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 44),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.space4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              provider.name,
+                              style: theme.headlineSmall?.copyWith(
+                                letterSpacing: -0.3,
+                                height: 1.2,
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.space1),
+                            Text(
+                              job,
+                              style: detail?.copyWith(
+                                color: AppColors.ink,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            for(final line in addressLines)
+                              Text(line, style: detail),
+                            const SizedBox(height: AppSpacing.space2),
+                            _StarRating(rating: provider.rating, style: detail),
+                            const SizedBox(height: AppSpacing.space2),
+                            Text(
+                              'Inspection fee: Rs. ${provider.inspectionFee.toStringAsFixed(0)}',
+                              style: theme.bodyMedium?.copyWith(
+                                color: AppColors.ink,
+                                fontWeight: FontWeight.w600,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      AnimatedOpacity(
+                        opacity: selected ? 1 : 0,
+                        duration: calm
+                            ? Duration.zero
+                            : const Duration(milliseconds: 150),
+                        child: const Padding(
+                          padding: EdgeInsets.only(left: AppSpacing.space2),
+                          child: Icon(
+                            Icons.check_circle_rounded,
+                            color: AppColors.green,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ChoiceCard extends StatelessWidget {
   const _ChoiceCard({
     required this.icon,
@@ -6133,18 +6572,33 @@ class _ChoiceCard extends StatelessWidget {
   }
 }
 
+String _requestDate(DateTime? madeAt) {
+  if(madeAt == null) {
+    return '';
+  }
+  final local = madeAt.toLocal();
+  String two(int value) {
+    return value.toString().padLeft(2, '0');
+  }
+  return '${two(local.day)}-${two(local.month)}-${two(local.year % 100)}';
+}
+
 class _EmergencyRequestCard extends StatelessWidget {
   const _EmergencyRequestCard({
     required this.title,
     required this.status,
     required this.people,
     required this.address,
+    this.madeAt,
+    this.details,
   });
 
   final String title;
   final String status;
   final int? people;
   final String address;
+  final DateTime? madeAt;
+  final String? details;
 
   @override
   Widget build(BuildContext context) {
@@ -6169,9 +6623,11 @@ class _EmergencyRequestCard extends StatelessWidget {
       statusText = AppColors.surface;
       statusBorder = AppColors.orange;
     }
+    final note = details?.trim() ?? '';
     final facts = <(String, String)>[
       if(people != null) ('People', _peopleLabel(people)),
       if(address.trim().isNotEmpty) ('Address', address.trim()),
+      if(note.isNotEmpty) ('Details', note),
     ];
     final captionStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
       color: AppColors.muted,
@@ -6228,10 +6684,27 @@ class _EmergencyRequestCard extends StatelessWidget {
                         ),
                         const SizedBox(width: AppSpacing.space3),
                         Expanded(
-                          child: Text(
-                            title,
-                            style: Theme.of(context).textTheme.labelLarge
-                                ?.copyWith(letterSpacing: -0.2),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: Theme.of(context).textTheme.labelLarge
+                                    ?.copyWith(letterSpacing: -0.2),
+                              ),
+                              if(_requestDate(madeAt).isNotEmpty)
+                                Text(
+                                  _requestDate(madeAt),
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: AppColors.muted,
+                                        height: 1.3,
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures(),
+                                        ],
+                                      ),
+                                ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: AppSpacing.space2),
@@ -6280,6 +6753,7 @@ class _DomesticRequestCard extends StatelessWidget {
     required this.issue,
     required this.address,
     required this.owed,
+    this.madeAt,
   });
 
   final String trade;
@@ -6287,6 +6761,7 @@ class _DomesticRequestCard extends StatelessWidget {
   final String issue;
   final String address;
   final String owed;
+  final DateTime? madeAt;
 
   @override
   Widget build(BuildContext context) {
@@ -6393,10 +6868,27 @@ class _DomesticRequestCard extends StatelessWidget {
                         ),
                         const SizedBox(width: AppSpacing.space3),
                         Expanded(
-                          child: Text(
-                            trade,
-                            style: Theme.of(context).textTheme.labelLarge
-                                ?.copyWith(letterSpacing: -0.2),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                trade,
+                                style: Theme.of(context).textTheme.labelLarge
+                                    ?.copyWith(letterSpacing: -0.2),
+                              ),
+                              if(_requestDate(madeAt).isNotEmpty)
+                                Text(
+                                  _requestDate(madeAt),
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: AppColors.muted,
+                                        height: 1.3,
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures(),
+                                        ],
+                                      ),
+                                ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: AppSpacing.space2),
@@ -6444,12 +6936,14 @@ class _InfoCard extends StatelessWidget {
     required this.subtitle,
     required this.icon,
     this.highlighted = false,
+    this.subtitleChild,
   });
 
   final String title;
   final String subtitle;
   final IconData icon;
   final bool highlighted;
+  final Widget? subtitleChild;
 
   @override
   Widget build(BuildContext context) {
@@ -6483,11 +6977,12 @@ class _InfoCard extends StatelessWidget {
               children: [
                 Text(title, style: Theme.of(context).textTheme.labelLarge),
                 const SizedBox(height: AppSpacing.space1),
-                Text(
-                  subtitle,
-                  style: Theme.of(context).textTheme.bodyMedium
-                      ?.copyWith(color: AppColors.muted),
-                ),
+                subtitleChild ??
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(color: AppColors.muted),
+                    ),
               ],
             ),
           ),
@@ -7212,4 +7707,6 @@ class _JobStatusBox extends StatelessWidget {
     );
   }
 }
+
+
 

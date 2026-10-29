@@ -289,6 +289,10 @@ class ProviderRow {
     required this.specialisationName,
     this.phone,
     this.cnic,
+    this.latitude,
+    this.longitude,
+    this.addressLine1,
+    this.addressLine2,
   });
 
   final String id;
@@ -300,6 +304,10 @@ class ProviderRow {
   final String? specialisationName;
   final String? phone;
   final String? cnic;
+  final double? latitude;
+  final double? longitude;
+  final String? addressLine1;
+  final String? addressLine2;
 
   ProviderRow withFee(double fee) {
     return ProviderRow(
@@ -311,6 +319,11 @@ class ProviderRow {
       specialisationId: specialisationId,
       specialisationName: specialisationName,
       phone: phone,
+      cnic: cnic,
+      latitude: latitude,
+      longitude: longitude,
+      addressLine1: addressLine1,
+      addressLine2: addressLine2,
     );
   }
 
@@ -324,6 +337,11 @@ class ProviderRow {
       specialisationId: specialisationId,
       specialisationName: specialisationName,
       phone: phone,
+      cnic: cnic,
+      latitude: latitude,
+      longitude: longitude,
+      addressLine1: addressLine1,
+      addressLine2: addressLine2,
     );
   }
 
@@ -338,6 +356,10 @@ class ProviderRow {
       specialisationName: json['specialisationName'] as String?,
       phone: json['phone'] as String?,
       cnic: json['cnic'] as String?,
+      latitude: _coord(json['lat']),
+      longitude: _coord(json['lng']),
+      addressLine1: json['addressLine1'] as String?,
+      addressLine2: json['addressLine2'] as String?,
     );
   }
 }
@@ -379,7 +401,13 @@ class DomesticBooking {
     this.receiptStatus,
     this.finishedAt,
     this.providerId,
+    this.providerPhone,
     this.components = const [],
+    this.lat,
+    this.lng,
+    this.providerLat,
+    this.providerLng,
+    this.updatedAt,
   });
 
   final String requestId;
@@ -397,7 +425,13 @@ class DomesticBooking {
   final String? receiptStatus;
   final DateTime? finishedAt;
   final String? providerId;
+  final String? providerPhone;
   final List<({String name, double price})> components;
+  final double? lat;
+  final double? lng;
+  final double? providerLat;
+  final double? providerLng;
+  final DateTime? updatedAt;
 
   factory DomesticBooking.fromJson(Map<String, dynamic> json) {
     final user = json['user'];
@@ -411,6 +445,9 @@ class DomesticBooking {
       userName: user is Map ? user['name'] as String? : null,
       providerName: provider is Map ? provider['name'] as String? : null,
       providerId: provider is Map ? provider['id'] as String? : null,
+      providerPhone: provider is Map ? provider['phone'] as String? : null,
+      providerLat: provider is Map ? _coord(provider['lat']) : null,
+      providerLng: provider is Map ? _coord(provider['lng']) : null,
       providerRating: provider is Map
           ? (provider['rating'] as num?)?.toDouble()
           : null,
@@ -425,6 +462,9 @@ class DomesticBooking {
       finalTotal: (json['finalTotal'] as num?)?.toDouble(),
       receiptStatus: json['receiptStatus'] as String?,
       finishedAt: _time(json['finishedAt']),
+      lat: _coord(json['lat']),
+      lng: _coord(json['lng']),
+      updatedAt: _time(json['updatedAt']),
       components: [
         for(final row in json['components'] as List? ?? const [])
           if(row is Map && row['name'] is String && row['price'] is num)
@@ -480,6 +520,7 @@ class EmergencyService {
     required int peopleCount,
     required String inputMethod,
     String? additionalDetails,
+    String? callerPhone,
   }) async {
     final details = additionalDetails?.trim() ?? '';
     final decoded = await _send(
@@ -495,6 +536,8 @@ class EmergencyService {
           'peopleCount': peopleCount,
           'inputMethod': inputMethod,
           if(details.isNotEmpty) 'additionalDetails': details,
+          if(callerPhone != null && callerPhone.trim().isNotEmpty)
+            'callerPhone': callerPhone.trim(),
         }),
       ),
       'The emergency request could not be sent.',
@@ -675,6 +718,8 @@ class EmergencyService {
     required String phone,
     required String cnic,
     required String trade,
+    String addressLine1 = '',
+    String addressLine2 = '',
   }) async {
     final decoded = await _send(
       http.post(
@@ -685,6 +730,8 @@ class EmergencyService {
           'phone': phone,
           'cnic': cnic,
           'trade': trade,
+          'addressLine1': addressLine1,
+          'addressLine2': addressLine2,
         }),
       ),
       'The provider account could not be created.',
@@ -738,6 +785,8 @@ class EmergencyService {
     required String specialisationId,
     required String description,
     required String address,
+    double? lat,
+    double? lng,
   }) async {
     final decoded = await _send(
       http.post(
@@ -749,6 +798,8 @@ class EmergencyService {
           'specialisationId': specialisationId,
           'description': description,
           'address': address,
+          if(lat != null && lng != null) 'lat': lat,
+          if(lat != null && lng != null) 'lng': lng,
         }),
       ),
       'The booking could not be sent.',
