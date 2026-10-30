@@ -89,7 +89,7 @@ async function emitAmbulance(ambulanceId) {
     .first();
 
   if (ambulance) {
-    io.to("dispatch").emit("ambulance.updated", {
+    const payload = {
       id: ambulance.id,
       label: ambulance.label,
       status: ambulance.status,
@@ -99,7 +99,11 @@ async function emitAmbulance(ambulanceId) {
         : null,
       lat: Number(ambulance.lat),
       lng: Number(ambulance.lng)
-    });
+    };
+    io.to("dispatch").emit("ambulance.updated", payload);
+    if (ambulance.driver_id) {
+      io.to(`driver:${ambulance.driver_id}`).emit("ambulance.updated", payload);
+    }
   }
 }
 
