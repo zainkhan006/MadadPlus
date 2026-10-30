@@ -1751,6 +1751,7 @@ class EmergencyRequestState extends ChangeNotifier {
     _emergencySocketService.connectDriver(
       driverId: id,
       onCall: _receiveDriverCall,
+      onAmbulance: _receiveAmbulanceStatus,
     );
     loadDriverPortal();
   }
@@ -1841,6 +1842,14 @@ class EmergencyRequestState extends ChangeNotifier {
       driverLoading = false;
       notifyListeners();
     }
+  }
+
+  void _receiveAmbulanceStatus(String ambulanceId, String status) {
+    if(driverId == null || driverAmbulanceStatus == status) {
+      return;
+    }
+    driverAmbulanceStatus = status;
+    notifyListeners();
   }
 
   void _receiveDriverCall(EmergencyCall call) {
@@ -2425,6 +2434,36 @@ class EmergencyRequestState extends ChangeNotifier {
 
   Future<void> loadRequestHistory() async {
     final prefs = await SharedPreferences.getInstance();
+    // final rawEmergency = prefs.getString(_emergencyRequestsKey);
+    // final decodedEmergency = rawEmergency == null ? null : jsonDecode(rawEmergency);
+    // if(decodedEmergency is List) {
+    //   final stored = [
+    //     for(final item in decodedEmergency)
+    //       if(item is Map &&
+    //           item['id'] is String &&
+    //           item['status'] is String &&
+    //           !emergencyRequests.any((request) => request.id == item['id']))
+    //         (
+    //           id: item['id'] as String,
+    //           address: item['address'] is String ? item['address'] as String : null,
+    //           happened: item['happened'] is String ? item['happened'] as String : null,
+    //           people: item['people'] is int ? item['people'] as int : null,
+    //           status: item['status'] as String,
+    //         ),
+    //   ];
+    //   emergencyRequests.insertAll(0, stored);
+    // }
+
+    // final rawDomestic = prefs.getString(_domesticHistoryKey);
+    // final decodedDomestic = rawDomestic == null ? null : jsonDecode(rawDomestic);
+    // if(decodedDomestic is List) {
+    //   final stored = [
+    //     for(final item in decodedDomestic)
+    //       ?_domesticHistoryEntry(item),
+    //   ];
+    //   domesticHistory.insertAll(0, stored);
+    // }
+    // notifyListeners();
     await prefs.remove(_emergencyRequestsKey);
     await prefs.remove(_domesticHistoryKey);
   }

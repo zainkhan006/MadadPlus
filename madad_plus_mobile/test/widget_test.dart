@@ -693,6 +693,30 @@ void main() {
     expect(find.text('Mark as unavailable'), findsOneWidget);
   });
 
+  testWidgets('the dispatcher marking an ambulance unavailable shows on the phone', (
+    WidgetTester tester,
+  ) async {
+    final socket = SilentSocketService();
+    final api = FakeEmergencyService();
+    final state = EmergencyRequestState(
+      emergencyService: api,
+      socketService: socket,
+      demoUserId: 'user-1',
+    );
+    addTearDown(state.dispose);
+
+    state.chooseDriverAmbulance(api.ambulances.first);
+    await tester.pump();
+    await tester.pump();
+    expect(state.driverAmbulanceStatus, 'FREE');
+
+    socket.driverAmbulanceListener!('amb-1', 'UNAVAILABLE');
+    expect(state.driverAmbulanceStatus, 'UNAVAILABLE');
+
+    socket.driverAmbulanceListener!('amb-1', 'FREE');
+    expect(state.driverAmbulanceStatus, 'FREE');
+  });
+
   testWidgets('a driver on a call cancels, then confirms, mark as unavailable', (
     WidgetTester tester,
   ) async {
@@ -2020,11 +2044,16 @@ class SilentSocketService extends EmergencySocketService {
 
   final FakeEmergencyService? relay;
 
+  void Function(String ambulanceId, String status)? driverAmbulanceListener;
+
   @override
   void connectDriver({
     required String driverId,
     required void Function(EmergencyCall call) onCall,
-  }) {}
+    void Function(String ambulanceId, String status)? onAmbulance,
+  }) {
+    driverAmbulanceListener = onAmbulance;
+  }
 
   @override
   void disconnectDriver() {}
