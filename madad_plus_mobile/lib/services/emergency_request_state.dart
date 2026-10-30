@@ -1751,6 +1751,7 @@ class EmergencyRequestState extends ChangeNotifier {
     _emergencySocketService.connectDriver(
       driverId: id,
       onCall: _receiveDriverCall,
+      onAmbulance: _receiveAmbulanceStatus,
     );
     loadDriverPortal();
   }
@@ -1841,6 +1842,14 @@ class EmergencyRequestState extends ChangeNotifier {
       driverLoading = false;
       notifyListeners();
     }
+  }
+
+  void _receiveAmbulanceStatus(String ambulanceId, String status) {
+    if(driverId == null || driverAmbulanceStatus == status) {
+      return;
+    }
+    driverAmbulanceStatus = status;
+    notifyListeners();
   }
 
   void _receiveDriverCall(EmergencyCall call) {

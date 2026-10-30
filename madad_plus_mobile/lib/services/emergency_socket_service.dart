@@ -114,9 +114,15 @@ class EmergencySocketService {
   void connectDriver({
     required String driverId,
     required void Function(EmergencyCall call) onCall,
+    void Function(String ambulanceId, String status)? onAmbulance,
   }) {
     disconnectDriver();
     final driverSocket = _joinRoom('join:driver', driverId);
+    driverSocket.on('ambulance.updated', (data) {
+      if(data is Map && data['id'] is String && data['status'] is String) {
+        onAmbulance?.call(data['id'] as String, data['status'] as String);
+      }
+    });
     for(final eventName in [
       'request.assigned',
       'request.reassigned',
