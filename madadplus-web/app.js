@@ -172,25 +172,58 @@ function initMap() {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     maxZoom: 19
   }).addTo(map);
+
+  map.on("zoom", resizeAmbulanceMarkers);
 }
 
-function ambulanceIconHtml(status) {
-  let src = "ambulance.png";
-  if(status === STATUS.BUSY) {
-    src = "ambulance-busy.png";
-  }
-  else if(status === STATUS.UNAVAILABLE) {
-    src = "ambulance-unavailable.png";
-  }
-  return `<img src="${src}" width="41" height="41" alt="" draggable="false" style="display:block" />`;
+// The van is 41px at zoom 16 (A-07 beside Niazi Hospital, about one plot
+// wide) and halves with each zoom level out, down to 12px, so a zoomed-out
+// van still marks one point. It stays 41px at closer zooms.
+const ambulanceIconSize = 41;
+const ambulanceIconMinSize = 12;
+const ambulanceReferenceZoom = 16;
+const ambulanceIcons = {};        // "STATUS:size" -> L.Icon, built once and reused
+
+function ambulanceIconPx() {
+  const scaled = Math.round(ambulanceIconSize * 2 ** (map.getZoom() - ambulanceReferenceZoom));
+  return Math.min(ambulanceIconSize, Math.max(ambulanceIconMinSize, scaled));
 }
 
-function ambulanceIcon(status) {
-  return L.divIcon({
-    className: "ambulance-marker",
-    html: ambulanceIconHtml(status),
-    iconSize: [41, 41],
-    iconAnchor: [20.5, 20.5]
+// An image icon keeps one <img> per marker for its whole life: a status
+// change swaps the src on that element, and nothing else rebuilds it.
+function ambulanceIcon(status, size) {
+  const key = `${status}:${size}`;
+  if(!ambulanceIcons[key]) {
+    let src = "ambulance.png";
+    if(status === STATUS.BUSY) {
+      src = "ambulance-busy.png";
+    }
+    else if(status === STATUS.UNAVAILABLE) {
+      src = "ambulance-unavailable.png";
+    }
+    ambulanceIcons[key] = L.icon({
+      iconUrl: src,
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+      className: "ambulance-marker"
+    });
+  }
+  return ambulanceIcons[key];
+}
+
+// Zoom changes the drawn size only. The <img> and its src stay as they
+// are, so the picture is not loaded again.
+function resizeAmbulanceMarkers() {
+  const size = ambulanceIconPx();
+  Object.values(ambulanceMarkers).forEach((marker) => {
+    const icon = ambulanceIcon(marker.iconStatus, size);
+    if(marker.options.icon === icon) return;
+    marker.options.icon = icon;
+    const img = marker.getElement();
+    img.style.width = `${size}px`;
+    img.style.height = `${size}px`;
+    img.style.marginLeft = `${-size / 2}px`;
+    img.style.marginTop = `${-size / 2}px`;
   });
 }
 
@@ -454,13 +487,14 @@ function upsertAmbulanceMarker(amb) {
   if (!map) return;
   const latlng = [amb.lat, amb.lng];
   const tooltip = `${driverLabel(amb)} — ${amb.label} — ${amb.status}`;
+  const icon = ambulanceIcon(amb.status, ambulanceIconPx());
   if (ambulanceMarkers[amb.id]) {
     if (!animations[amb.id]) ambulanceMarkers[amb.id].setLatLng(latlng);
-    if (ambulanceMarkers[amb.id].iconStatus !== amb.status) {
-      ambulanceMarkers[amb.id].setIcon(ambulanceIcon(amb.status));
+    if (ambulanceMarkers[amb.id].options.icon !== icon) {
+      ambulanceMarkers[amb.id].setIcon(icon);
     }
   } else {
-    ambulanceMarkers[amb.id] = L.marker(latlng, { icon: ambulanceIcon(amb.status) })
+    ambulanceMarkers[amb.id] = L.marker(latlng, { icon })
       .bindTooltip(tooltip)
       .addTo(map);
   }
