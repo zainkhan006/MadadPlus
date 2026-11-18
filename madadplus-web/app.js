@@ -490,8 +490,9 @@ function upsertAmbulanceMarker(amb) {
   const icon = ambulanceIcon(amb.status, ambulanceIconPx());
   if (ambulanceMarkers[amb.id]) {
     if (!animations[amb.id]) ambulanceMarkers[amb.id].setLatLng(latlng);
-    if (ambulanceMarkers[amb.id].options.icon !== icon) {
-      ambulanceMarkers[amb.id].setIcon(icon);
+    if (ambulanceMarkers[amb.id].iconStatus !== amb.status) {
+      ambulanceMarkers[amb.id].options.icon = icon;
+      ambulanceMarkers[amb.id].getElement().src = icon.options.iconUrl;
     }
   } else {
     ambulanceMarkers[amb.id] = L.marker(latlng, { icon })

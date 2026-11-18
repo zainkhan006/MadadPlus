@@ -399,7 +399,12 @@ input, select {
 .legend-dot--busy { background: var(--marker-busy); }
 .legend-dot--unavailable { background: var(--marker-unavailable); }
 
-/* Ambulance marker icons (Leaflet divIcon) — represents the driver tied to that ambulance */
+/* Markers get their own layer, so they stay painted while the map pans and zooms */
+.leaflet-marker-pane {
+  will-change: transform;
+}
+
+/* Ambulance marker icons (Leaflet image icon) — represents the driver tied to that ambulance */
 .ambulance-marker {
   background: transparent;
   border: none;
