@@ -307,6 +307,72 @@ void main() {
     expect(session.api.emergencyPosts, 1);
   });
 
+  testWidgets('a searching ambulance request waits, then shows the ambulance', (
+    WidgetTester tester,
+  ) async {
+    final session = await reachAmbulanceRequest(tester);
+    session.api.scriptedEmergencyResult = const EmergencyRequestResult(
+      requestId: 'req-search',
+      status: 'QUEUED',
+      assignedAmbulance: null,
+      consideredNearest: null,
+      searching: true,
+    );
+
+    await tapText(tester, 'REQUEST NOW');
+    await pumpAsync(tester);
+
+    expect(find.text('FINDING HELP NOW'), findsOneWidget);
+    expect(find.text('All ambulances are busy'), findsNothing);
+
+    final assigned = EmergencyRequestResult(
+      requestId: 'req-search',
+      status: 'ASSIGNED',
+      assignedAmbulance: const AmbulanceAssignment(
+        id: 'amb-1',
+        label: 'A-01',
+        latitude: 24.805,
+        longitude: 67.0375,
+      ),
+      consideredNearest: null,
+      pickupLatitude: 24.8138,
+      pickupLongitude: 67.03,
+    );
+    session.socket.outcomeListener!(createEmergencyOutcome(assigned));
+    session.socket.assignedListener!(assigned);
+    await tester.pump();
+
+    expect(find.text('Ambulance is on its way'), findsOneWidget);
+    expect(find.text('A-01 was assigned.'), findsOneWidget);
+    expect(find.text('FINDING HELP NOW'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    session.state.dispose();
+  });
+
+  testWidgets('a search that runs out of ambulances tells the caller', (
+    WidgetTester tester,
+  ) async {
+    final session = await reachAmbulanceRequest(tester);
+    session.api.scriptedEmergencyResult = const EmergencyRequestResult(
+      requestId: 'req-search',
+      status: 'QUEUED',
+      assignedAmbulance: null,
+      consideredNearest: null,
+      searching: true,
+    );
+
+    await tapText(tester, 'REQUEST NOW');
+    await pumpAsync(tester);
+    expect(find.text('FINDING HELP NOW'), findsOneWidget);
+
+    session.socket.searchEndedListener!();
+    await tester.pump();
+
+    expect(find.text('All ambulances are busy'), findsOneWidget);
+    expect(find.text('FINDING HELP NOW'), findsNothing);
+  });
+
   testWidgets('a timed out ambulance request leaves the finding help spinner', (
     WidgetTester tester,
   ) async {
@@ -715,6 +781,84 @@ void main() {
 
     socket.driverAmbulanceListener!('amb-1', 'FREE');
     expect(state.driverAmbulanceStatus, 'FREE');
+  });
+
+  testWidgets('an offered driver accepts and gets the call', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    await reachDriverCall(tester, session.state);
+    expect(find.text('No call on this ambulance.'), findsOneWidget);
+    expect(find.text('Accept'), findsNothing);
+
+    session.socket.driverOfferListener!(offeredCall);
+    await tester.pump();
+
+    expect(find.text('Incoming call'), findsOneWidget);
+    expect(find.text('Clifton Block 5'), findsOneWidget);
+    expect(find.text('2 people still waiting'), findsOneWidget);
+    expect(find.text('Accident'), findsOneWidget);
+    expect(find.text('Caller +92 300 0000000'), findsOneWidget);
+    expect(find.text('Decline'), findsOneWidget);
+    expect(find.text('No call on this ambulance.'), findsNothing);
+
+    await tapText(tester, 'Accept');
+    await pumpAsync(tester);
+
+    expect(find.text('Pickup'), findsOneWidget);
+    expect(find.text('Picked up'), findsOneWidget);
+    expect(find.text('BUSY'), findsOneWidget);
+    expect(find.text('Accept'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    session.state.dispose();
+  });
+
+  testWidgets('an offered driver is told when the call was taken', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    await reachDriverCall(tester, session.state);
+
+    session.socket.driverOfferListener!(offeredCall);
+    await tester.pump();
+    session.socket.driverTakenListener!('req-1');
+    await tester.pump();
+
+    expect(find.text('The call was taken.'), findsOneWidget);
+    expect(find.text('No active call'), findsOneWidget);
+    expect(find.text('Accept'), findsNothing);
+
+    session.socket.driverOfferListener!(offeredCall);
+    await tester.pump();
+    expect(find.text('The call was taken.'), findsNothing);
+    session.api.acceptError = const ApiException(
+      'The call was taken.',
+      statusCode: 409,
+    );
+    await tapText(tester, 'Accept');
+    await pumpAsync(tester);
+
+    expect(find.text('The call was taken.'), findsOneWidget);
+    expect(find.text('Accept'), findsNothing);
+    expect(find.text('FREE'), findsOneWidget);
+  });
+
+  testWidgets('a driver who declines an offer goes back to no call', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    await reachDriverCall(tester, session.state);
+
+    session.socket.driverOfferListener!(offeredCall);
+    await tester.pump();
+    await tapText(tester, 'Decline');
+    await pumpAsync(tester);
+
+    expect(find.text('No active call'), findsOneWidget);
+    expect(find.text('No call on this ambulance.'), findsOneWidget);
+    expect(find.text('Accept'), findsNothing);
+    expect(session.api.declineCalls, 1);
   });
 
   testWidgets('a driver on a call cancels, then confirms, mark as unavailable', (
@@ -2045,14 +2189,23 @@ class SilentSocketService extends EmergencySocketService {
   final FakeEmergencyService? relay;
 
   void Function(String ambulanceId, String status)? driverAmbulanceListener;
+  void Function(EmergencyCall offer)? driverOfferListener;
+  void Function(String requestId)? driverTakenListener;
+  void Function(EmergencyOutcome outcome)? outcomeListener;
+  void Function(EmergencyRequestResult result)? assignedListener;
+  void Function()? searchEndedListener;
 
   @override
   void connectDriver({
     required String driverId,
     required void Function(EmergencyCall call) onCall,
     void Function(String ambulanceId, String status)? onAmbulance,
+    void Function(EmergencyCall offer)? onOffer,
+    void Function(String requestId)? onTaken,
   }) {
     driverAmbulanceListener = onAmbulance;
+    driverOfferListener = onOffer;
+    driverTakenListener = onTaken;
   }
 
   @override
@@ -2107,9 +2260,14 @@ class SilentSocketService extends EmergencySocketService {
     void Function(EmergencyCompletion completion)? onCompleted,
     void Function(String message, AmbulanceAssignment? assignment)?
         onCallerMessage,
+    void Function()? onSearchEnded,
     void Function()? onDisconnected,
     void Function()? onReconnected,
-  }) {}
+  }) {
+    outcomeListener = onOutcome;
+    assignedListener = onAssigned;
+    searchEndedListener = onSearchEnded;
+  }
 
   @override
   void disconnect() {}
@@ -2120,9 +2278,11 @@ class FakeEmergencyService extends EmergencyService {
   var domesticPosts = 0;
   var cancelCalls = 0;
   var reassignCalls = 0;
+  var declineCalls = 0;
   double? reassignLat;
   double? reassignLng;
   ApiException? reassignError;
+  ApiException? acceptError;
   EmergencyCall? portalCall;
   String? portalStatus;
   final jobs = <DomesticBooking>[];
@@ -2267,7 +2427,14 @@ class FakeEmergencyService extends EmergencyService {
     required String requestId,
     required String action,
   }) async {
-    if(action == 'pickup') {
+    if(action == 'accept') {
+      final error = acceptError;
+      if(error != null) {
+        throw error;
+      }
+      portalCall = callWith(status: 'ASSIGNED');
+    }
+    else if(action == 'pickup') {
       portalCall = callWith(
         status: 'PICKED_UP',
         hospitalName: 'Parklane Hospital',
@@ -2291,6 +2458,14 @@ class FakeEmergencyService extends EmergencyService {
       return completed;
     }
     return portalCall!;
+  }
+
+  @override
+  Future<void> declineDriverRequest({
+    required String driverId,
+    required String requestId,
+  }) async {
+    declineCalls += 1;
   }
 
   @override
@@ -2555,10 +2730,23 @@ class FakeEmergencyService extends EmergencyService {
   }
 }
 
+const offeredCall = EmergencyCall(
+  requestId: 'req-1',
+  status: 'QUEUED',
+  pickupAddress: 'Clifton Block 5',
+  emergencyDescription: 'Accident',
+  peopleCount: 2,
+  callerPhone: '+92 300 0000000',
+  hospitalName: null,
+  hospitalAddress: null,
+  assignedDriverId: null,
+);
+
 class TestSession {
-  TestSession({required this.api, required this.state});
+  TestSession({required this.api, required this.socket, required this.state});
 
   final FakeEmergencyService api;
+  final SilentSocketService socket;
   final EmergencyRequestState state;
 }
 
@@ -2582,11 +2770,13 @@ TestSession testSession({
           )
         : null,
   );
+  final socket = SilentSocketService(relay: api);
   return TestSession(
     api: api,
+    socket: socket,
     state: EmergencyRequestState(
       emergencyService: api,
-      socketService: SilentSocketService(relay: api),
+      socketService: socket,
       demoUserId: demoUserId,
     ),
   );

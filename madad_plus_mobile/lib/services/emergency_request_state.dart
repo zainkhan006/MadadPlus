@@ -182,6 +182,8 @@ class EmergencyRequestState extends ChangeNotifier {
   String? driverAmbulanceLabel;
   String? driverAmbulanceStatus;
   EmergencyCall? driverCall;
+  EmergencyCall? driverOffer;
+  String? driverOfferNotice;
   bool driverLoading = false;
   String? driverError;
   AmbulanceRow? matchedDriver;
@@ -1747,11 +1749,15 @@ class EmergencyRequestState extends ChangeNotifier {
     driverAmbulanceLat = ambulance.latitude;
     driverAmbulanceLng = ambulance.longitude;
     driverCall = null;
+    driverOffer = null;
+    driverOfferNotice = null;
     clearRoute();
     _emergencySocketService.connectDriver(
       driverId: id,
       onCall: _receiveDriverCall,
       onAmbulance: _receiveAmbulanceStatus,
+      onOffer: _receiveDriverOffer,
+      onTaken: _receiveOfferTaken,
     );
     loadDriverPortal();
   }
@@ -1764,6 +1770,8 @@ class EmergencyRequestState extends ChangeNotifier {
     driverAmbulanceLat = null;
     driverAmbulanceLng = null;
     driverCall = null;
+    driverOffer = null;
+    driverOfferNotice = null;
     matchedDriver = null;
     clearRoute();
     goTo(EmergencyScreen.login);
@@ -1852,10 +1860,86 @@ class EmergencyRequestState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _receiveDriverOffer(EmergencyCall offer) {
+    if(driverId == null || driverCall != null) {
+      return;
+    }
+    driverOffer = offer;
+    driverOfferNotice = null;
+    notifyListeners();
+  }
+
+  void _receiveOfferTaken(String requestId) {
+    if(driverOffer?.requestId != requestId) {
+      return;
+    }
+    driverOffer = null;
+    driverOfferNotice = 'The call was taken.';
+    notifyListeners();
+  }
+
+  Future<void> acceptDriverOffer() async {
+    final id = driverId;
+    final offer = driverOffer;
+    if(id == null || offer == null || driverLoading) {
+      return;
+    }
+
+    driverLoading = true;
+    driverError = null;
+    notifyListeners();
+    try {
+      driverCall = await _emergencyService.updateDriverRequest(
+        driverId: id,
+        requestId: offer.requestId,
+        action: 'accept',
+      );
+      driverOffer = null;
+      driverAmbulanceStatus = 'BUSY';
+      syncDriverRoute();
+    } on ApiException catch (error) {
+      if(error.statusCode == 409) {
+        driverOffer = null;
+        driverOfferNotice = 'The call was taken.';
+      }
+      else {
+        driverError = error.message;
+      }
+    } on TimeoutException {
+      driverError = 'The server did not answer in time. Try again.';
+    } catch (_) {
+      driverError = 'The call could not be accepted. Try again.';
+    } finally {
+      driverLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> declineDriverOffer() async {
+    final id = driverId;
+    final offer = driverOffer;
+    if(id == null || offer == null) {
+      return;
+    }
+
+    driverOffer = null;
+    notifyListeners();
+    try {
+      await _emergencyService.declineDriverRequest(
+        driverId: id,
+        requestId: offer.requestId,
+      );
+    } catch (_) {
+      // A decline that does not arrive lapses on the server when the offer times out.
+    }
+  }
+
   void _receiveDriverCall(EmergencyCall call) {
     final forThisDriver = call.assignedDriverId == driverId;
     if(forThisDriver && !_closedCallStatuses.contains(call.status)) {
       driverCall = call;
+      driverOffer = null;
+      driverOfferNotice = null;
       driverAmbulanceStatus = 'BUSY';
       syncDriverRoute();
     }
@@ -2298,7 +2382,10 @@ class EmergencyRequestState extends ChangeNotifier {
       );
 
       rememberEmergencyRequest();
-      if(result!.status == 'QUEUED') {
+      if(result!.status == 'QUEUED' && result!.searching) {
+        _connectToRequest(result!.requestId);
+      }
+      else if(result!.status == 'QUEUED') {
         currentScreen = EmergencyScreen.emergencyBusy;
       }
       else {
@@ -2819,7 +2906,17 @@ class EmergencyRequestState extends ChangeNotifier {
         result = incoming;
         rememberEmergencyRequest();
         beginCallerLeg(incoming);
+        if(currentScreen == EmergencyScreen.emergencySearch) {
+          currentScreen = EmergencyScreen.emergencyAssigned;
+          _startArrivalSimulation();
+        }
         notifyListeners();
+      },
+      onSearchEnded: () {
+        if(currentScreen == EmergencyScreen.emergencySearch) {
+          currentScreen = EmergencyScreen.emergencyBusy;
+          notifyListeners();
+        }
       },
       onPickedUp: receivePickup,
       onReconnected: () {

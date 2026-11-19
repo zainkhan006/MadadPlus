@@ -1229,11 +1229,15 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
     }
 
     final call = state.driverCall;
+    final offer = call == null ? state.driverOffer : null;
     final atPickup = _pickupStatuses.contains(call?.status);
     final toHospital = _hospitalStatuses.contains(call?.status);
     final atDropoff = call?.status == 'ARRIVED';
     final String title;
-    if(call == null) {
+    if(offer != null) {
+      title = 'Incoming call';
+    }
+    else if(call == null) {
       title = 'No active call';
     }
     else if(atPickup) {
@@ -1295,11 +1299,17 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: AppSpacing.space2),
-          if(call == null)
+          if(call == null && offer == null)
             Text(
-              'No call on this ambulance.',
+              state.driverOfferNotice ?? 'No call on this ambulance.',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
+          if(offer != null)
+            for(final line in _driverDetailLines(offer, atHospital: false))
+              Text(
+                line,
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
           if(call != null)
             for(final line in _driverDetailLines(
               call,
@@ -1314,6 +1324,20 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
             _ErrorNotice(message: state.driverError!),
           ],
           const SizedBox(height: AppSpacing.space5),
+          if(offer != null) ...[
+            _ActionButton(
+              label: 'Accept',
+              onPressed: busy ? null : state.acceptDriverOffer,
+            ),
+            const SizedBox(height: AppSpacing.space3),
+            _PressScale(
+              child: _SecondaryButton(
+                label: 'Decline',
+                onPressed: busy ? null : state.declineDriverOffer,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.space3),
+          ],
           if(atPickup)
             _ActionButton(
               label: 'Picked up',

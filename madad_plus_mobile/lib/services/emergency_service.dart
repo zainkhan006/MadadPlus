@@ -86,6 +86,7 @@ class EmergencyRequestResult {
     this.pickupLatitude,
     this.pickupLongitude,
     this.updatedAt,
+    this.searching = false,
   });
 
   final String requestId;
@@ -95,12 +96,14 @@ class EmergencyRequestResult {
   final double? pickupLatitude;
   final double? pickupLongitude;
   final DateTime? updatedAt;
+  final bool searching;
 
   factory EmergencyRequestResult.fromJson(Map<String, dynamic> json) {
     final pickup = _point(json['pickupLocation']);
     return EmergencyRequestResult(
       requestId: json['requestId'] as String,
       status: json['status'] as String,
+      searching: json['searching'] == true,
       pickupLatitude: pickup?.lat,
       pickupLongitude: pickup?.lng,
       updatedAt: _time(json['updatedAt']),
@@ -632,6 +635,19 @@ class EmergencyService {
       'The $action update could not be sent.',
     );
     return EmergencyCall.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<void> declineDriverRequest({
+    required String driverId,
+    required String requestId,
+  }) async {
+    await _send(
+      http.patch(
+        Uri.parse('$baseUrl/api/v1/drivers/$driverId/requests/$requestId/decline'),
+        headers: _headers,
+      ),
+      'The call could not be declined.',
+    );
   }
 
   Future<DriverReassignment> reassignDriverRequest({
