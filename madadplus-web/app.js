@@ -1114,6 +1114,7 @@ function untrackRequest(requestId) {
   }
   removeHospitalMarker(requestId);
   removeRequestPin(requestId);
+  removeSearchRing(requestId);
 }
 
 // Every request-lifecycle event (queued, assigned, enRoute, pickedUp,
@@ -1186,6 +1187,68 @@ socket.on("request.completed", (payload) => {
     untrackRequest(payload.requestId);
     renderAll();
   }
+});
+
+// ---- Search ring (search.updated / search.ended from the server) ----
+// One circle per request, centred on its dispatch point. Each update grows
+// it from the radius already drawn to the next ring across 15 seconds.
+// search.ended stops it where it is.
+const searchRings = {}; // request id -> { circle, frame }
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+function stopSearchRing(requestId) {
+  const ring = searchRings[requestId];
+  if (ring) cancelAnimationFrame(ring.frame);
+}
+
+function removeSearchRing(requestId) {
+  const ring = searchRings[requestId];
+  if (!ring) return;
+  cancelAnimationFrame(ring.frame);
+  map.removeLayer(ring.circle);
+  delete searchRings[requestId];
+}
+
+function drawSearchRing(payload) {
+  if (!map || !payload || !payload.requestId || !payload.center) return;
+  const center = [payload.center.lat, payload.center.lng];
+  let ring = searchRings[payload.requestId];
+  if (!ring) {
+    const color = getComputedStyle(document.documentElement).getPropertyValue("--accent-critical").trim();
+    ring = {
+      circle: L.circle(center, {
+        radius: payload.fromRadius || 0,
+        color,
+        weight: 2,
+        fillColor: color,
+        fillOpacity: 0.08,
+        interactive: false
+      }).addTo(map),
+      frame: null
+    };
+    searchRings[payload.requestId] = ring;
+  }
+  stopSearchRing(payload.requestId);
+  ring.circle.setLatLng(center);
+
+  const from = ring.circle.getRadius();
+  const to = payload.toRadius;
+  if (reducedMotion.matches || !payload.durationMs || from === to) {
+    ring.circle.setRadius(to);
+    return;
+  }
+  const start = performance.now();
+  function step(now) {
+    const t = Math.min(1, (now - start) / payload.durationMs);
+    ring.circle.setRadius(from + (to - from) * t);
+    if (t < 1) ring.frame = requestAnimationFrame(step);
+  }
+  ring.frame = requestAnimationFrame(step);
+}
+
+socket.on("search.updated", drawSearchRing);
+socket.on("search.ended", (payload) => {
+  if (payload && payload.requestId) stopSearchRing(payload.requestId);
 });
 
 // ---- Login screen ----
