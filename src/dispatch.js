@@ -92,14 +92,20 @@ async function assignSpecific(trx, requestId, ambulanceId, phase, reason) {
   return true;
 }
 
-async function assignNearest(trx, requestId, phase, reason) {
+// Every FREE ambulance the request may use, closest first, with its
+// straight-line distance in metres from the request's dispatch point.
+async function freeAmbulancesByDistance(trx, requestId) {
   const request = await getRequest(trx, requestId);
   if (!request || !request.dispatch_location) {
-    return false;
+    return [];
   }
 
-  const candidates = await trx("ambulances")
-    .select("id")
+  return trx("ambulances")
+    .select("id", "driver_id")
+    .select(trx.raw(
+      "ST_Distance(ambulances.location, (select dispatch_location from emergency_requests where id = ?)) as distance_m",
+      [requestId]
+    ))
     .where({ organization_id: request.organization_id, status: "FREE" })
     .whereNotExists(
       trx("request_ambulance_blocks")
@@ -111,17 +117,11 @@ async function assignNearest(trx, requestId, phase, reason) {
       "ambulances.location <-> (select dispatch_location from emergency_requests where id = ?)",
       [requestId]
     );
-
-  for (const candidate of candidates) {
-    if (await assignSpecific(trx, requestId, candidate.id, phase, reason)) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
-async function dispatchQueuedForAmbulance(trx, ambulanceId) {
+// skipRequestIds are requests whose ring search is still running, so a
+// van that becomes free does not jump the 15-second count.
+async function dispatchQueuedForAmbulance(trx, ambulanceId, skipRequestIds = []) {
   const ambulance = await trx("ambulances")
     .select("id", "organization_id", "location")
     .where("id", ambulanceId)
@@ -135,6 +135,7 @@ async function dispatchQueuedForAmbulance(trx, ambulanceId) {
     .select("id", "current_phase")
     .where("organization_id", ambulance.organization_id)
     .whereIn("status", QUEUED_STATUSES)
+    .whereNotIn("id", skipRequestIds)
     .orderByRaw(
       "dispatch_location <-> (select location from ambulances where id = ?)",
       [ambulanceId]
@@ -244,7 +245,7 @@ async function requestPayload(trx, requestId) {
 
 module.exports = {
   QUEUED_STATUSES,
-  assignNearest,
+  freeAmbulancesByDistance,
   assignSpecific,
   closeActiveAssignment,
   dispatchQueuedForAmbulance,
