@@ -7,7 +7,8 @@ const crypto = require("crypto");
 const { Server } = require("socket.io");
 const db = require("./db");
 const {
-  assignNearest,
+  QUEUED_STATUSES,
+  freeAmbulancesByDistance,
   assignSpecific,
   closeActiveAssignment,
   dispatchQueuedForAmbulance,
@@ -234,9 +235,176 @@ function emitDomesticRequest(request, event) {
   }
 }
 
-async function assignAndLoad(trx, requestId, phase, reason) {
-  await assignNearest(trx, requestId, phase, reason);
-  return requestPayload(trx, requestId);
+// Ring search: a queued request looks for FREE ambulances inside a
+// radius that starts at 300 m and grows by 500 m every 15 seconds. One
+// ambulance inside the ring is assigned. Several are offered the call
+// and the first driver to accept gets it. Searches live in memory, so a
+// restart leaves the request QUEUED for the existing queue.
+const SEARCH_START_METRES = 300;
+const SEARCH_GROW_METRES = 500;
+const SEARCH_RING_MS = 15000;
+const searches = new Map(); // request id -> search
+
+function searchingRequestIds() {
+  return [...searches.keys()];
+}
+
+function emitSearch(search, fromRadius) {
+  io.to("dispatch").emit("search.updated", {
+    requestId: search.requestId,
+    center: search.center,
+    fromRadius,
+    toRadius: search.radius,
+    durationMs: fromRadius === search.radius ? 0 : SEARCH_RING_MS
+  });
+}
+
+function runSearchStep(search, step) {
+  search.timer = setTimeout(() => {
+    step(search).catch((error) => {
+      console.error(error.message);
+    });
+  }, SEARCH_RING_MS);
+}
+
+function growSearch(search) {
+  const fromRadius = search.radius;
+  search.radius = fromRadius === 0 ? SEARCH_START_METRES : fromRadius + SEARCH_GROW_METRES;
+  search.offering = false;
+  emitSearch(search, fromRadius);
+  runSearchStep(search, countSearch);
+}
+
+async function eligibleAmbulances(search) {
+  const free = await freeAmbulancesByDistance(db, search.requestId);
+  return free.filter((ambulance) => !search.declined.has(ambulance.id));
+}
+
+// Returns true when a search started. With no FREE ambulance to look
+// for, the request stays on the existing queue.
+async function startSearch(payload, phase, reason) {
+  stopSearch(payload.requestId);
+  const search = {
+    requestId: payload.requestId,
+    center: payload.dispatchLocation,
+    phase,
+    reason,
+    radius: 0,
+    offering: false,
+    coversAll: false,
+    offered: new Map(), // ambulance id -> driver id
+    declined: new Set(),
+    timer: null
+  };
+  if ((await eligibleAmbulances(search)).length === 0) {
+    return false;
+  }
+  searches.set(search.requestId, search);
+  growSearch(search);
+  return true;
+}
+
+function stopSearch(requestId, assignedAmbulanceId) {
+  const search = searches.get(requestId);
+  if (!search) return;
+  clearTimeout(search.timer);
+  searches.delete(requestId);
+  search.offered.forEach((driverId, ambulanceId) => {
+    if (driverId && ambulanceId !== assignedAmbulanceId) {
+      io.to(`driver:${driverId}`).emit("request.taken", { requestId });
+    }
+  });
+  io.to("dispatch").emit("search.ended", { requestId });
+}
+
+// No ambulance left to ask: the caller is told and the request waits
+// on the existing queue.
+function giveUpSearch(search) {
+  stopSearch(search.requestId);
+  io.to(`request:${search.requestId}`).emit("request.queued", {
+    requestId: search.requestId,
+    status: "QUEUED",
+    searching: false
+  });
+}
+
+// Tries the ambulances in order and assigns the first that is still
+// FREE. The request row is locked, so two drivers accepting at once
+// cannot both win.
+async function assignFromSearch(search, ambulanceIds) {
+  const payload = await db.transaction(async (trx) => {
+    await trx("emergency_requests").select("id").where("id", search.requestId).forUpdate().first();
+    for (const ambulanceId of ambulanceIds) {
+      if (await assignSpecific(trx, search.requestId, ambulanceId, search.phase, search.reason)) {
+        return requestPayload(trx, search.requestId);
+      }
+    }
+    return null;
+  });
+  if (!payload) return null;
+
+  stopSearch(search.requestId, payload.assignedAmbulance.id);
+  if (search.reason === "BREAKDOWN_REPLACEMENT") {
+    emitRequest(
+      {
+        ...payload,
+        reassignmentStatus: "ASSIGNED",
+        callerMessage: `Your ambulance has changed to ${payload.assignedAmbulance.label}.`
+      },
+      "request.reassigned"
+    );
+  } else {
+    emitRequest(payload, "request.assigned");
+  }
+  await emitAmbulance(payload.assignedAmbulance.id);
+  return payload;
+}
+
+// End of a 15-second ring: count the FREE ambulances inside it.
+async function countSearch(search) {
+  const request = await getRequest(db, search.requestId);
+  if (searches.get(search.requestId) !== search) return;
+  if (!request || !QUEUED_STATUSES.includes(request.status)) {
+    return stopSearch(search.requestId);
+  }
+
+  const eligible = await eligibleAmbulances(search);
+  if (searches.get(search.requestId) !== search) return;
+  if (eligible.length === 0) return giveUpSearch(search);
+
+  const inside = eligible.filter((ambulance) => Number(ambulance.distance_m) <= search.radius);
+  if (inside.length === 0) return growSearch(search);
+  if (inside.length === 1) {
+    const assigned = await assignFromSearch(search, [inside[0].id]);
+    if (!assigned && searches.get(search.requestId) === search) growSearch(search);
+    return;
+  }
+
+  const payload = await requestPayload(db, search.requestId);
+  if (searches.get(search.requestId) !== search) return;
+  inside.forEach((ambulance) => {
+    search.offered.set(ambulance.id, ambulance.driver_id);
+    if (ambulance.driver_id) {
+      io.to(`driver:${ambulance.driver_id}`).emit("request.offered", payload);
+    }
+  });
+  search.offering = true;
+  search.coversAll = inside.length === eligible.length;
+  emitSearch(search, search.radius);
+  runSearchStep(search, closeOffers);
+}
+
+// Nobody accepted. A wider ring can still find someone new. Once the
+// ring already holds every FREE ambulance, the nearest is assigned so
+// the call is not left waiting on drivers who never answer.
+async function closeOffers(search) {
+  if (searches.get(search.requestId) !== search) return;
+  if (!search.coversAll) return growSearch(search);
+
+  const eligible = await eligibleAmbulances(search);
+  if (searches.get(search.requestId) !== search) return;
+  const assigned = await assignFromSearch(search, eligible.map((ambulance) => ambulance.id));
+  if (!assigned && searches.get(search.requestId) === search) giveUpSearch(search);
 }
 
 async function completeRequest(requestId) {
@@ -266,7 +434,8 @@ async function completeRequest(requestId) {
 
     const waitingRequestId = await dispatchQueuedForAmbulance(
       trx,
-      request.assigned_ambulance_id
+      request.assigned_ambulance_id,
+      searchingRequestIds()
     );
     return {
       statusCode: 200,
@@ -536,7 +705,6 @@ app.post("/api/v1/emergency-requests", async (req, res) => {
           [Number(lng), Number(lat)]
         );
 
-      await assignAndLoad(trx, request.id, "PICKUP", "AUTOMATIC");
       const payload = await requestPayload(trx, request.id);
       const nearest = allNearby[0];
 
@@ -556,14 +724,9 @@ app.post("/api/v1/emergency-requests", async (req, res) => {
       };
     });
 
-    emitRequest(
-      result.payload,
-      result.payload.status === "QUEUED" ? "request.queued" : "request.assigned"
-    );
-    if (result.payload.assignedAmbulance) {
-      await emitAmbulance(result.payload.assignedAmbulance.id);
-    }
-    res.status(201).json(result.response);
+    const searching = await startSearch(result.payload, "PICKUP", "AUTOMATIC");
+    emitRequest(result.payload, "request.queued");
+    res.status(201).json({ ...result.response, searching });
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Unable to create emergency request" });
@@ -711,6 +874,46 @@ app.patch("/api/v1/drivers/:driverId/requests/:requestId/pickup", async (req, re
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Unable to confirm pickup" });
+  }
+});
+
+// The ambulance this driver was offered the request on, while the
+// search is still open.
+async function offeredAmbulanceId(search, driverId) {
+  if (!search) return null;
+  const ambulance = await db("ambulances").select("id").where("driver_id", driverId).first();
+  return ambulance && search.offered.has(ambulance.id) ? ambulance.id : null;
+}
+
+app.patch("/api/v1/drivers/:driverId/requests/:requestId/accept", async (req, res) => {
+  try {
+    const search = searches.get(req.params.requestId);
+    const ambulanceId = await offeredAmbulanceId(search, req.params.driverId);
+    const payload = ambulanceId ? await assignFromSearch(search, [ambulanceId]) : null;
+    if (!payload) return res.status(409).json({ error: "The call was taken." });
+    res.json(payload);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to accept the call" });
+  }
+});
+
+app.patch("/api/v1/drivers/:driverId/requests/:requestId/decline", async (req, res) => {
+  try {
+    const search = searches.get(req.params.requestId);
+    const ambulanceId = await offeredAmbulanceId(search, req.params.driverId);
+    if (ambulanceId && searches.get(req.params.requestId) === search) {
+      search.declined.add(ambulanceId);
+      const allDeclined = [...search.offered.keys()].every((id) => search.declined.has(id));
+      if (search.offering && allDeclined) {
+        clearTimeout(search.timer);
+        await closeOffers(search);
+      }
+    }
+    res.json({ requestId: req.params.requestId, declined: true });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to decline the call" });
   }
 });
 
@@ -886,23 +1089,15 @@ async function markUnavailable(driverId, reason, lat, lng, ambulanceIdOverride, 
           updated_at: trx.fn.now()
         });
 
-      await assignNearest(
-        trx,
-        request.id,
-        afterPickup ? "TRANSFER" : "PICKUP",
-        "BREAKDOWN_REPLACEMENT"
-      );
       replacementRequestId = request.id;
 
-      const payload = await requestPayload(trx, request.id);
-      const reassigned = Boolean(payload.assignedAmbulance);
-      requestEvent = reassigned ? "request.reassigned" : "request.queued";
+      // The replacement is found by the ring search, started once this
+      // transaction has committed.
+      requestEvent = "request.queued";
       requestEventPayload = {
-        ...payload,
-        reassignmentStatus: reassigned ? "ASSIGNED" : "QUEUED",
-        callerMessage: reassigned
-          ? `Your ambulance has changed to ${payload.assignedAmbulance.label}.`
-          : "Your ambulance is unavailable. We are finding a replacement now."
+        ...(await requestPayload(trx, request.id)),
+        reassignmentStatus: "QUEUED",
+        callerMessage: "Your ambulance is unavailable. We are finding a replacement now."
       };
 
       if (hasCoordinates) {
@@ -937,13 +1132,14 @@ async function publishUnavailableResult(result) {
   await emitAmbulance(result.ambulanceId);
   if (!result.requestEventPayload) return;
 
+  await startSearch(
+    result.requestEventPayload,
+    result.requestEventPayload.phase === "TRANSFER" ? "TRANSFER" : "PICKUP",
+    "BREAKDOWN_REPLACEMENT"
+  );
   emitRequest(result.requestEventPayload, result.requestEvent);
-  const nextDriverId = result.requestEventPayload.assignedAmbulance?.driver?.id;
-  if (result.previousDriverId && result.previousDriverId !== nextDriverId) {
+  if (result.previousDriverId) {
     io.to(`driver:${result.previousDriverId}`).emit("request.reassigned", result.requestEventPayload);
-  }
-  if (result.requestEventPayload.assignedAmbulance) {
-    await emitAmbulance(result.requestEventPayload.assignedAmbulance.id);
   }
 }
 
@@ -1015,7 +1211,11 @@ app.patch("/api/v1/drivers/:driverId/available", async (req, res) => {
         unavailable_reason: null,
         updated_at: trx.fn.now()
       });
-      const waitingRequestId = await dispatchQueuedForAmbulance(trx, ambulance.id);
+      const waitingRequestId = await dispatchQueuedForAmbulance(
+        trx,
+        ambulance.id,
+        searchingRequestIds()
+      );
       return { ambulanceId: ambulance.id, waitingRequestId };
     });
 
@@ -1080,7 +1280,11 @@ app.patch("/api/v1/ambulances/:ambulanceId/status", async (req, res) => {
       await trx("ambulances")
         .where("id", req.params.ambulanceId)
         .update({ status: "FREE", unavailable_reason: null, updated_at: trx.fn.now() });
-      const waitingRequestId = await dispatchQueuedForAmbulance(trx, req.params.ambulanceId);
+      const waitingRequestId = await dispatchQueuedForAmbulance(
+        trx,
+        req.params.ambulanceId,
+        searchingRequestIds()
+      );
       return { waitingRequestId, cancelledRequestId };
     });
     if (result.notFound) return res.status(404).json({ error: "Ambulance not found" });
@@ -1152,6 +1356,7 @@ app.post("/api/v1/emergency-requests/:requestId/assign", async (req, res) => {
     });
 
     if (result.statusCode === 200) {
+      stopSearch(req.params.requestId, result.body.assignedAmbulance?.id);
       emitRequest(result.body, "request.reassigned");
       if (result.body.assignedAmbulance) await emitAmbulance(result.body.assignedAmbulance.id);
     }
