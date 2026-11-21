@@ -156,6 +156,7 @@ async function requestPayload(trx, requestId) {
     .leftJoin("ambulances as a", "a.id", "r.assigned_ambulance_id")
     .leftJoin("drivers as d", "d.id", "a.driver_id")
     .leftJoin("hospitals as h", "h.id", "r.hospital_id")
+    .leftJoin("users as caller", "caller.id", "r.caller_user_id")
     .select(
       "r.id as request_id",
       "r.status",
@@ -171,7 +172,9 @@ async function requestPayload(trx, requestId) {
       "r.hospital_id",
       "r.hospital_address",
       "r.assigned_ambulance_id",
+      "r.caller_user_id",
       "r.updated_at",
+      "caller.name as caller_name",
       "h.name as hospital_name",
       "a.label as ambulance_label",
       "d.id as driver_id",
@@ -200,6 +203,9 @@ async function requestPayload(trx, requestId) {
     phase: request.current_phase,
     type: request.type,
     callerPhone: request.caller_phone,
+    caller: request.caller_user_id
+      ? { id: request.caller_user_id, name: request.caller_name }
+      : null,
     pickupAddress: request.pickup_address,
     pickupLocation: {
       lat: Number(request.pickup_lat),

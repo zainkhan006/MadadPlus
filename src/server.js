@@ -236,10 +236,11 @@ function emitDomesticRequest(request, event) {
 }
 
 // Ring search: a queued request looks for FREE ambulances inside a
-// radius that starts at 300 m and grows by 500 m every 15 seconds. One
-// ambulance inside the ring is assigned. Several are offered the call
-// and the first driver to accept gets it. Searches live in memory, so a
-// restart leaves the request QUEUED for the existing queue.
+// radius that starts at 300 m and grows by 500 m every 15 seconds.
+// Every free ambulance inside the ring is offered the call, whether
+// that is one ambulance or several. The first driver to accept is
+// assigned. The ring keeps growing until that accept. Searches live in
+// memory, so a restart leaves the request QUEUED for the existing queue.
 const SEARCH_START_METRES = 300;
 const SEARCH_GROW_METRES = 500;
 const SEARCH_RING_MS = 15000;
@@ -291,7 +292,6 @@ async function startSearch(payload, phase, reason) {
     reason,
     radius: 0,
     offering: false,
-    coversAll: false,
     offered: new Map(), // ambulance id -> driver id
     declined: new Set(),
     timer: null
@@ -360,7 +360,10 @@ async function assignFromSearch(search, ambulanceIds) {
   return payload;
 }
 
-// End of a 15-second ring: count the FREE ambulances inside it.
+// End of a 15-second ring. Offer every free ambulance that has just
+// come inside, then grow again. An accept is the only thing that stops
+// the ring. A driver who never answers stays on the offer while the
+// ring moves on to ambulances farther out.
 async function countSearch(search) {
   const request = await getRequest(db, search.requestId);
   if (searches.get(search.requestId) !== search) return;
@@ -373,38 +376,20 @@ async function countSearch(search) {
   if (eligible.length === 0) return giveUpSearch(search);
 
   const inside = eligible.filter((ambulance) => Number(ambulance.distance_m) <= search.radius);
-  if (inside.length === 0) return growSearch(search);
-  if (inside.length === 1) {
-    const assigned = await assignFromSearch(search, [inside[0].id]);
-    if (!assigned && searches.get(search.requestId) === search) growSearch(search);
-    return;
+  const fresh = inside.filter((ambulance) => !search.offered.has(ambulance.id));
+  if (fresh.length > 0) {
+    const payload = await requestPayload(db, search.requestId);
+    if (searches.get(search.requestId) !== search) return;
+    fresh.forEach((ambulance) => {
+      search.offered.set(ambulance.id, ambulance.driver_id);
+      if (ambulance.driver_id) {
+        io.to(`driver:${ambulance.driver_id}`).emit("request.offered", payload);
+      }
+    });
+    search.offering = true;
   }
 
-  const payload = await requestPayload(db, search.requestId);
-  if (searches.get(search.requestId) !== search) return;
-  inside.forEach((ambulance) => {
-    search.offered.set(ambulance.id, ambulance.driver_id);
-    if (ambulance.driver_id) {
-      io.to(`driver:${ambulance.driver_id}`).emit("request.offered", payload);
-    }
-  });
-  search.offering = true;
-  search.coversAll = inside.length === eligible.length;
-  emitSearch(search, search.radius);
-  runSearchStep(search, closeOffers);
-}
-
-// Nobody accepted. A wider ring can still find someone new. Once the
-// ring already holds every FREE ambulance, the nearest is assigned so
-// the call is not left waiting on drivers who never answer.
-async function closeOffers(search) {
-  if (searches.get(search.requestId) !== search) return;
-  if (!search.coversAll) return growSearch(search);
-
-  const eligible = await eligibleAmbulances(search);
-  if (searches.get(search.requestId) !== search) return;
-  const assigned = await assignFromSearch(search, eligible.map((ambulance) => ambulance.id));
-  if (!assigned && searches.get(search.requestId) === search) giveUpSearch(search);
+  growSearch(search);
 }
 
 async function completeRequest(requestId) {
@@ -641,6 +626,7 @@ app.post("/api/v1/emergency-requests", async (req, res) => {
     additionalDetails,
     inputMethod,
     callerPhone,
+    callerUserId,
     hospitalAddress,
     hospitalLat,
     hospitalLng
@@ -671,11 +657,16 @@ app.post("/api/v1/emergency-requests", async (req, res) => {
     const result = await db.transaction(async (trx) => {
       const orgId = await organizationId(trx);
       const pointValue = point(trx, lat, lng);
+      const callerId = String(callerUserId || "").trim();
+      const caller = callerId
+        ? await trx("users").select("id").where("id", callerId).first()
+        : null;
       const [request] = await trx("emergency_requests")
         .insert({
           organization_id: orgId,
           type,
           caller_phone: callerPhone || null,
+          caller_user_id: caller ? caller.id : null,
           pickup_address: String(address).trim(),
           emergency_description: String(description).trim(),
           people_count: parsedPeopleCount,
@@ -904,11 +895,6 @@ app.patch("/api/v1/drivers/:driverId/requests/:requestId/decline", async (req, r
     const ambulanceId = await offeredAmbulanceId(search, req.params.driverId);
     if (ambulanceId && searches.get(req.params.requestId) === search) {
       search.declined.add(ambulanceId);
-      const allDeclined = [...search.offered.keys()].every((id) => search.declined.has(id));
-      if (search.offering && allDeclined) {
-        clearTimeout(search.timer);
-        await closeOffers(search);
-      }
     }
     res.json({ requestId: req.params.requestId, declined: true });
   } catch (error) {
