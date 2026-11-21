@@ -194,6 +194,7 @@ class EmergencySocketService {
     disconnectDomestic();
     final domesticSocket = _joinRoom('join:domestic-request', requestId);
     for(final eventName in [
+      'domestic.payment_ready',
       'domestic.accepted',
       'domestic.cancelled',
       'domestic.cost_submitted',
