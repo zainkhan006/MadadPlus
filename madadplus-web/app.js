@@ -1084,6 +1084,8 @@ socket.on("queue.updated", (payload) => {
     untrackRequest(payload.requestId);
   } else {
     trackRequest(payload);
+    const assignedId = payload.assignedAmbulance?.id || payload.ambulanceId || null;
+    if (assignedId) removeSearchRing(payload.requestId);
     // Breakdown left the call with no unit: pop the nearest-driver picker
     // so the dispatcher can put one on it (backend may have auto-assigned
     // already — then this flag is false and nothing pops).
@@ -1149,7 +1151,7 @@ socket.on("request.completed", (payload) => {
 // ---- Search ring (search.updated / search.ended from the server) ----
 // One circle per request, centred on its dispatch point. Each update grows
 // it from the radius already drawn to the next ring across 15 seconds.
-// search.ended stops it where it is.
+// search.ended takes the circle off the map.
 const searchRings = {}; // request id -> { circle, frame }
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -1205,7 +1207,7 @@ function drawSearchRing(payload) {
 
 socket.on("search.updated", drawSearchRing);
 socket.on("search.ended", (payload) => {
-  if (payload && payload.requestId) stopSearchRing(payload.requestId);
+  if (payload && payload.requestId) removeSearchRing(payload.requestId);
 });
 
 // ---- Login screen ----
