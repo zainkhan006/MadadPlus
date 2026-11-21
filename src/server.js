@@ -32,9 +32,6 @@ io.on("connection", (socket) => {
   socket.on("domestic.inspecting", (requestId) => {
     relayDomestic(requestId, "domestic.inspecting");
   });
-  socket.on("domestic.work_finished", (requestId) => {
-    relayDomestic(requestId, "domestic.work_finished");
-  });
 });
 
 function validCoordinates(lat, lng) {
@@ -292,6 +289,7 @@ async function startSearch(payload, phase, reason) {
     reason,
     radius: 0,
     offering: false,
+    coveredOnce: false,
     offered: new Map(), // ambulance id -> driver id
     declined: new Set(),
     timer: null
@@ -361,9 +359,10 @@ async function assignFromSearch(search, ambulanceIds) {
 }
 
 // End of a 15-second ring. Offer every free ambulance that has just
-// come inside, then grow again. An accept is the only thing that stops
-// the ring. A driver who never answers stays on the offer while the
-// ring moves on to ambulances farther out.
+// come inside, then grow again. A driver who never answers stays on the
+// offer while the ring moves on to ambulances farther out. An accept
+// ends the search, or it ends one ring after every free ambulance has
+// been offered the call.
 async function countSearch(search) {
   const request = await getRequest(db, search.requestId);
   if (searches.get(search.requestId) !== search) return;
@@ -388,6 +387,12 @@ async function countSearch(search) {
     });
     search.offering = true;
   }
+
+  // Every free ambulance has been offered the call. One more ring is
+  // given for an answer, then the search ends and the call stays queued.
+  const everyoneOffered = inside.length === eligible.length;
+  if (everyoneOffered && search.coveredOnce) return giveUpSearch(search);
+  search.coveredOnce = everyoneOffered;
 
   growSearch(search);
 }
@@ -2020,6 +2025,59 @@ app.post("/api/v1/domestic-requests/:requestId/cost-decision", async (req, res) 
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Unable to save domestic cost decision" });
+  }
+});
+
+// The provider's phone shows this one-time code as a QR. Only the
+// provider's response carries the code; the user's phone is told the
+// code is ready and has to scan it.
+app.post("/api/v1/providers/:providerId/requests/:requestId/payment-code", async (req, res) => {
+  try {
+    const code = crypto.randomBytes(16).toString("hex");
+    const updated = await db("domestic_requests")
+      .where({ id: req.params.requestId, provider_id: req.params.providerId, status: "ACCEPTED" })
+      .whereNull("payment_confirmed_at")
+      .whereExists(
+        db("receipts")
+          .select(db.raw("1"))
+          .whereRaw("receipts.request_id = domestic_requests.id")
+          .whereNotNull("receipts.final_total")
+      )
+      .update({ payment_code: code, updated_at: db.fn.now() });
+    if (updated !== 1) {
+      return res.status(409).json({ error: "This job has no agreed total, or it is already paid" });
+    }
+    const payload = await getDomesticRequest(req.params.requestId);
+    emitDomesticRequest(payload, "domestic.payment_ready");
+    res.json({ code });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to create the payment code" });
+  }
+});
+
+// A scan the server accepts is the user confirming they paid the agreed
+// total in person. The code works once.
+app.post("/api/v1/domestic-requests/:requestId/payment", async (req, res) => {
+  const code = typeof req.body?.code === "string" ? req.body.code.trim() : "";
+  if (!code) return res.status(400).json({ error: "code is required" });
+
+  try {
+    const updated = await db.transaction(async (trx) => {
+      return trx("domestic_requests")
+        .where({ id: req.params.requestId, payment_code: code })
+        .whereNull("payment_confirmed_at")
+        .update({ payment_confirmed_at: trx.fn.now(), updated_at: trx.fn.now() });
+    });
+    if (updated !== 1) {
+      return res.status(409).json({ error: "That code did not match. Scan the code on the worker's phone." });
+    }
+    const payload = await getDomesticRequest(req.params.requestId);
+    emitDomesticRequest(payload, "domestic.work_finished");
+    res.json(payload);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to confirm the payment" });
   }
 });
 
