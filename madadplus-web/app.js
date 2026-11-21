@@ -172,58 +172,25 @@ function initMap() {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     maxZoom: 19
   }).addTo(map);
-
-  map.on("zoom", resizeAmbulanceMarkers);
 }
 
-// The van is 41px at zoom 16 (A-07 beside Niazi Hospital, about one plot
-// wide) and halves with each zoom level out, down to 12px, so a zoomed-out
-// van still marks one point. It stays 41px at closer zooms.
-const ambulanceIconSize = 41;
-const ambulanceIconMinSize = 12;
-const ambulanceReferenceZoom = 16;
-const ambulanceIcons = {};        // "STATUS:size" -> L.Icon, built once and reused
-
-function ambulanceIconPx() {
-  const scaled = Math.round(ambulanceIconSize * 2 ** (map.getZoom() - ambulanceReferenceZoom));
-  return Math.min(ambulanceIconSize, Math.max(ambulanceIconMinSize, scaled));
-}
-
-// An image icon keeps one <img> per marker for its whole life: a status
-// change swaps the src on that element, and nothing else rebuilds it.
-function ambulanceIcon(status, size) {
-  const key = `${status}:${size}`;
-  if(!ambulanceIcons[key]) {
-    let src = "ambulance.png";
-    if(status === STATUS.BUSY) {
-      src = "ambulance-busy.png";
-    }
-    else if(status === STATUS.UNAVAILABLE) {
-      src = "ambulance-unavailable.png";
-    }
-    ambulanceIcons[key] = L.icon({
-      iconUrl: src,
-      iconSize: [size, size],
-      iconAnchor: [size / 2, size / 2],
-      className: "ambulance-marker"
-    });
+function ambulanceIconHtml(status) {
+  let src = "ambulance.png";
+  if(status === STATUS.BUSY) {
+    src = "ambulance-busy.png";
   }
-  return ambulanceIcons[key];
+  else if(status === STATUS.UNAVAILABLE) {
+    src = "ambulance-unavailable.png";
+  }
+  return `<img src="${src}" width="41" height="41" alt="" draggable="false" style="display:block" onerror="fetch('http://127.0.0.1:7305/ingest/3123ab15-a865-40c1-9544-a2717b4e7d1d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89386b'},body:JSON.stringify({sessionId:'89386b',hypothesisId:'A',location:'app.js:ambulanceIconHtml',message:'ambulance image failed',data:{src:this.src},timestamp:Date.now()})}).catch(()=>{})" />`;
 }
 
-// Zoom changes the drawn size only. The <img> and its src stay as they
-// are, so the picture is not loaded again.
-function resizeAmbulanceMarkers() {
-  const size = ambulanceIconPx();
-  Object.values(ambulanceMarkers).forEach((marker) => {
-    const icon = ambulanceIcon(marker.iconStatus, size);
-    if(marker.options.icon === icon) return;
-    marker.options.icon = icon;
-    const img = marker.getElement();
-    img.style.width = `${size}px`;
-    img.style.height = `${size}px`;
-    img.style.marginLeft = `${-size / 2}px`;
-    img.style.marginTop = `${-size / 2}px`;
+function ambulanceIcon(status) {
+  return L.divIcon({
+    className: "ambulance-marker",
+    html: ambulanceIconHtml(status),
+    iconSize: [41, 41],
+    iconAnchor: [20.5, 20.5]
   });
 }
 
@@ -427,10 +394,6 @@ async function driveAmbulanceTo(ambulanceId, destination, durationMs, onComplete
 // request; called again after each leg lands, and no-ops when there is
 // nothing left to drive or no coordinates in the payload (a request
 // booked without a hospital simply ends at the pickup).
-function patientAboard(req) {
-  return req.phase === "TRANSFER" || req.status === "PICKED_UP" || req.status === "EN_ROUTE_HOSPITAL";
-}
-
 function syncRequestAnimation(req) {
   if (!req || !req.anim || req.anim.running) return;
   if (!req.ambulanceId || !ambulances[req.ambulanceId]) return;
@@ -439,7 +402,7 @@ function syncRequestAnimation(req) {
   let leg = null;
   let target = null;
 
-  if (patientAboard(req) && req.hospital && !anim.hospitalDone) {
+  if (req.phase === "TRANSFER" && req.hospital && !anim.hospitalDone) {
     anim.pickupDone = true; // patient is already aboard — don't drive back to the pickup
     leg = "hospital";
     target = req.hospital;
@@ -454,6 +417,9 @@ function syncRequestAnimation(req) {
 
   const amb = ambulances[req.ambulanceId];
   const from = { lat: amb.lat, lng: amb.lng };
+  // #region agent log
+  fetch('http://127.0.0.1:7305/ingest/3123ab15-a865-40c1-9544-a2717b4e7d1d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89386b'},body:JSON.stringify({sessionId:'89386b',hypothesisId:'E',location:'app.js:syncRequestAnimation',message:'leg chosen',data:{phase:req.phase,status:req.status,leg:leg,from:from,target:target,km:haversineKm(from,target),pickupDone:anim.pickupDone,hospitalDone:anim.hospitalDone},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (haversineKm(from, target) < 0.03) {
     // Already at the leg's destination — land it without animating.
     if (leg === "pickup") anim.pickupDone = true;
@@ -473,12 +439,6 @@ function syncRequestAnimation(req) {
   });
 }
 
-function serverPositionApplies(ambulanceId) {
-  if(animations[ambulanceId]) return false;
-  const amb = ambulances[ambulanceId];
-  return !(amb && amb.currentRequestId && requests[amb.currentRequestId]);
-}
-
 function driverLabel(amb) {
   return amb.driverName || "No driver assigned";
 }
@@ -487,19 +447,14 @@ function upsertAmbulanceMarker(amb) {
   if (!map) return;
   const latlng = [amb.lat, amb.lng];
   const tooltip = `${driverLabel(amb)} — ${amb.label} — ${amb.status}`;
-  const icon = ambulanceIcon(amb.status, ambulanceIconPx());
   if (ambulanceMarkers[amb.id]) {
-    if (!animations[amb.id]) ambulanceMarkers[amb.id].setLatLng(latlng);
-    if (ambulanceMarkers[amb.id].iconStatus !== amb.status) {
-      ambulanceMarkers[amb.id].options.icon = icon;
-      ambulanceMarkers[amb.id].getElement().src = icon.options.iconUrl;
-    }
+    ambulanceMarkers[amb.id].setLatLng(latlng);
+    ambulanceMarkers[amb.id].setIcon(ambulanceIcon(amb.status));
   } else {
-    ambulanceMarkers[amb.id] = L.marker(latlng, { icon })
+    ambulanceMarkers[amb.id] = L.marker(latlng, { icon: ambulanceIcon(amb.status) })
       .bindTooltip(tooltip)
       .addTo(map);
   }
-  ambulanceMarkers[amb.id].iconStatus = amb.status;
   ambulanceMarkers[amb.id].setTooltipContent(tooltip);
 }
 
@@ -554,8 +509,8 @@ async function loadAmbulances() {
 // Periodic reconciliation for live tracking: driver phones push
 // ambulance.updated (position ticks while free AND on a call), but a
 // dropped socket would freeze the map. This re-reads the snapshot and
-// updates positions/status. A unit on a booking keeps the animated
-// position until that booking ends, including the pause at the pickup.
+// updates positions/status — never touching a unit mid-drive, where the
+// animation owns the marker until it lands.
 async function syncAmbulanceSnapshot() {
   try {
     const res = await fetch(`${BACKEND_URL}/api/v1/ambulances`);
@@ -564,7 +519,7 @@ async function syncAmbulanceSnapshot() {
     list.forEach((a) => {
       const amb = ambulances[a.id];
       if (!amb) return;
-      if(serverPositionApplies(a.id)) {
+      if (!animations[a.id]) {
         if (a.lat != null) amb.lat = Number(a.lat);
         if (a.lng != null) amb.lng = Number(a.lng);
       }
@@ -1026,12 +981,11 @@ function trackRequest(payload) {
   const ambulanceId = payload.assignedAmbulance?.id || payload.ambulanceId || null;
   const previous = requests[payload.requestId];
 
-  // The payload carries the unit's position at assignment time. Take it
-  // only when this unit first gets the request; later updates repeat the
-  // same depot point and would undo the drive already shown.
+  // The payload carries the unit's authoritative position at assignment
+  // time — take it, unless a drive is already underway (that animation
+  // owns the position until it lands).
   const ambLocation = toPoint(payload.assignedAmbulance?.location);
-  const alreadyOnRequest = previous && previous.ambulanceId === ambulanceId;
-  if (ambulanceId && ambulances[ambulanceId] && ambLocation && !alreadyOnRequest && !animations[ambulanceId]) {
+  if (ambulanceId && ambulances[ambulanceId] && ambLocation && !animations[ambulanceId]) {
     ambulances[ambulanceId].lat = ambLocation.lat;
     ambulances[ambulanceId].lng = ambLocation.lng;
   }
@@ -1067,9 +1021,11 @@ function trackRequest(payload) {
     needsReassignment: (previous && previous.needsReassignment) || false,
     anim: (previous && previous.anim) || { pickupDone: false, hospitalDone: false, running: false, leg: null }
   };
-  // A queued call with no unit is exactly the state that needs the
-  // dispatcher to pick a replacement; once a unit is attached, clear it.
-  req.needsReassignment = !ambulanceId && isQueuedStatus(status);
+  // A new booking is queued while the ring search runs. That is not a
+  // breakdown, so the reassign list stays closed. It opens only after a
+  // unit that was already on this call drops off.
+  const lostUnit = !!(previous && previous.ambulanceId && !ambulanceId);
+  req.needsReassignment = !ambulanceId && (lostUnit || !!(previous && previous.needsReassignment));
 
   if (previous && previous.ambulanceId && previous.ambulanceId !== ambulanceId && previous.anim.running) {
     // Reassigned away mid-drive: stop the old unit's leg where it stands.
@@ -1077,7 +1033,7 @@ function trackRequest(payload) {
     previous.anim.running = false;
     previous.anim.leg = null;
   }
-  if (req.anim.running && req.anim.leg === "pickup" && patientAboard(req)) {
+  if (req.anim.running && req.anim.leg === "pickup" && req.phase === "TRANSFER") {
     // The driver confirmed pickup while we were still driving there —
     // drop the pickup leg and send the unit on to the hospital instead.
     cancelAnimation(ambulanceId);
@@ -1153,10 +1109,11 @@ socket.on("ambulance.updated", (payload) => {
   const wasBusy = amb.status === STATUS.BUSY;
   const lastPosition = { lat: amb.lat, lng: amb.lng };
   if (payload.status) amb.status = normalizeStatus(payload.status);
-  if(serverPositionApplies(payload.id)) {
-    if (payload.lat != null) amb.lat = Number(payload.lat);
-    if (payload.lng != null) amb.lng = Number(payload.lng);
-  }
+  // #region agent log
+  fetch('http://127.0.0.1:7305/ingest/3123ab15-a865-40c1-9544-a2717b4e7d1d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89386b'},body:JSON.stringify({sessionId:'89386b',hypothesisId:'D',location:'app.js:ambulance.updated',message:'socket position',data:{id:payload.id,status:amb.status,prev:lastPosition,nextLat:payload.lat,nextLng:payload.lng,animating:Object.values(requests).some(function(r){return r.ambulanceId===payload.id&&r.anim&&r.anim.running;})},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  if (payload.lat != null) amb.lat = Number(payload.lat);
+  if (payload.lng != null) amb.lng = Number(payload.lng);
   if (payload.unavailableReason !== undefined) amb.reason = payload.unavailableReason;
   if (payload.driver !== undefined) {
     amb.driverId = payload.driver ? payload.driver.id : null;
