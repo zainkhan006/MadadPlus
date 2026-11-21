@@ -7,7 +7,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -57,6 +59,8 @@ class EmergencyFlow extends StatelessWidget {
         return const _ServiceConfirmScreen();
       case EmergencyScreen.domesticJob:
         return const _DomesticJobScreen();
+      case EmergencyScreen.domesticScan:
+        return const _DomesticScanScreen();
       case EmergencyScreen.costReview:
         return const _CostReviewScreen();
       case EmergencyScreen.providerDashboard:
@@ -73,6 +77,8 @@ class EmergencyFlow extends StatelessWidget {
         return const _ProviderEnRouteScreen();
       case EmergencyScreen.providerJob:
         return const _ProviderJobScreen();
+      case EmergencyScreen.providerPaymentQr:
+        return const _ProviderPaymentQrScreen();
       case EmergencyScreen.providerPaid:
         return const _ProviderPaidScreen();
       case EmergencyScreen.home:
@@ -1155,216 +1161,6 @@ List<String> _driverDetailLines(EmergencyCall call, {required bool atHospital}) 
   return lines;
 }
 
-class _DriverOfferCard extends StatefulWidget {
-  const _DriverOfferCard({required this.offer});
-
-  final EmergencyCall offer;
-
-  @override
-  State<_DriverOfferCard> createState() => _DriverOfferCardState();
-}
-
-class _DriverOfferCardState extends State<_DriverOfferCard> {
-  bool locationOpen = false;
-  bool notesOpen = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final state = context.watch<EmergencyRequestState>();
-    final offer = widget.offer;
-    final name = offer.callerName?.trim();
-    final notes = offer.additionalDetails?.trim();
-    final address = offer.pickupAddress?.trim();
-    final busy = state.driverLoading;
-    final String eta;
-    final String distance;
-    if(state.offerRouteLoading) {
-      eta = 'Checking the road';
-      distance = 'Checking the road';
-    }
-    else if(state.offerRoadKm != null && state.offerEtaMinutes != null) {
-      final km = state.offerRoadKm!;
-      eta = '${state.offerEtaMinutes} min';
-      distance = '${km >= 10 ? km.toStringAsFixed(0) : km.toStringAsFixed(1)} km';
-    }
-    else {
-      eta = 'Unavailable';
-      distance = 'Unavailable';
-    }
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x1A000000),
-            blurRadius: 24,
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.space4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const CircleAvatar(
-                  radius: 22,
-                  backgroundColor: AppColors.blue,
-                  child: Icon(Icons.person, color: AppColors.surface, size: 22),
-                ),
-                const SizedBox(width: AppSpacing.space3),
-                Expanded(
-                  child: Text(
-                    name == null || name.isEmpty ? 'Caller' : name,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                Text(
-                  _peopleLabel(offer.peopleCount),
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.space4),
-            Text(
-              offer.emergencyDescription ?? 'Emergency',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: AppSpacing.space4),
-            Row(
-              children: [
-                Expanded(child: _OfferStat(label: 'ETA', value: eta)),
-                const SizedBox(width: AppSpacing.space3),
-                Expanded(child: _OfferStat(label: 'Distance', value: distance)),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.space3),
-            _OfferDisclosure(
-              title: 'Location',
-              open: locationOpen,
-              body: address == null || address.isEmpty
-                  ? 'Location unavailable'
-                  : address,
-              onTap: () {
-                setState(() {
-                  locationOpen = !locationOpen;
-                });
-              },
-            ),
-            const SizedBox(height: AppSpacing.space2),
-            _OfferDisclosure(
-              title: 'Notes',
-              open: notesOpen,
-              body: notes == null || notes.isEmpty ? 'N/A' : notes,
-              onTap: () {
-                setState(() {
-                  notesOpen = !notesOpen;
-                });
-              },
-            ),
-            const SizedBox(height: AppSpacing.space4),
-            Row(
-              children: [
-                Expanded(
-                  child: _PressScale(
-                    child: _SecondaryButton(
-                      label: 'Decline',
-                      onPressed: busy ? null : state.declineDriverOffer,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.space3),
-                Expanded(
-                  child: _ActionButton(
-                    label: 'Accept',
-                    onPressed: busy ? null : state.acceptDriverOffer,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _OfferStat extends StatelessWidget {
-  const _OfferStat({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: Theme.of(context).textTheme.labelMedium),
-        const SizedBox(height: AppSpacing.space1),
-        Text(value, style: Theme.of(context).textTheme.titleMedium),
-      ],
-    );
-  }
-}
-
-class _OfferDisclosure extends StatelessWidget {
-  const _OfferDisclosure({
-    required this.title,
-    required this.open,
-    required this.body,
-    required this.onTap,
-  });
-
-  final String title;
-  final bool open;
-  final String body;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.page,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.space3,
-            vertical: AppSpacing.space3,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(title, style: Theme.of(context).textTheme.titleSmall),
-                  ),
-                  Icon(
-                    open ? Icons.expand_less : Icons.expand_more,
-                    color: AppColors.ink,
-                  ),
-                ],
-              ),
-              if(open) ...[
-                const SizedBox(height: AppSpacing.space2),
-                Text(body, style: Theme.of(context).textTheme.bodyLarge),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _DriverJobScreen extends StatefulWidget {
   const _DriverJobScreen();
 
@@ -1514,7 +1310,12 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
               state.driverOfferNotice ?? 'No call on this ambulance.',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
-          if(offer != null) _DriverOfferCard(offer: offer),
+          if(offer != null)
+            for(final line in _driverDetailLines(offer, atHospital: false))
+              Text(
+                line,
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
           if(call != null)
             for(final line in _driverDetailLines(
               call,
@@ -1529,6 +1330,20 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
             _ErrorNotice(message: state.driverError!),
           ],
           const SizedBox(height: AppSpacing.space5),
+          if(offer != null) ...[
+            _ActionButton(
+              label: 'Accept',
+              onPressed: busy ? null : state.acceptDriverOffer,
+            ),
+            const SizedBox(height: AppSpacing.space3),
+            _PressScale(
+              child: _SecondaryButton(
+                label: 'Decline',
+                onPressed: busy ? null : state.declineDriverOffer,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.space3),
+          ],
           if(atPickup)
             _ActionButton(
               label: 'Picked up',
@@ -5925,12 +5740,133 @@ class _ProviderJobScreenState extends State<_ProviderJobScreen> {
             label: 'Upload photos',
             onPressed: () {},
           ),
+          if(state.domesticNotice != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            _ErrorNotice(message: state.domesticNotice!),
+          ],
           const SizedBox(height: AppSpacing.space5),
           _ActionButton(
             label: 'Complete job',
             color: AppColors.green,
-            onPressed: state.finishProviderWork,
+            onPressed: state.providerPaymentLoading ? null : state.finishProviderWork,
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProviderPaymentQrScreen extends StatelessWidget {
+  const _ProviderPaymentQrScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final code = state.providerPaymentCode ?? '';
+    final total = state.activeJob?.finalTotal;
+    return _FlowFrame(
+      title: 'Get paid',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            total == null
+                ? 'Ask the customer to scan this code.'
+                : 'Take Rs. ${total.toStringAsFixed(0)} from the customer, then ask them to scan this code.',
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              border: Border.all(color: AppColors.line),
+            ),
+            child: QrImageView(
+              data: code,
+              padding: const EdgeInsets.all(AppSpacing.space4),
+              semanticsLabel: 'Payment code for the customer to scan',
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          _SecondaryButton(
+            label: 'Report',
+            onPressed: () {},
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DomesticScanScreen extends StatelessWidget {
+  const _DomesticScanScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.read<EmergencyRequestState>();
+    final notice = context.select<EmergencyRequestState, String?>(
+      (state) => state.scanNotice,
+    );
+    final owed = context.select<EmergencyRequestState, String?>(
+      (state) => state.amountOwed,
+    );
+    return _FlowFrame(
+      title: 'Scan to finish',
+      tab: _UserTab.services,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Point the camera at the code on the worker\'s phone.',
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+          if(owed != null) ...[
+            const SizedBox(height: AppSpacing.space2),
+            Text(
+              owed,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.space4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: MobileScanner(
+                onDetect: (capture) {
+                  for(final barcode in capture.barcodes) {
+                    final value = barcode.rawValue;
+                    if(value != null) {
+                      state.confirmScannedPayment(value);
+                      return;
+                    }
+                  }
+                },
+                errorBuilder: (context, error) {
+                  return ColoredBox(
+                    color: AppColors.surface,
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpacing.space4),
+                        child: Text(
+                          'The camera did not open. Allow camera access for Madad+ in your phone settings.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          if(notice != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            _ErrorNotice(message: notice),
+          ],
         ],
       ),
     );

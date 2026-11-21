@@ -175,7 +175,6 @@ class EmergencyCall {
     this.hospitalLongitude,
     this.additionalDetails,
     this.updatedAt,
-    this.callerName,
   });
 
   final String requestId;
@@ -195,7 +194,6 @@ class EmergencyCall {
   final double? hospitalLatitude;
   final double? hospitalLongitude;
   final DateTime? updatedAt;
-  final String? callerName;
 
   factory EmergencyCall.fromJson(Map<String, dynamic> json) {
     final hospital = json['hospital'];
@@ -205,7 +203,6 @@ class EmergencyCall {
     final pickup = _point(json['pickupLocation']);
     final ambulancePoint = ambulance is Map ? _point(ambulance['location']) : null;
     final hospitalPoint = hospital is Map ? _point(hospital['location']) : null;
-    final caller = json['caller'];
     return EmergencyCall(
       requestId: json['requestId'] as String,
       status: json['status'] as String,
@@ -226,7 +223,6 @@ class EmergencyCall {
       hospitalLongitude: hospitalPoint?.lng,
       additionalDetails: json['additionalDetails'] as String?,
       updatedAt: _time(json['updatedAt']),
-      callerName: caller is Map ? caller['name'] as String? : null,
     );
   }
 }
@@ -534,7 +530,6 @@ class EmergencyService {
     required String inputMethod,
     String? additionalDetails,
     String? callerPhone,
-    String? callerUserId,
   }) async {
     final details = additionalDetails?.trim() ?? '';
     final decoded = await _send(
@@ -552,8 +547,6 @@ class EmergencyService {
           if(details.isNotEmpty) 'additionalDetails': details,
           if(callerPhone != null && callerPhone.trim().isNotEmpty)
             'callerPhone': callerPhone.trim(),
-          if(callerUserId != null && callerUserId.trim().isNotEmpty)
-            'callerUserId': callerUserId.trim(),
         }),
       ),
       'The emergency request could not be sent.',
@@ -874,6 +867,37 @@ class EmergencyService {
         headers: _headers,
       ),
       'The request could not be cancelled.',
+    );
+    return DomesticBooking.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<String> createPaymentCode({
+    required String providerId,
+    required String requestId,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse(
+          '$baseUrl/api/v1/providers/$providerId/requests/$requestId/payment-code',
+        ),
+        headers: _headers,
+      ),
+      'The payment code could not be made.',
+    );
+    return (decoded as Map)['code'] as String;
+  }
+
+  Future<DomesticBooking> confirmDomesticPayment({
+    required String requestId,
+    required String code,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse('$baseUrl/api/v1/domestic-requests/$requestId/payment'),
+        headers: _headers,
+        body: jsonEncode({'code': code}),
+      ),
+      'The payment could not be confirmed.',
     );
     return DomesticBooking.fromJson(Map<String, dynamic>.from(decoded as Map));
   }

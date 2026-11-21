@@ -11,7 +11,9 @@ import 'package:madad_plus_mobile/services/emergency_service.dart';
 import 'package:madad_plus_mobile/services/emergency_socket_service.dart';
 import 'package:madad_plus_mobile/services/provider_notifier.dart';
 import 'package:madad_plus_mobile/theme/app_theme.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -795,12 +797,11 @@ void main() {
     await tester.pump();
 
     expect(find.text('Incoming call'), findsOneWidget);
-    expect(find.text('Accident'), findsOneWidget);
-    expect(find.text('2 people'), findsOneWidget);
-    expect(find.text('Decline'), findsOneWidget);
-    await tester.tap(find.text('Location'));
-    await tester.pump();
     expect(find.text('Clifton Block 5'), findsOneWidget);
+    expect(find.text('2 people still waiting'), findsOneWidget);
+    expect(find.text('Accident'), findsOneWidget);
+    expect(find.text('Caller +92 300 0000000'), findsOneWidget);
+    expect(find.text('Decline'), findsOneWidget);
     expect(find.text('No call on this ambulance.'), findsNothing);
 
     await tapText(tester, 'Accept');
@@ -1423,13 +1424,54 @@ void main() {
     expect(find.text('Address'), findsNothing);
     await tapText(tester, 'Start job');
     await tapText(tester, 'Complete job');
+    await pumpAsync(tester);
+    expect(find.byType(QrImageView), findsOneWidget);
+    expect(find.text('Report'), findsOneWidget);
+    expect(find.text('You were paid Rs. 2500'), findsNothing);
+    await tapText(tester, 'Report');
+    expect(find.byType(QrImageView), findsOneWidget);
+    expect(providerSession.currentScreen, EmergencyScreen.providerPaymentQr);
+
+    expect(session.state.currentScreen, EmergencyScreen.domesticScan);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(MyApp(requestState: session.state));
+    await tester.pump();
+    expect(find.text('Scan to finish'), findsOneWidget);
+    expect(find.byType(MobileScanner), findsOneWidget);
+    expect(find.text('Amount owed: Rs. 2500'), findsOneWidget);
+
+    await session.state.confirmScannedPayment('code-wrong');
+    await tester.pump();
+    expect(
+      find.text('That code did not match. Scan the code on the worker\'s phone.'),
+      findsOneWidget,
+    );
+    expect(find.byType(MobileScanner), findsOneWidget);
+    expect(
+      session.state.scanNotice,
+      'That code did not match. Scan the code on the worker\'s phone.',
+    );
+    expect(session.state.currentScreen, EmergencyScreen.domesticScan);
+    expect(providerSession.currentScreen, EmergencyScreen.providerPaymentQr);
+
+    await session.state.confirmScannedPayment('code-1');
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(MyApp(requestState: providerSession));
+    await tester.pump();
     expect(find.text('You were paid Rs. 2500'), findsOneWidget);
     expect(find.text('From Test User'), findsOneWidget);
+    expect(session.api.paymentConfirms, 1);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(MyApp(requestState: session.state));
     await tester.pump();
     expect(find.text('How was Karachi Plumbers?'), findsOneWidget);
+
+    await expectLater(
+      session.api.confirmDomesticPayment(requestId: 'dom-1', code: 'code-1'),
+      throwsA(isA<ApiException>()),
+    );
+    expect(session.api.paymentConfirms, 1);
 
     await tester.tap(find.byTooltip('Rate 5 stars'));
     await tester.pump();
@@ -2383,7 +2425,6 @@ class FakeEmergencyService extends EmergencyService {
     required String inputMethod,
     String? additionalDetails,
     String? callerPhone,
-    String? callerUserId,
   }) async {
     emergencyPosts += 1;
     final error = scriptedEmergencyError;
@@ -2715,6 +2756,43 @@ class FakeEmergencyService extends EmergencyService {
       quotedTotal: quotedTotal,
       components: components,
     );
+  }
+
+  String? paymentCode;
+  var paymentConfirmed = false;
+  var paymentConfirms = 0;
+
+  @override
+  Future<String> createPaymentCode({
+    required String providerId,
+    required String requestId,
+  }) async {
+    paymentCode = 'code-${paymentConfirms + 1}';
+    final job = jobs.firstWhere((item) => item.requestId == requestId);
+    for(final listener in List.of(listeners)) {
+      listener(job, 'domestic.payment_ready');
+    }
+    return paymentCode!;
+  }
+
+  @override
+  Future<DomesticBooking> confirmDomesticPayment({
+    required String requestId,
+    required String code,
+  }) async {
+    if(paymentConfirmed || code != paymentCode) {
+      throw const ApiException(
+        'That code did not match. Scan the code on the worker\'s phone.',
+        statusCode: 409,
+      );
+    }
+    paymentConfirmed = true;
+    paymentConfirms += 1;
+    final job = jobs.firstWhere((item) => item.requestId == requestId);
+    for(final listener in List.of(listeners)) {
+      listener(job, 'domestic.work_finished');
+    }
+    return job;
   }
 
   @override

@@ -46,6 +46,7 @@ enum EmergencyScreen {
   serviceSchedule,
   serviceConfirm,
   domesticJob,
+  domesticScan,
   costReview,
   providerDashboard,
   providerIncoming,
@@ -54,6 +55,7 @@ enum EmergencyScreen {
   providerAccepted,
   providerEnRoute,
   providerJob,
+  providerPaymentQr,
   providerPaid,
 }
 
@@ -130,6 +132,11 @@ class EmergencyRequestState extends ChangeNotifier {
   String? amountOwed;
   String? providerPaidText;
   String? providerPaidBy;
+  String? providerPaymentCode;
+  bool providerPaymentLoading = false;
+  String? scanNotice;
+  bool scanChecking = false;
+  String? _rejectedScan;
   final List<({
     String id,
     String trade,
@@ -184,10 +191,6 @@ class EmergencyRequestState extends ChangeNotifier {
   EmergencyCall? driverCall;
   EmergencyCall? driverOffer;
   String? driverOfferNotice;
-  double? offerRoadKm;
-  int? offerEtaMinutes;
-  bool offerRouteLoading = false;
-  bool offerRouteMissing = false;
   bool driverLoading = false;
   String? driverError;
   AmbulanceRow? matchedDriver;
@@ -1115,6 +1118,12 @@ class EmergencyRequestState extends ChangeNotifier {
     }
 
     domesticBooking = booking;
+    if(event == 'domestic.payment_ready') {
+      scanNotice = null;
+      _rejectedScan = null;
+      goTo(EmergencyScreen.domesticScan);
+      return;
+    }
     if(event == 'domestic.inspecting') {
       if(domesticJob == DomesticJob.assigned || domesticJob == DomesticJob.searching) {
         domesticJob = DomesticJob.enRoute;
@@ -1503,16 +1512,63 @@ class EmergencyRequestState extends ChangeNotifier {
     }
   }
 
-  void finishProviderWork() {
+  Future<void> finishProviderWork() async {
     final job = activeJob;
-    if(job == null || job.finalTotal == null) {
+    final provider = providerProfile;
+    if(job == null || job.finalTotal == null || provider == null || providerPaymentLoading) {
       return;
     }
-    _rememberProviderPayment(job);
-    final requestId = job.requestId;
-    _finishProviderJob();
-    goTo(EmergencyScreen.providerPaid);
-    _emergencySocketService.relayDomestic('domestic.work_finished', requestId);
+
+    providerPaymentLoading = true;
+    domesticNotice = null;
+    notifyListeners();
+    try {
+      providerPaymentCode = await _emergencyService.createPaymentCode(
+        providerId: provider.id,
+        requestId: job.requestId,
+      );
+      goTo(EmergencyScreen.providerPaymentQr);
+    } on ApiException catch (error) {
+      domesticNotice = error.message;
+    } on TimeoutException {
+      domesticNotice = 'The server did not answer in time. Try again.';
+    } catch (_) {
+      domesticNotice = 'The payment code could not be made. Try again.';
+    } finally {
+      providerPaymentLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> confirmScannedPayment(String scanned) async {
+    final requestId = domesticBooking?.requestId;
+    final code = scanned.trim();
+    if(requestId == null || code.isEmpty || scanChecking || code == _rejectedScan) {
+      return;
+    }
+
+    scanChecking = true;
+    notifyListeners();
+    try {
+      final paid = await _emergencyService.confirmDomesticPayment(
+        requestId: requestId,
+        code: code,
+      );
+      scanNotice = null;
+      if(currentScreen == EmergencyScreen.domesticScan) {
+        _receiveUserBooking(paid, 'domestic.work_finished');
+      }
+    } on ApiException catch (error) {
+      _rejectedScan = code;
+      scanNotice = error.message;
+    } on TimeoutException {
+      scanNotice = 'The server did not answer in time. Hold the camera on the code again.';
+    } catch (_) {
+      scanNotice = 'The scan could not be checked. Hold the camera on the code again.';
+    } finally {
+      scanChecking = false;
+      notifyListeners();
+    }
   }
 
   void _receiveProviderBooking(DomesticBooking booking, [String event = '']) {
@@ -1543,6 +1599,7 @@ class EmergencyRequestState extends ChangeNotifier {
       if(currentScreen != EmergencyScreen.providerPaid && booking.finalTotal != null) {
         _rememberProviderPayment(booking);
         _finishProviderJob();
+        providerPaymentCode = null;
         goTo(EmergencyScreen.providerPaid);
       }
       notifyListeners();
@@ -1557,6 +1614,7 @@ class EmergencyRequestState extends ChangeNotifier {
       }
       else if(booking.receiptStatus == 'ACCEPTED' &&
           currentScreen != EmergencyScreen.providerJob &&
+          currentScreen != EmergencyScreen.providerPaymentQr &&
           currentScreen != EmergencyScreen.providerPaid) {
         goTo(EmergencyScreen.providerAccepted);
       }
@@ -1864,80 +1922,13 @@ class EmergencyRequestState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _clearOfferRoute() {
-    offerRoadKm = null;
-    offerEtaMinutes = null;
-    offerRouteLoading = false;
-    offerRouteMissing = false;
-  }
-
   void _receiveDriverOffer(EmergencyCall offer) {
     if(driverId == null || driverCall != null) {
       return;
     }
     driverOffer = offer;
     driverOfferNotice = null;
-    _loadOfferRoad(offer);
     notifyListeners();
-  }
-
-  // Road kilometres from the driving route, then minutes at 40 km/h.
-  // A straight line is not used. If the road route cannot be fetched,
-  // the card says the distance is unavailable.
-  Future<void> _loadOfferRoad(EmergencyCall offer) async {
-    final fromLat = driverAmbulanceLat;
-    final fromLng = driverAmbulanceLng;
-    final toLat = offer.pickupLatitude;
-    final toLng = offer.pickupLongitude;
-    offerRoadKm = null;
-    offerEtaMinutes = null;
-    offerRouteMissing = false;
-    if(fromLat == null || fromLng == null || toLat == null || toLng == null
-        || Platform.environment['FLUTTER_TEST'] == 'true') {
-      offerRouteMissing = true;
-      offerRouteLoading = false;
-      notifyListeners();
-      return;
-    }
-
-    offerRouteLoading = true;
-    notifyListeners();
-    try {
-      final response = await http
-          .get(Uri.parse(
-            'https://router.project-osrm.org/route/v1/driving/$fromLng,$fromLat;$toLng,$toLat?overview=false',
-          ))
-          .timeout(const Duration(seconds: 5));
-      if(driverOffer?.requestId != offer.requestId) {
-        return;
-      }
-      if(response.statusCode != 200) {
-        throw Exception('OSRM request failed: ${response.statusCode}');
-      }
-      final routes = (jsonDecode(response.body) as Map<String, dynamic>)['routes'] as List;
-      if(routes.isEmpty) {
-        throw Exception('No route found');
-      }
-      final metres = (routes.first['distance'] as num).toDouble();
-      final km = metres / 1000;
-      offerRoadKm = km;
-      final minutes = (km / 40 * 60).round();
-      offerEtaMinutes = minutes < 1 && km > 0 ? 1 : minutes;
-      offerRouteMissing = false;
-    } catch (error) {
-      if(driverOffer?.requestId != offer.requestId) {
-        return;
-      }
-      offerRoadKm = null;
-      offerEtaMinutes = null;
-      offerRouteMissing = true;
-      debugPrint('could not measure the road to this pickup: $error');
-    } finally {
-      if(driverOffer?.requestId == offer.requestId) {
-        offerRouteLoading = false;
-        notifyListeners();
-      }
-    }
   }
 
   void _receiveOfferTaken(String requestId) {
@@ -1946,7 +1937,6 @@ class EmergencyRequestState extends ChangeNotifier {
     }
     driverOffer = null;
     driverOfferNotice = 'The call was taken.';
-    _clearOfferRoute();
     notifyListeners();
   }
 
@@ -1968,7 +1958,6 @@ class EmergencyRequestState extends ChangeNotifier {
       );
       driverOffer = null;
       driverAmbulanceStatus = 'BUSY';
-      _clearOfferRoute();
       syncDriverRoute();
     } on ApiException catch (error) {
       if(error.statusCode == 409) {
@@ -1996,7 +1985,6 @@ class EmergencyRequestState extends ChangeNotifier {
     }
 
     driverOffer = null;
-    _clearOfferRoute();
     notifyListeners();
     try {
       await _emergencyService.declineDriverRequest(
@@ -2449,7 +2437,6 @@ class EmergencyRequestState extends ChangeNotifier {
         inputMethod: detailsFromSpeech ? 'VOICE' : 'MANUAL',
         additionalDetails: additionalDetails,
         callerPhone: signedInUserPhone,
-        callerUserId: signedInUserId,
       );
       updateRequest(
         requestId: result!.requestId,
