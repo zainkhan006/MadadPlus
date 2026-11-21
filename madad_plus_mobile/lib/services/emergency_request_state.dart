@@ -14,6 +14,26 @@ import 'emergency_service.dart';
 import 'emergency_socket_service.dart';
 import 'provider_notifier.dart';
 
+// Reads the driving distance and time from an OSRM route response.
+// Returns null when the response holds no route.
+({double km, int minutes})? parseRoadEstimate(String body) {
+  final routes = (jsonDecode(body) as Map<String, dynamic>)['routes'];
+  if(routes is! List || routes.isEmpty) {
+    return null;
+  }
+  final route = routes.first as Map;
+  final metres = route['distance'];
+  final seconds = route['duration'];
+  if(metres is! num || seconds is! num) {
+    return null;
+  }
+  var minutes = (seconds / 60).round();
+  if(seconds > 0 && minutes == 0) {
+    minutes = 1;
+  }
+  return (km: metres / 1000, minutes: minutes);
+}
+
 enum EmergencyScreen {
   splash,
   onboarding,
@@ -184,6 +204,9 @@ class EmergencyRequestState extends ChangeNotifier {
   EmergencyCall? driverCall;
   EmergencyCall? driverOffer;
   String? driverOfferNotice;
+  double? driverOfferKm;
+  int? driverOfferMinutes;
+  bool driverOfferRouteLoading = false;
   bool driverLoading = false;
   String? driverError;
   AmbulanceRow? matchedDriver;
@@ -254,7 +277,7 @@ class EmergencyRequestState extends ChangeNotifier {
     return raw.clamp(0.0, 1.0);
   }
 
-  double driveDurationMs(double fromLat, double fromLng, double toLat, double toLng) {
+  double straightLineKm(double fromLat, double fromLng, double toLat, double toLng) {
     const earthRadiusKm = 6371.0;
     final dLat = (toLat - fromLat) * math.pi / 180;
     final dLng = (toLng - fromLng) * math.pi / 180;
@@ -262,7 +285,11 @@ class EmergencyRequestState extends ChangeNotifier {
     final lat2 = toLat * math.pi / 180;
     final x = math.pow(math.sin(dLat / 2), 2) +
         math.cos(lat1) * math.cos(lat2) * math.pow(math.sin(dLng / 2), 2);
-    final km = 2 * earthRadiusKm * math.asin(math.sqrt(x));
+    return 2 * earthRadiusKm * math.asin(math.sqrt(x));
+  }
+
+  double driveDurationMs(double fromLat, double fromLng, double toLat, double toLng) {
+    final km = straightLineKm(fromLat, fromLng, toLat, toLng);
     return math.min(45000.0, math.max(8000.0, (km / 55) * 3600000));
   }
 
@@ -1866,6 +1893,47 @@ class EmergencyRequestState extends ChangeNotifier {
     }
     driverOffer = offer;
     driverOfferNotice = null;
+    _loadOfferRoute(offer);
+    notifyListeners();
+  }
+
+  Future<void> _loadOfferRoute(EmergencyCall offer) async {
+    driverOfferKm = null;
+    driverOfferMinutes = null;
+    driverOfferRouteLoading = false;
+    final fromLat = driverAmbulanceLat;
+    final fromLng = driverAmbulanceLng;
+    final toLat = offer.pickupLatitude;
+    final toLng = offer.pickupLongitude;
+    if(fromLat == null || fromLng == null || toLat == null || toLng == null) {
+      return;
+    }
+    final straightKm = straightLineKm(fromLat, fromLng, toLat, toLng);
+    if(Platform.environment['FLUTTER_TEST'] == 'true') {
+      driverOfferKm = straightKm;
+      return;
+    }
+
+    driverOfferRouteLoading = true;
+    ({double km, int minutes})? estimate;
+    try {
+      final response = await http
+          .get(Uri.parse(
+            'https://router.project-osrm.org/route/v1/driving/$fromLng,$fromLat;$toLng,$toLat?overview=full&geometries=geojson',
+          ))
+          .timeout(const Duration(seconds: 5));
+      if(response.statusCode == 200) {
+        estimate = parseRoadEstimate(response.body);
+      }
+    } catch (error) {
+      debugPrint('could not get a road route for this offer, so the card shows the straight-line distance: $error');
+    }
+    if(!identical(driverOffer, offer)) {
+      return;
+    }
+    driverOfferKm = estimate?.km ?? straightKm;
+    driverOfferMinutes = estimate?.minutes;
+    driverOfferRouteLoading = false;
     notifyListeners();
   }
 
@@ -2375,6 +2443,7 @@ class EmergencyRequestState extends ChangeNotifier {
         inputMethod: detailsFromSpeech ? 'VOICE' : 'MANUAL',
         additionalDetails: additionalDetails,
         callerPhone: signedInUserPhone,
+        callerName: signedInUserName,
       );
       updateRequest(
         requestId: result!.requestId,

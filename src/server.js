@@ -236,10 +236,11 @@ function emitDomesticRequest(request, event) {
 }
 
 // Ring search: a queued request looks for FREE ambulances inside a
-// radius that starts at 300 m and grows by 500 m every 15 seconds. One
-// ambulance inside the ring is assigned. Several are offered the call
-// and the first driver to accept gets it. Searches live in memory, so a
-// restart leaves the request QUEUED for the existing queue.
+// radius that starts at 300 m and grows by 500 m every 15 seconds.
+// Every ambulance inside the ring is offered the call, whether that is
+// one ambulance or several, and the call is assigned only when a driver
+// accepts. Searches live in memory, so a restart leaves the request
+// QUEUED for the existing queue.
 const SEARCH_START_METRES = 300;
 const SEARCH_GROW_METRES = 500;
 const SEARCH_RING_MS = 15000;
@@ -374,11 +375,6 @@ async function countSearch(search) {
 
   const inside = eligible.filter((ambulance) => Number(ambulance.distance_m) <= search.radius);
   if (inside.length === 0) return growSearch(search);
-  if (inside.length === 1) {
-    const assigned = await assignFromSearch(search, [inside[0].id]);
-    if (!assigned && searches.get(search.requestId) === search) growSearch(search);
-    return;
-  }
 
   const payload = await requestPayload(db, search.requestId);
   if (searches.get(search.requestId) !== search) return;
@@ -395,16 +391,17 @@ async function countSearch(search) {
 }
 
 // Nobody accepted. A wider ring can still find someone new. Once the
-// ring already holds every FREE ambulance, the nearest is assigned so
-// the call is not left waiting on drivers who never answer.
+// ring already holds every FREE ambulance, the timer stops and the
+// request stays QUEUED with its offers open until a driver accepts.
+// If every one of those drivers declined, nobody is left to ask.
 async function closeOffers(search) {
   if (searches.get(search.requestId) !== search) return;
   if (!search.coversAll) return growSearch(search);
 
   const eligible = await eligibleAmbulances(search);
   if (searches.get(search.requestId) !== search) return;
-  const assigned = await assignFromSearch(search, eligible.map((ambulance) => ambulance.id));
-  if (!assigned && searches.get(search.requestId) === search) giveUpSearch(search);
+  if (eligible.length === 0) return giveUpSearch(search);
+  clearTimeout(search.timer);
 }
 
 async function completeRequest(requestId) {
@@ -641,6 +638,7 @@ app.post("/api/v1/emergency-requests", async (req, res) => {
     additionalDetails,
     inputMethod,
     callerPhone,
+    callerName,
     hospitalAddress,
     hospitalLat,
     hospitalLng
@@ -676,6 +674,7 @@ app.post("/api/v1/emergency-requests", async (req, res) => {
           organization_id: orgId,
           type,
           caller_phone: callerPhone || null,
+          caller_name: String(callerName || "").trim() || null,
           pickup_address: String(address).trim(),
           emergency_description: String(description).trim(),
           people_count: parsedPeopleCount,

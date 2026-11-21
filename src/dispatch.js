@@ -162,6 +162,7 @@ async function requestPayload(trx, requestId) {
       "r.current_phase",
       "r.type",
       "r.caller_phone",
+      "r.caller_name",
       "r.pickup_address",
       "r.emergency_description",
       "r.people_count",
@@ -200,6 +201,7 @@ async function requestPayload(trx, requestId) {
     phase: request.current_phase,
     type: request.type,
     callerPhone: request.caller_phone,
+    callerName: request.caller_name,
     pickupAddress: request.pickup_address,
     pickupLocation: {
       lat: Number(request.pickup_lat),

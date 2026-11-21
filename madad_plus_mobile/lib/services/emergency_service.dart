@@ -175,6 +175,7 @@ class EmergencyCall {
     this.hospitalLongitude,
     this.additionalDetails,
     this.updatedAt,
+    this.callerName,
   });
 
   final String requestId;
@@ -184,6 +185,7 @@ class EmergencyCall {
   final String? emergencyDescription;
   final int? peopleCount;
   final String? callerPhone;
+  final String? callerName;
   final String? hospitalName;
   final String? hospitalAddress;
   final String? assignedDriverId;
@@ -223,6 +225,7 @@ class EmergencyCall {
       hospitalLongitude: hospitalPoint?.lng,
       additionalDetails: json['additionalDetails'] as String?,
       updatedAt: _time(json['updatedAt']),
+      callerName: json['callerName'] as String?,
     );
   }
 }
@@ -530,6 +533,7 @@ class EmergencyService {
     required String inputMethod,
     String? additionalDetails,
     String? callerPhone,
+    String? callerName,
   }) async {
     final details = additionalDetails?.trim() ?? '';
     final decoded = await _send(
@@ -547,6 +551,8 @@ class EmergencyService {
           if(details.isNotEmpty) 'additionalDetails': details,
           if(callerPhone != null && callerPhone.trim().isNotEmpty)
             'callerPhone': callerPhone.trim(),
+          if(callerName != null && callerName.trim().isNotEmpty)
+            'callerName': callerName.trim(),
         }),
       ),
       'The emergency request could not be sent.',

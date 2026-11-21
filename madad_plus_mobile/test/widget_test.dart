@@ -794,13 +794,32 @@ void main() {
     session.socket.driverOfferListener!(offeredCall);
     await tester.pump();
 
-    expect(find.text('Incoming call'), findsOneWidget);
-    expect(find.text('Clifton Block 5'), findsOneWidget);
-    expect(find.text('2 people still waiting'), findsOneWidget);
+    expect(find.byKey(const Key('driver-offer-card')), findsOneWidget);
+    expect(find.text('Incoming call'), findsNothing);
+    expect(find.text('Caller'), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
     expect(find.text('Accident'), findsOneWidget);
-    expect(find.text('Caller +92 300 0000000'), findsOneWidget);
-    expect(find.text('Decline'), findsOneWidget);
+    expect(find.text('ETA unavailable'), findsOneWidget);
+    expect(find.text('2 people still waiting'), findsNothing);
+    expect(find.text('Caller +92 300 0000000'), findsNothing);
     expect(find.text('No call on this ambulance.'), findsNothing);
+    expect(find.text('FREE'), findsOneWidget);
+    expect(find.text('Refresh'), findsOneWidget);
+    expect(find.text('Sign out'), findsOneWidget);
+    expect(find.text('Decline'), findsOneWidget);
+    expect(
+      tester.getCenter(find.text('Decline')).dx,
+      lessThan(tester.getCenter(find.text('Accept')).dx),
+    );
+
+    expect(find.text('Clifton Block 5'), findsNothing);
+    await tapText(tester, 'Location');
+    await tester.pumpAndSettle();
+    expect(find.text('Clifton Block 5'), findsOneWidget);
+    expect(find.text('N/A'), findsNothing);
+    await tapText(tester, 'Notes');
+    await tester.pumpAndSettle();
+    expect(find.text('N/A'), findsOneWidget);
 
     await tapText(tester, 'Accept');
     await pumpAsync(tester);
@@ -812,6 +831,59 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     session.state.dispose();
+  });
+
+  testWidgets('an offered driver without a road route sees the straight-line distance', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    await reachDriverCall(tester, session.state);
+    session.state.driverAmbulanceLat = 24.80;
+    session.state.driverAmbulanceLng = 67.03;
+
+    session.socket.driverOfferListener!(
+      const EmergencyCall(
+        requestId: 'req-2',
+        status: 'QUEUED',
+        pickupAddress: 'Clifton Block 5',
+        emergencyDescription: 'Cardiac',
+        peopleCount: 5,
+        callerPhone: '+92 300 0000000',
+        callerName: 'Hal Jordan',
+        hospitalName: null,
+        hospitalAddress: null,
+        assignedDriverId: null,
+        pickupLatitude: 24.81,
+        pickupLongitude: 67.03,
+        additionalDetails: 'Second floor, gate 2',
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Hal Jordan'), findsOneWidget);
+    expect(find.text('4+'), findsOneWidget);
+    expect(find.text('Cardiac'), findsOneWidget);
+    expect(find.text('ETA unavailable'), findsOneWidget);
+    expect(find.text('1.1 km'), findsOneWidget);
+    await tapText(tester, 'Notes');
+    await tester.pumpAndSettle();
+    expect(find.text('Second floor, gate 2'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    session.state.dispose();
+  });
+
+  test('an offered driver card reads kilometres and minutes from a road route', () {
+    final estimate = parseRoadEstimate(
+      '{"routes":[{"distance":3440.2,"duration":742.6}]}',
+    );
+    expect(estimate!.km, closeTo(3.44, 0.001));
+    expect(estimate.minutes, 12);
+    expect(
+      parseRoadEstimate('{"routes":[{"distance":120,"duration":20}]}')!.minutes,
+      1,
+    );
+    expect(parseRoadEstimate('{"routes":[]}'), isNull);
   });
 
   testWidgets('an offered driver is told when the call was taken', (
@@ -2382,6 +2454,7 @@ class FakeEmergencyService extends EmergencyService {
     required String inputMethod,
     String? additionalDetails,
     String? callerPhone,
+    String? callerName,
   }) async {
     emergencyPosts += 1;
     final error = scriptedEmergencyError;
