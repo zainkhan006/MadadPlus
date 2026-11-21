@@ -1,0 +1,260 @@
+const QUEUED_STATUSES = ["QUEUED", "TRANSFER_QUEUED"];
+
+function statusForPhase(phase) {
+  return phase === "TRANSFER" ? "TRANSFER_EN_ROUTE" : "ASSIGNED";
+}
+
+async function getRequest(trx, requestId) {
+  return trx("emergency_requests")
+    .select(
+      "id",
+      "organization_id",
+      "status",
+      "current_phase",
+      "assigned_ambulance_id",
+      "dispatch_location"
+    )
+    .where("id", requestId)
+    .first();
+}
+
+async function nextAssignmentSequence(trx, requestId) {
+  const row = await trx("request_assignments")
+    .where("request_id", requestId)
+    .max("sequence as value")
+    .first();
+
+  return Number(row?.value || 0) + 1;
+}
+
+async function closeActiveAssignment(trx, requestId, reason) {
+  await trx("request_assignments")
+    .where({ request_id: requestId, status: "ACTIVE" })
+    .update({
+      status: "RELEASED",
+      released_at: trx.fn.now(),
+      release_reason: reason,
+      updated_at: trx.fn.now()
+    });
+}
+
+async function assignSpecific(trx, requestId, ambulanceId, phase, reason) {
+  const request = await getRequest(trx, requestId);
+  if (!request || !QUEUED_STATUSES.includes(request.status)) {
+    return false;
+  }
+
+  const [ambulance] = await trx("ambulances")
+    .select("id", "driver_id")
+    .where({
+      id: ambulanceId,
+      organization_id: request.organization_id,
+      status: "FREE"
+    })
+    .whereNotExists(
+      trx("request_ambulance_blocks")
+        .select(trx.raw("1"))
+        .whereRaw("request_ambulance_blocks.request_id = ?", [requestId])
+        .whereRaw("request_ambulance_blocks.ambulance_id = ambulances.id")
+    )
+    .limit(1);
+
+  if (!ambulance) {
+    return false;
+  }
+
+  const updated = await trx("ambulances")
+    .where({ id: ambulanceId, status: "FREE" })
+    .update({ status: "BUSY", updated_at: trx.fn.now() });
+
+  if (updated !== 1) {
+    return false;
+  }
+
+  await trx("request_assignments").insert({
+    request_id: requestId,
+    ambulance_id: ambulanceId,
+    driver_id: ambulance.driver_id,
+    sequence: await nextAssignmentSequence(trx, requestId),
+    phase,
+    reason
+  });
+
+  await trx("emergency_requests")
+    .where("id", requestId)
+    .update({
+      assigned_ambulance_id: ambulanceId,
+      status: statusForPhase(phase),
+      current_phase: phase,
+      updated_at: trx.fn.now()
+    });
+
+  return true;
+}
+
+// Every FREE ambulance the request may use, closest first, with its
+// straight-line distance in metres from the request's dispatch point.
+async function freeAmbulancesByDistance(trx, requestId) {
+  const request = await getRequest(trx, requestId);
+  if (!request || !request.dispatch_location) {
+    return [];
+  }
+
+  return trx("ambulances")
+    .select("id", "driver_id")
+    .select(trx.raw(
+      "ST_Distance(ambulances.location, (select dispatch_location from emergency_requests where id = ?)) as distance_m",
+      [requestId]
+    ))
+    .where({ organization_id: request.organization_id, status: "FREE" })
+    .whereNotExists(
+      trx("request_ambulance_blocks")
+        .select(trx.raw("1"))
+        .whereRaw("request_ambulance_blocks.request_id = ?", [requestId])
+        .whereRaw("request_ambulance_blocks.ambulance_id = ambulances.id")
+    )
+    .orderByRaw(
+      "ambulances.location <-> (select dispatch_location from emergency_requests where id = ?)",
+      [requestId]
+    );
+}
+
+// skipRequestIds are requests whose ring search is still running, so a
+// van that becomes free does not jump the 15-second count.
+async function dispatchQueuedForAmbulance(trx, ambulanceId, skipRequestIds = []) {
+  const ambulance = await trx("ambulances")
+    .select("id", "organization_id", "location")
+    .where("id", ambulanceId)
+    .first();
+
+  if (!ambulance) {
+    return null;
+  }
+
+  const waiting = await trx("emergency_requests")
+    .select("id", "current_phase")
+    .where("organization_id", ambulance.organization_id)
+    .whereIn("status", QUEUED_STATUSES)
+    .whereNotIn("id", skipRequestIds)
+    .orderByRaw(
+      "dispatch_location <-> (select location from ambulances where id = ?)",
+      [ambulanceId]
+    );
+
+  for (const request of waiting) {
+    const phase = request.current_phase === "TRANSFER" ? "TRANSFER" : "PICKUP";
+    if (await assignSpecific(trx, request.id, ambulanceId, phase, "QUEUE")) {
+      return request.id;
+    }
+  }
+
+  return null;
+}
+
+async function requestPayload(trx, requestId) {
+  const request = await trx("emergency_requests as r")
+    .leftJoin("ambulances as a", "a.id", "r.assigned_ambulance_id")
+    .leftJoin("drivers as d", "d.id", "a.driver_id")
+    .leftJoin("hospitals as h", "h.id", "r.hospital_id")
+    .leftJoin("users as caller", "caller.id", "r.caller_user_id")
+    .select(
+      "r.id as request_id",
+      "r.status",
+      "r.current_phase",
+      "r.type",
+      "r.caller_phone",
+      "r.pickup_address",
+      "r.emergency_description",
+      "r.people_count",
+      "r.additional_details",
+      "r.input_method",
+      "r.dispatch_location",
+      "r.hospital_id",
+      "r.hospital_address",
+      "r.assigned_ambulance_id",
+      "r.caller_user_id",
+      "r.updated_at",
+      "caller.name as caller_name",
+      "h.name as hospital_name",
+      "a.label as ambulance_label",
+      "d.id as driver_id",
+      "d.name as driver_name",
+      "d.phone as driver_phone",
+      trx.raw("ST_Y(r.pickup_location::geometry) as pickup_lat"),
+      trx.raw("ST_X(r.pickup_location::geometry) as pickup_lng"),
+      trx.raw("ST_Y(r.dispatch_location::geometry) as dispatch_lat"),
+      trx.raw("ST_X(r.dispatch_location::geometry) as dispatch_lng"),
+      trx.raw("ST_Y(r.hospital_location::geometry) as hospital_lat"),
+      trx.raw("ST_X(r.hospital_location::geometry) as hospital_lng"),
+      trx.raw("ST_Y(a.location::geometry) as ambulance_lat"),
+      trx.raw("ST_X(a.location::geometry) as ambulance_lng")
+    )
+    .where("r.id", requestId)
+    .first();
+
+  if (!request) {
+    return null;
+  }
+
+  return {
+    requestId: request.request_id,
+    status: request.status,
+    updatedAt: request.updated_at,
+    phase: request.current_phase,
+    type: request.type,
+    callerPhone: request.caller_phone,
+    caller: request.caller_user_id
+      ? { id: request.caller_user_id, name: request.caller_name }
+      : null,
+    pickupAddress: request.pickup_address,
+    pickupLocation: {
+      lat: Number(request.pickup_lat),
+      lng: Number(request.pickup_lng)
+    },
+    dispatchLocation: request.dispatch_lat == null
+      ? null
+      : { lat: Number(request.dispatch_lat), lng: Number(request.dispatch_lng) },
+    emergencyDescription: request.emergency_description,
+    peopleCount: request.people_count,
+    additionalDetails: request.additional_details,
+    inputMethod: request.input_method,
+    hospital: request.hospital_id || request.hospital_address
+      ? {
+          id: request.hospital_id,
+          name: request.hospital_name || null,
+          address: request.hospital_address,
+          location: request.hospital_lat == null
+            ? null
+            : { lat: Number(request.hospital_lat), lng: Number(request.hospital_lng) }
+        }
+      : null,
+    hospitalAddress: request.hospital_address,
+    assignedAmbulance: request.assigned_ambulance_id
+      ? {
+          id: request.assigned_ambulance_id,
+          label: request.ambulance_label,
+          driver: request.driver_id
+            ? {
+                id: request.driver_id,
+                name: request.driver_name,
+                phone: request.driver_phone
+              }
+            : null,
+          location: {
+            lat: Number(request.ambulance_lat),
+            lng: Number(request.ambulance_lng)
+          }
+        }
+      : null
+  };
+}
+
+module.exports = {
+  QUEUED_STATUSES,
+  freeAmbulancesByDistance,
+  assignSpecific,
+  closeActiveAssignment,
+  dispatchQueuedForAmbulance,
+  getRequest,
+  requestPayload
+};
