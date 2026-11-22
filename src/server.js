@@ -234,10 +234,11 @@ function emitDomesticRequest(request, event) {
 
 // Ring search: a queued request looks for FREE ambulances inside a
 // radius that starts at 300 m and grows by 500 m every 15 seconds.
-// Every free ambulance inside the ring is offered the call, whether
-// that is one ambulance or several. The first driver to accept is
-// assigned. The ring keeps growing until that accept. Searches live in
-// memory, so a restart leaves the request QUEUED for the existing queue.
+// Each time the radius is set, every free ambulance inside it is
+// offered the call at once, whether that is one ambulance or several.
+// The first driver to accept is assigned. The ring keeps growing until
+// that accept. Searches live in memory, so a restart leaves the request
+// QUEUED for the existing queue.
 const SEARCH_START_METRES = 300;
 const SEARCH_GROW_METRES = 500;
 const SEARCH_RING_MS = 15000;
@@ -270,7 +271,9 @@ function growSearch(search) {
   search.radius = fromRadius === 0 ? SEARCH_START_METRES : fromRadius + SEARCH_GROW_METRES;
   search.offering = false;
   emitSearch(search, fromRadius);
-  runSearchStep(search, countSearch);
+  return countSearch(search).catch((error) => {
+    console.error(error.message);
+  });
 }
 
 async function eligibleAmbulances(search) {
@@ -358,11 +361,11 @@ async function assignFromSearch(search, ambulanceIds) {
   return payload;
 }
 
-// End of a 15-second ring. Offer every free ambulance that has just
-// come inside, then grow again. A driver who never answers stays on the
-// offer while the ring moves on to ambulances farther out. An accept
-// ends the search, or it ends one ring after every free ambulance has
-// been offered the call.
+// Runs as soon as the radius is set. Offer every free ambulance that has
+// just come inside, then grow again after 15 seconds. A driver who never
+// answers stays on the offer while the ring moves on to ambulances
+// farther out. An accept ends the search, or it ends one ring after every
+// free ambulance has been offered the call.
 async function countSearch(search) {
   const request = await getRequest(db, search.requestId);
   if (searches.get(search.requestId) !== search) return;
@@ -394,7 +397,7 @@ async function countSearch(search) {
   if (everyoneOffered && search.coveredOnce) return giveUpSearch(search);
   search.coveredOnce = everyoneOffered;
 
-  growSearch(search);
+  runSearchStep(search, growSearch);
 }
 
 async function completeRequest(requestId) {
