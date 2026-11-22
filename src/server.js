@@ -32,9 +32,6 @@ io.on("connection", (socket) => {
   socket.on("domestic.inspecting", (requestId) => {
     relayDomestic(requestId, "domestic.inspecting");
   });
-  socket.on("domestic.work_finished", (requestId) => {
-    relayDomestic(requestId, "domestic.work_finished");
-  });
 });
 
 function validCoordinates(lat, lng) {
@@ -237,9 +234,10 @@ function emitDomesticRequest(request, event) {
 
 // Ring search: a queued request looks for FREE ambulances inside a
 // radius that starts at 300 m and grows by 500 m every 15 seconds.
-// Every ambulance inside the ring is offered the call, whether that is
-// one ambulance or several, and the call is assigned only when a driver
-// accepts. Searches live in memory, so a restart leaves the request
+// Each time the radius is set, every free ambulance inside it is
+// offered the call at once, whether that is one ambulance or several.
+// The first driver to accept is assigned. The ring keeps growing until
+// that accept. Searches live in memory, so a restart leaves the request
 // QUEUED for the existing queue.
 const SEARCH_START_METRES = 300;
 const SEARCH_GROW_METRES = 500;
@@ -273,7 +271,9 @@ function growSearch(search) {
   search.radius = fromRadius === 0 ? SEARCH_START_METRES : fromRadius + SEARCH_GROW_METRES;
   search.offering = false;
   emitSearch(search, fromRadius);
-  runSearchStep(search, countSearch);
+  return countSearch(search).catch((error) => {
+    console.error(error.message);
+  });
 }
 
 async function eligibleAmbulances(search) {
@@ -292,7 +292,7 @@ async function startSearch(payload, phase, reason) {
     reason,
     radius: 0,
     offering: false,
-    coversAll: false,
+    coveredOnce: false,
     offered: new Map(), // ambulance id -> driver id
     declined: new Set(),
     timer: null
@@ -361,7 +361,11 @@ async function assignFromSearch(search, ambulanceIds) {
   return payload;
 }
 
-// End of a 15-second ring: count the FREE ambulances inside it.
+// Runs as soon as the radius is set. Offer every free ambulance that has
+// just come inside, then grow again after 15 seconds. A driver who never
+// answers stays on the offer while the ring moves on to ambulances
+// farther out. An accept ends the search, or it ends one ring after every
+// free ambulance has been offered the call.
 async function countSearch(search) {
   const request = await getRequest(db, search.requestId);
   if (searches.get(search.requestId) !== search) return;
@@ -374,34 +378,26 @@ async function countSearch(search) {
   if (eligible.length === 0) return giveUpSearch(search);
 
   const inside = eligible.filter((ambulance) => Number(ambulance.distance_m) <= search.radius);
-  if (inside.length === 0) return growSearch(search);
+  const fresh = inside.filter((ambulance) => !search.offered.has(ambulance.id));
+  if (fresh.length > 0) {
+    const payload = await requestPayload(db, search.requestId);
+    if (searches.get(search.requestId) !== search) return;
+    fresh.forEach((ambulance) => {
+      search.offered.set(ambulance.id, ambulance.driver_id);
+      if (ambulance.driver_id) {
+        io.to(`driver:${ambulance.driver_id}`).emit("request.offered", payload);
+      }
+    });
+    search.offering = true;
+  }
 
-  const payload = await requestPayload(db, search.requestId);
-  if (searches.get(search.requestId) !== search) return;
-  inside.forEach((ambulance) => {
-    search.offered.set(ambulance.id, ambulance.driver_id);
-    if (ambulance.driver_id) {
-      io.to(`driver:${ambulance.driver_id}`).emit("request.offered", payload);
-    }
-  });
-  search.offering = true;
-  search.coversAll = inside.length === eligible.length;
-  emitSearch(search, search.radius);
-  runSearchStep(search, closeOffers);
-}
+  // Every free ambulance has been offered the call. One more ring is
+  // given for an answer, then the search ends and the call stays queued.
+  const everyoneOffered = inside.length === eligible.length;
+  if (everyoneOffered && search.coveredOnce) return giveUpSearch(search);
+  search.coveredOnce = everyoneOffered;
 
-// Nobody accepted. A wider ring can still find someone new. Once the
-// ring already holds every FREE ambulance, the timer stops and the
-// request stays QUEUED with its offers open until a driver accepts.
-// If every one of those drivers declined, nobody is left to ask.
-async function closeOffers(search) {
-  if (searches.get(search.requestId) !== search) return;
-  if (!search.coversAll) return growSearch(search);
-
-  const eligible = await eligibleAmbulances(search);
-  if (searches.get(search.requestId) !== search) return;
-  if (eligible.length === 0) return giveUpSearch(search);
-  clearTimeout(search.timer);
+  runSearchStep(search, growSearch);
 }
 
 async function completeRequest(requestId) {
@@ -638,7 +634,7 @@ app.post("/api/v1/emergency-requests", async (req, res) => {
     additionalDetails,
     inputMethod,
     callerPhone,
-    callerName,
+    callerUserId,
     hospitalAddress,
     hospitalLat,
     hospitalLng
@@ -669,12 +665,16 @@ app.post("/api/v1/emergency-requests", async (req, res) => {
     const result = await db.transaction(async (trx) => {
       const orgId = await organizationId(trx);
       const pointValue = point(trx, lat, lng);
+      const callerId = String(callerUserId || "").trim();
+      const caller = callerId
+        ? await trx("users").select("id").where("id", callerId).first()
+        : null;
       const [request] = await trx("emergency_requests")
         .insert({
           organization_id: orgId,
           type,
           caller_phone: callerPhone || null,
-          caller_name: String(callerName || "").trim() || null,
+          caller_user_id: caller ? caller.id : null,
           pickup_address: String(address).trim(),
           emergency_description: String(description).trim(),
           people_count: parsedPeopleCount,
@@ -903,11 +903,6 @@ app.patch("/api/v1/drivers/:driverId/requests/:requestId/decline", async (req, r
     const ambulanceId = await offeredAmbulanceId(search, req.params.driverId);
     if (ambulanceId && searches.get(req.params.requestId) === search) {
       search.declined.add(ambulanceId);
-      const allDeclined = [...search.offered.keys()].every((id) => search.declined.has(id));
-      if (search.offering && allDeclined) {
-        clearTimeout(search.timer);
-        await closeOffers(search);
-      }
     }
     res.json({ requestId: req.params.requestId, declined: true });
   } catch (error) {
@@ -2033,6 +2028,59 @@ app.post("/api/v1/domestic-requests/:requestId/cost-decision", async (req, res) 
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Unable to save domestic cost decision" });
+  }
+});
+
+// The provider's phone shows this one-time code as a QR. Only the
+// provider's response carries the code; the user's phone is told the
+// code is ready and has to scan it.
+app.post("/api/v1/providers/:providerId/requests/:requestId/payment-code", async (req, res) => {
+  try {
+    const code = crypto.randomBytes(16).toString("hex");
+    const updated = await db("domestic_requests")
+      .where({ id: req.params.requestId, provider_id: req.params.providerId, status: "ACCEPTED" })
+      .whereNull("payment_confirmed_at")
+      .whereExists(
+        db("receipts")
+          .select(db.raw("1"))
+          .whereRaw("receipts.request_id = domestic_requests.id")
+          .whereNotNull("receipts.final_total")
+      )
+      .update({ payment_code: code, updated_at: db.fn.now() });
+    if (updated !== 1) {
+      return res.status(409).json({ error: "This job has no agreed total, or it is already paid" });
+    }
+    const payload = await getDomesticRequest(req.params.requestId);
+    emitDomesticRequest(payload, "domestic.payment_ready");
+    res.json({ code });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to create the payment code" });
+  }
+});
+
+// A scan the server accepts is the user confirming they paid the agreed
+// total in person. The code works once.
+app.post("/api/v1/domestic-requests/:requestId/payment", async (req, res) => {
+  const code = typeof req.body?.code === "string" ? req.body.code.trim() : "";
+  if (!code) return res.status(400).json({ error: "code is required" });
+
+  try {
+    const updated = await db.transaction(async (trx) => {
+      return trx("domestic_requests")
+        .where({ id: req.params.requestId, payment_code: code })
+        .whereNull("payment_confirmed_at")
+        .update({ payment_confirmed_at: trx.fn.now(), updated_at: trx.fn.now() });
+    });
+    if (updated !== 1) {
+      return res.status(409).json({ error: "That code did not match. Scan the code on the worker's phone." });
+    }
+    const payload = await getDomesticRequest(req.params.requestId);
+    emitDomesticRequest(payload, "domestic.work_finished");
+    res.json(payload);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to confirm the payment" });
   }
 });
 
