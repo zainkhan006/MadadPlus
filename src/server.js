@@ -26,7 +26,11 @@ app.use(express.json());
 io.on("connection", (socket) => {
   socket.on("join:dispatch", () => socket.join("dispatch"));
   socket.on("join:request", (requestId) => socket.join(`request:${requestId}`));
-  socket.on("join:driver", (driverId) => socket.join(`driver:${driverId}`));
+  socket.on("join:driver", (driverId) => {
+    replayOffers(socket, driverId).catch((error) => {
+      console.error(error.message);
+    });
+  });
   socket.on("join:provider", (providerId) => socket.join(`provider:${providerId}`));
   socket.on("join:domestic-request", (requestId) => socket.join(`domestic:${requestId}`));
   socket.on("domestic.inspecting", (requestId) => {
@@ -398,6 +402,24 @@ async function countSearch(search) {
   search.coveredOnce = everyoneOffered;
 
   runSearchStep(search, growSearch);
+}
+
+// A driver who signs in after the ring reached their ambulance missed
+// the countSearch emit. Send that same offer to the joining socket, unless
+// this ambulance declined or is still outside the ring.
+async function replayOffers(socket, driverId) {
+  await socket.join(`driver:${driverId}`);
+  for (const search of [...searches.values()]) {
+    const eligible = await eligibleAmbulances(search);
+    const ambulance = eligible.find((row) => row.driver_id === driverId);
+    if (!ambulance || Number(ambulance.distance_m) > search.radius) continue;
+
+    const payload = await requestPayload(db, search.requestId);
+    if (searches.get(search.requestId) !== search) continue;
+    search.offered.set(ambulance.id, ambulance.driver_id);
+    search.offering = true;
+    socket.emit("request.offered", payload);
+  }
 }
 
 async function completeRequest(requestId) {
@@ -2084,7 +2106,11 @@ app.post("/api/v1/domestic-requests/:requestId/payment", async (req, res) => {
   }
 });
 
-const port = process.env.PORT || 3000;
-server.listen(port, () => {
-  console.log(`Backend running on http://localhost:${port}`);
-});
+if (require.main === module) {
+  const port = process.env.PORT || 3000;
+  server.listen(port, () => {
+    console.log(`Backend running on http://localhost:${port}`);
+  });
+}
+
+module.exports = { replayOffers, searches };
