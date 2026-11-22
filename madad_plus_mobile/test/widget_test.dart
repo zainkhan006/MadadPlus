@@ -811,6 +811,47 @@ void main() {
       tester.getCenter(find.text('Decline')).dx,
       lessThan(tester.getCenter(find.text('Accept')).dx),
     );
+    expect(find.text('ETA'), findsNothing);
+    expect(find.text('Distance'), findsNothing);
+    expect(find.byIcon(Icons.schedule_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.route_rounded), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Text && (widget.data ?? '').contains('·'),
+      ),
+      findsNothing,
+    );
+
+    await tester.pumpAndSettle();
+    final card = find.byKey(const Key('driver-offer-card'));
+    final map = find.byKey(const Key('driver-trip-map'));
+    expect(tester.getSize(map).height, 190);
+    expect(
+      tester.getRect(card).bottom,
+      lessThanOrEqualTo(tester.getTopLeft(map).dy + 1),
+    );
+    expect(
+      tester.getTopLeft(card).dy,
+      lessThan(tester.getTopLeft(map).dy),
+    );
+    expect(tester.widget<Opacity>(map).opacity, 0.4);
+    expect(
+      tester.widget<Opacity>(
+        find.ancestor(of: find.text('FREE'), matching: find.byType(Opacity)).first,
+      ).opacity,
+      0.4,
+    );
+    expect(
+      tester.widget<Opacity>(
+        find.ancestor(of: find.text('A-01').first, matching: find.byType(Opacity)).first,
+      ).opacity,
+      0.4,
+    );
+    for(final layer in tester.widgetList<Opacity>(
+      find.ancestor(of: card, matching: find.byType(Opacity)),
+    )) {
+      expect(layer.opacity, 1);
+    }
 
     expect(find.text('Clifton Block 5'), findsNothing);
     await tapText(tester, 'Location');
@@ -865,9 +906,42 @@ void main() {
     expect(find.text('Cardiac'), findsOneWidget);
     expect(find.text('ETA unavailable'), findsOneWidget);
     expect(find.text('1.1 km'), findsOneWidget);
+    expect(find.byIcon(Icons.route_rounded), findsOneWidget);
+    expect(find.text('ETA'), findsNothing);
+    expect(find.text('Distance'), findsNothing);
     await tapText(tester, 'Notes');
     await tester.pumpAndSettle();
     expect(find.text('Second floor, gate 2'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    session.state.dispose();
+  });
+
+  testWidgets('an offered driver with reduced motion sees the card at full size at once', (
+    WidgetTester tester,
+  ) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    final session = testSession(withCall: false);
+    await reachDriverCall(tester, session.state);
+
+    session.socket.driverOfferListener!(offeredCall);
+    await tester.pump();
+
+    final entrance = tester.widget<Transform>(
+      find.byKey(const Key('driver-offer-entrance')),
+    );
+    expect(entrance.transform.getMaxScaleOnAxis(), 1);
+    expect(
+      tester.widget<Opacity>(
+        find.ancestor(
+          of: find.byKey(const Key('driver-offer-entrance')),
+          matching: find.byType(Opacity),
+        ).first,
+      ).opacity,
+      1,
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     session.state.dispose();

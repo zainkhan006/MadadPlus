@@ -182,7 +182,7 @@ function ambulanceIconHtml(status) {
   else if(status === STATUS.UNAVAILABLE) {
     src = "ambulance-unavailable.png";
   }
-  return `<img src="${src}" width="41" height="41" alt="" draggable="false" style="display:block" onerror="fetch('http://127.0.0.1:7305/ingest/3123ab15-a865-40c1-9544-a2717b4e7d1d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89386b'},body:JSON.stringify({sessionId:'89386b',hypothesisId:'A',location:'app.js:ambulanceIconHtml',message:'ambulance image failed',data:{src:this.src},timestamp:Date.now()})}).catch(()=>{})" />`;
+  return `<img src="${src}" width="41" height="41" alt="" draggable="false" style="display:block" />`;
 }
 
 function ambulanceIcon(status) {
