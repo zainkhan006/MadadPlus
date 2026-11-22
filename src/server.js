@@ -237,9 +237,10 @@ function emitDomesticRequest(request, event) {
 }
 
 // Ring search: a queued request looks for FREE ambulances inside a
-// radius that starts at 300 m and grows by 500 m every 15 seconds.
-// Each time the radius is set, every free ambulance inside it is
-// offered the call at once, whether that is one ambulance or several.
+// radius that starts at 300 m and grows by 500 m every 15 seconds. The
+// ring grows steadily across those 15 seconds, the same way the
+// dispatcher draws it, and an ambulance is offered the call at the
+// moment the growing edge reaches it, never before.
 // The first driver to accept is assigned. The ring keeps growing until
 // that accept. Searches live in memory, so a restart leaves the request
 // QUEUED for the existing queue.
@@ -270,10 +271,45 @@ function runSearchStep(search, step) {
   }, SEARCH_RING_MS);
 }
 
+// How far the growing edge has reached right now.
+function currentRadius(search) {
+  const grown = Math.min(1, (Date.now() - search.ringStartedAt) / SEARCH_RING_MS);
+  return search.ringFrom + (search.radius - search.ringFrom) * grown;
+}
+
+// Sends the offer to one ambulance's driver, once, unless that ambulance
+// declined or the search has ended.
+function offerAmbulance(search, ambulance, payload) {
+  if (searches.get(search.requestId) !== search) return;
+  if (search.declined.has(ambulance.id) || search.offered.has(ambulance.id)) return;
+  search.offered.set(ambulance.id, ambulance.driver_id);
+  search.offering = true;
+  if (ambulance.driver_id) {
+    io.to(`driver:${ambulance.driver_id}`).emit("request.offered", payload);
+  }
+  // #region agent log
+  io.to("dispatch").emit("debug.offer", { requestId: search.requestId, ambulanceId: ambulance.id, distM: Number(ambulance.distance_m), radiusM: currentRadius(search), via: "ring" });
+  // #endregion
+}
+
+// Offers now if the edge is already past this ambulance, otherwise at the
+// moment the edge gets there.
+function offerWhenReached(search, ambulance, payload) {
+  if (search.pending.has(ambulance.id)) return;
+  const span = search.radius - search.ringFrom;
+  const edgeMs = ((Number(ambulance.distance_m) - search.ringFrom) / span) * SEARCH_RING_MS;
+  const waitMs = edgeMs - (Date.now() - search.ringStartedAt);
+  if (waitMs <= 0) return offerAmbulance(search, ambulance, payload);
+  search.pending.add(ambulance.id);
+  search.offerTimers.push(setTimeout(() => offerAmbulance(search, ambulance, payload), waitMs));
+}
+
 function growSearch(search) {
   const fromRadius = search.radius;
   search.radius = fromRadius === 0 ? SEARCH_START_METRES : fromRadius + SEARCH_GROW_METRES;
   search.offering = false;
+  search.ringFrom = fromRadius;
+  search.ringStartedAt = Date.now();
   emitSearch(search, fromRadius);
   return countSearch(search).catch((error) => {
     console.error(error.message);
@@ -295,9 +331,13 @@ async function startSearch(payload, phase, reason) {
     phase,
     reason,
     radius: 0,
+    ringFrom: 0,
+    ringStartedAt: 0,
     offering: false,
     coveredOnce: false,
     offered: new Map(), // ambulance id -> driver id
+    pending: new Set(), // ambulance ids waiting for the edge to reach them
+    offerTimers: [],
     declined: new Set(),
     timer: null
   };
@@ -313,6 +353,7 @@ function stopSearch(requestId, assignedAmbulanceId) {
   const search = searches.get(requestId);
   if (!search) return;
   clearTimeout(search.timer);
+  search.offerTimers.forEach(clearTimeout);
   searches.delete(requestId);
   search.offered.forEach((driverId, ambulanceId) => {
     if (driverId && ambulanceId !== assignedAmbulanceId) {
@@ -365,11 +406,12 @@ async function assignFromSearch(search, ambulanceIds) {
   return payload;
 }
 
-// Runs as soon as the radius is set. Offer every free ambulance that has
-// just come inside, then grow again after 15 seconds. A driver who never
-// answers stays on the offer while the ring moves on to ambulances
-// farther out. An accept ends the search, or it ends one ring after every
-// free ambulance has been offered the call.
+// Runs as soon as the radius is set. Each free ambulance that comes inside
+// this ring is offered the call when the growing edge reaches it, then the
+// ring grows again after 15 seconds. A driver who never answers stays on
+// the offer while the ring moves on to ambulances farther out. An accept
+// ends the search, or it ends one ring after every free ambulance has been
+// offered the call.
 async function countSearch(search) {
   const request = await getRequest(db, search.requestId);
   if (searches.get(search.requestId) !== search) return;
@@ -386,13 +428,7 @@ async function countSearch(search) {
   if (fresh.length > 0) {
     const payload = await requestPayload(db, search.requestId);
     if (searches.get(search.requestId) !== search) return;
-    fresh.forEach((ambulance) => {
-      search.offered.set(ambulance.id, ambulance.driver_id);
-      if (ambulance.driver_id) {
-        io.to(`driver:${ambulance.driver_id}`).emit("request.offered", payload);
-      }
-    });
-    search.offering = true;
+    fresh.forEach((ambulance) => offerWhenReached(search, ambulance, payload));
   }
 
   // Every free ambulance has been offered the call. One more ring is
@@ -404,21 +440,24 @@ async function countSearch(search) {
   runSearchStep(search, growSearch);
 }
 
-// A driver who signs in after the ring reached their ambulance missed
-// the countSearch emit. Send that same offer to the joining socket, unless
-// this ambulance declined or is still outside the ring.
+// A driver who signs in after the growing edge reached their ambulance
+// missed the live offer. Send that same offer to the joining socket, unless
+// this ambulance declined or the edge has not reached it yet.
 async function replayOffers(socket, driverId) {
   await socket.join(`driver:${driverId}`);
   for (const search of [...searches.values()]) {
     const eligible = await eligibleAmbulances(search);
     const ambulance = eligible.find((row) => row.driver_id === driverId);
-    if (!ambulance || Number(ambulance.distance_m) > search.radius) continue;
+    if (!ambulance || Number(ambulance.distance_m) > currentRadius(search)) continue;
 
     const payload = await requestPayload(db, search.requestId);
     if (searches.get(search.requestId) !== search) continue;
     search.offered.set(ambulance.id, ambulance.driver_id);
     search.offering = true;
     socket.emit("request.offered", payload);
+    // #region agent log
+    io.to("dispatch").emit("debug.offer", { requestId: search.requestId, ambulanceId: ambulance.id, distM: Number(ambulance.distance_m), radiusM: currentRadius(search), via: "join" });
+    // #endregion
   }
 }
 
@@ -2113,4 +2152,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { replayOffers, searches };
+module.exports = { replayOffers, offerWhenReached, searches };
