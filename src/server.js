@@ -287,9 +287,6 @@ function offerAmbulance(search, ambulance, payload) {
   if (ambulance.driver_id) {
     io.to(`driver:${ambulance.driver_id}`).emit("request.offered", payload);
   }
-  // #region agent log
-  io.to("dispatch").emit("debug.offer", { requestId: search.requestId, ambulanceId: ambulance.id, distM: Number(ambulance.distance_m), radiusM: currentRadius(search), via: "ring" });
-  // #endregion
 }
 
 // Offers now if the edge is already past this ambulance, otherwise at the
@@ -455,9 +452,6 @@ async function replayOffers(socket, driverId) {
     search.offered.set(ambulance.id, ambulance.driver_id);
     search.offering = true;
     socket.emit("request.offered", payload);
-    // #region agent log
-    io.to("dispatch").emit("debug.offer", { requestId: search.requestId, ambulanceId: ambulance.id, distM: Number(ambulance.distance_m), radiusM: currentRadius(search), via: "join" });
-    // #endregion
   }
 }
 
