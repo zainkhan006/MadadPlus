@@ -509,8 +509,9 @@ async function loadAmbulances() {
 // Periodic reconciliation for live tracking: driver phones push
 // ambulance.updated (position ticks while free AND on a call), but a
 // dropped socket would freeze the map. This re-reads the snapshot and
-// updates positions/status — never touching a unit mid-drive, where the
-// animation owns the marker until it lands.
+// updates positions/status. A unit on a call keeps the position the
+// dashboard drove it to: the database still has its start point, so
+// copying that back would send it there between legs.
 async function syncAmbulanceSnapshot() {
   try {
     const res = await fetch(`${BACKEND_URL}/api/v1/ambulances`);
@@ -519,7 +520,7 @@ async function syncAmbulanceSnapshot() {
     list.forEach((a) => {
       const amb = ambulances[a.id];
       if (!amb) return;
-      if (!animations[a.id]) {
+      if (!animations[a.id] && !amb.currentRequestId) {
         if (a.lat != null) amb.lat = Number(a.lat);
         if (a.lng != null) amb.lng = Number(a.lng);
       }
@@ -982,10 +983,13 @@ function trackRequest(payload) {
   const previous = requests[payload.requestId];
 
   // The payload carries the unit's authoritative position at assignment
-  // time — take it, unless a drive is already underway (that animation
-  // owns the position until it lands).
+  // time — take it once, when the unit first joins this call, and never
+  // while a drive is underway. After that the dashboard owns the position:
+  // the database still holds where the unit started, so later updates
+  // (pickup, arrival) would send it back there.
   const ambLocation = toPoint(payload.assignedAmbulance?.location);
-  if (ambulanceId && ambulances[ambulanceId] && ambLocation && !animations[ambulanceId]) {
+  const alreadyOnThisCall = !!(previous && previous.ambulanceId === ambulanceId);
+  if (ambulanceId && ambulances[ambulanceId] && ambLocation && !animations[ambulanceId] && !alreadyOnThisCall) {
     ambulances[ambulanceId].lat = ambLocation.lat;
     ambulances[ambulanceId].lng = ambLocation.lng;
   }
@@ -1149,11 +1153,10 @@ socket.on("request.completed", (payload) => {
 });
 
 // ---- Search ring (search.updated / search.ended from the server) ----
-// One circle per request, centred on its dispatch point. Each update grows
-// it from the radius already drawn to the next ring across 15 seconds.
+// One circle per request, centred on the caller's dispatch point. A new
+// request starts at fromRadius (0) on that point and grows to toRadius.
 // search.ended takes the circle off the map.
 const searchRings = {}; // request id -> { circle, frame }
-const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 function stopSearchRing(requestId) {
   const ring = searchRings[requestId];
@@ -1171,12 +1174,15 @@ function removeSearchRing(requestId) {
 function drawSearchRing(payload) {
   if (!map || !payload || !payload.requestId || !payload.center) return;
   const center = [payload.center.lat, payload.center.lng];
+  const fromRadius = Number(payload.fromRadius) || 0;
+  const toRadius = Number(payload.toRadius) || 0;
+  const durationMs = Number(payload.durationMs) || 0;
   let ring = searchRings[payload.requestId];
   if (!ring) {
     const color = getComputedStyle(document.documentElement).getPropertyValue("--accent-critical").trim();
     ring = {
       circle: L.circle(center, {
-        radius: payload.fromRadius || 0,
+        radius: fromRadius,
         color,
         weight: 2,
         fillColor: color,
@@ -1189,20 +1195,20 @@ function drawSearchRing(payload) {
   }
   stopSearchRing(payload.requestId);
   ring.circle.setLatLng(center);
-
-  const from = ring.circle.getRadius();
-  const to = payload.toRadius;
-  if (reducedMotion.matches || !payload.durationMs || from === to) {
-    ring.circle.setRadius(to);
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduceMotion || durationMs === 0 || fromRadius === toRadius) {
+    ring.circle.setRadius(toRadius);
     return;
   }
-  const start = performance.now();
-  function step(now) {
-    const t = Math.min(1, (now - start) / payload.durationMs);
-    ring.circle.setRadius(from + (to - from) * t);
-    if (t < 1) ring.frame = requestAnimationFrame(step);
+  const started = performance.now();
+  function grow(now) {
+    const progress = Math.min(1, (now - started) / durationMs);
+    ring.circle.setRadius(fromRadius + (toRadius - fromRadius) * progress);
+    if (progress < 1 && searchRings[payload.requestId] === ring) {
+      ring.frame = requestAnimationFrame(grow);
+    }
   }
-  ring.frame = requestAnimationFrame(step);
+  ring.frame = requestAnimationFrame(grow);
 }
 
 socket.on("search.updated", drawSearchRing);
