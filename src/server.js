@@ -15,6 +15,7 @@ const {
   getRequest,
   requestPayload
 } = require("./dispatch");
+const { reading, refreshCode, checkScan } = require("./presence");
 
 const app = express();
 const server = http.createServer(app);
@@ -35,6 +36,9 @@ io.on("connection", (socket) => {
   socket.on("join:domestic-request", (requestId) => socket.join(`domestic:${requestId}`));
   socket.on("domestic.inspecting", (requestId) => {
     relayDomestic(requestId, "domestic.inspecting");
+  });
+  socket.on("domestic.presence_started", (requestId) => {
+    relayDomestic(requestId, "domestic.presence_started");
   });
 });
 
@@ -2136,6 +2140,45 @@ app.post("/api/v1/domestic-requests/:requestId/payment", async (req, res) => {
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Unable to confirm the payment" });
+  }
+});
+
+// Live presence codes per domestic request. A server restart clears them.
+const presenceCodes = new Map();
+
+app.post("/api/v1/domestic-requests/:requestId/presence-code", async (req, res) => {
+  try {
+    const job = await getDomesticRequest(req.params.requestId);
+    if (!job) return res.status(404).json({ error: "Domestic request not found" });
+    const entry = refreshCode(
+      presenceCodes.get(job.requestId),
+      Date.now(),
+      reading(req.body?.lat, req.body?.lng)
+    );
+    presenceCodes.set(job.requestId, entry);
+    res.json({ code: entry.current.code });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to make a presence code" });
+  }
+});
+
+app.post("/api/v1/domestic-requests/:requestId/presence-scan", async (req, res) => {
+  try {
+    const job = await getDomesticRequest(req.params.requestId);
+    if (!job) return res.status(404).json({ error: "Domestic request not found" });
+    const result = checkScan(presenceCodes.get(job.requestId), job, {
+      code: req.body?.code,
+      lat: req.body?.lat,
+      lng: req.body?.lng
+    }, Date.now());
+    if (!result.ok) return res.status(409).json({ error: result.reason });
+    presenceCodes.delete(job.requestId);
+    emitDomesticRequest(job, "domestic.work_finished");
+    res.json(job);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to check the presence scan" });
   }
 });
 
