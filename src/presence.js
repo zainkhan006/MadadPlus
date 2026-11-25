@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 
 const codeLifeMs = 5000;
-const nearMetres = 100;
+const nearMetres = 200;
 
 function reading(lat, lng) {
   if (lat == null || lng == null || lat === "" || lng === "") return null;

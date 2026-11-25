@@ -11,7 +11,7 @@ function codes() {
   return () => `code-${++count}`;
 }
 
-test("the current code is accepted when both phones are inside 100 metres", () => {
+test("the current code is accepted when both phones are inside 200 metres", () => {
   const entry = refreshCode(null, 0, atJob, codes());
   const result = checkScan(entry, job, { code: "code-1", ...atJob }, 1000);
   assert.equal(result.ok, true);
@@ -34,13 +34,13 @@ test("a code from two refreshes back is rejected", () => {
   assert.equal(result.ok, false);
 });
 
-test("a worker reading beyond 100 metres is rejected", () => {
+test("a worker reading beyond 200 metres is rejected", () => {
   const entry = refreshCode(null, 0, atJob, codes());
   const result = checkScan(entry, job, { code: "code-1", ...farAway }, 1000);
   assert.equal(result.ok, false);
 });
 
-test("a user reading beyond 100 metres is rejected", () => {
+test("a user reading beyond 200 metres is rejected", () => {
   const entry = refreshCode(null, 0, farAway, codes());
   const result = checkScan(entry, job, { code: "code-1", ...atJob }, 1000);
   assert.equal(result.ok, false);
