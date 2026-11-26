@@ -115,9 +115,19 @@ class EmergencySocketService {
     required String driverId,
     required void Function(EmergencyCall call) onCall,
     void Function(String ambulanceId, String status)? onAmbulance,
+    void Function(EmergencyCall offer)? onOffer,
+    void Function(String requestId)? onTaken,
   }) {
     disconnectDriver();
     final driverSocket = _joinRoom('join:driver', driverId);
+    driverSocket.on('request.offered', (data) {
+      onOffer?.call(EmergencyCall.fromJson(Map<String, dynamic>.from(data as Map)));
+    });
+    driverSocket.on('request.taken', (data) {
+      if(data is Map && data['requestId'] is String) {
+        onTaken?.call(data['requestId'] as String);
+      }
+    });
     driverSocket.on('ambulance.updated', (data) {
       if(data is Map && data['id'] is String && data['status'] is String) {
         onAmbulance?.call(data['id'] as String, data['status'] as String);
@@ -159,6 +169,7 @@ class EmergencySocketService {
       'domestic.cost_submitted',
       'domestic.cost_decided',
       'domestic.inspecting',
+      'domestic.presence_started',
       'domestic.work_finished',
     ]) {
       providerSocket.on(eventName, (data) {
@@ -184,11 +195,13 @@ class EmergencySocketService {
     disconnectDomestic();
     final domesticSocket = _joinRoom('join:domestic-request', requestId);
     for(final eventName in [
+      'domestic.payment_ready',
       'domestic.accepted',
       'domestic.cancelled',
       'domestic.cost_submitted',
       'domestic.cost_decided',
       'domestic.inspecting',
+      'domestic.presence_started',
       'domestic.work_finished',
     ]) {
       domesticSocket.on(eventName, (data) {
@@ -220,6 +233,7 @@ class EmergencySocketService {
     void Function(EmergencyCompletion completion)? onCompleted,
     void Function(String message, AmbulanceAssignment? assignment)?
         onCallerMessage,
+    void Function()? onSearchEnded,
     void Function()? onDisconnected,
     void Function()? onReconnected,
   }) {
@@ -259,6 +273,9 @@ class EmergencySocketService {
     });
 
     requestSocket.on('request.queued', (data) {
+      if(data is Map && data['searching'] == false) {
+        onSearchEnded?.call();
+      }
       final message = callerMessageFrom(data);
       if(message != null) {
         onCallerMessage?.call(message, null);

@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -7,7 +9,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -73,6 +77,8 @@ class EmergencyFlow extends StatelessWidget {
         return const _ProviderEnRouteScreen();
       case EmergencyScreen.providerJob:
         return const _ProviderJobScreen();
+      case EmergencyScreen.providerScan:
+        return const _ProviderScanScreen();
       case EmergencyScreen.providerPaid:
         return const _ProviderPaidScreen();
       case EmergencyScreen.home:
@@ -117,6 +123,16 @@ final _settleSpring = SpringDescription.withDampingRatio(
   mass: 1,
   stiffness: 440,
   ratio: 1,
+);
+
+final _presenceSpring = SpringDescription.withDurationAndBounce(
+  duration: const Duration(milliseconds: 400),
+);
+
+final _offerSpring = SpringDescription.withDampingRatio(
+  mass: 1,
+  stiffness: 480,
+  ratio: 0.78,
 );
 
 TextStyle? _largeTitle(BuildContext context) {
@@ -1155,6 +1171,371 @@ List<String> _driverDetailLines(EmergencyCall call, {required bool atHospital}) 
   return lines;
 }
 
+class _DriverOfferCard extends StatefulWidget {
+  const _DriverOfferCard({super.key, required this.offer});
+
+  final EmergencyCall offer;
+
+  @override
+  State<_DriverOfferCard> createState() => _DriverOfferCardState();
+}
+
+class _DriverOfferCardState extends State<_DriverOfferCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController entrance = AnimationController.unbounded(
+    vsync: this,
+  );
+  var started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if(started) {
+      return;
+    }
+    started = true;
+    if(MediaQuery.disableAnimationsOf(context)) {
+      entrance.value = 1;
+      return;
+    }
+    entrance.animateWith(SpringSimulation(_offerSpring, 0, 1, 0));
+  }
+
+  @override
+  void dispose() {
+    entrance.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final offer = widget.offer;
+    final busy = state.driverLoading;
+    final name = offer.callerName?.trim() ?? '';
+    final people = offer.peopleCount;
+    final address = offer.pickupAddress?.trim() ?? '';
+    final notes = offer.additionalDetails?.trim() ?? '';
+    final minutes = state.driverOfferMinutes;
+    final km = state.driverOfferKm;
+    final String etaText;
+    if(state.driverOfferRouteLoading) {
+      etaText = 'Checking the route';
+    }
+    else if(minutes != null) {
+      etaText = '$minutes min';
+    }
+    else {
+      etaText = 'ETA unavailable';
+    }
+    final kmText = km == null ? '' : '${km.toStringAsFixed(1)} km';
+    final tripStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+      color: AppColors.muted,
+    );
+
+    final card = Container(
+      key: const Key('driver-offer-card'),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x2917212F),
+            blurRadius: 24,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Material(
+        color: AppColors.surface,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          side: BorderSide(color: AppColors.line.withValues(alpha: 0.6)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.space4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const CircleAvatar(
+                    radius: 26,
+                    backgroundColor: AppColors.blue,
+                    child: Icon(
+                      Icons.person,
+                      color: AppColors.surface,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.space3),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          name.isEmpty ? 'Caller' : name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(color: AppColors.ink),
+                        ),
+                        Text(
+                          offer.emergencyDescription ?? 'Emergency',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: AppColors.ink,
+                                fontWeight: FontWeight.w500,
+                              ),
+                        ),
+                        const SizedBox(height: AppSpacing.space1),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.schedule_rounded,
+                              size: 14,
+                              color: AppColors.muted,
+                            ),
+                            const SizedBox(width: AppSpacing.space1),
+                            Flexible(
+                              child: Text(
+                                etaText,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: tripStyle,
+                              ),
+                            ),
+                            if(kmText.isNotEmpty) ...[
+                              const SizedBox(width: AppSpacing.space2),
+                              const Icon(
+                                Icons.route_rounded,
+                                size: 14,
+                                color: AppColors.muted,
+                              ),
+                              const SizedBox(width: AppSpacing.space1),
+                              Text(
+                                kmText,
+                                maxLines: 1,
+                                style: tripStyle,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  if(people != null) ...[
+                    const SizedBox(width: AppSpacing.space3),
+                    Semantics(
+                      label: _peopleLabel(people),
+                      excludeSemantics: true,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.space3,
+                          vertical: AppSpacing.space1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.blue,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.group_rounded,
+                              color: AppColors.surface,
+                              size: 16,
+                            ),
+                            const SizedBox(width: AppSpacing.space1),
+                            Text(
+                              people >= 4 ? '4+' : '$people',
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(color: AppColors.surface),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: AppSpacing.space2),
+              _OfferDisclosure(
+                label: 'Location',
+                body: address.isEmpty
+                    ? 'The caller didn\'t share an address.'
+                    : address,
+              ),
+              const Divider(height: 1, color: AppColors.line),
+              _OfferDisclosure(
+                label: 'Notes',
+                body: notes.isEmpty ? 'N/A' : notes,
+              ),
+              const SizedBox(height: AppSpacing.space3),
+              Row(
+                children: [
+                  Expanded(
+                    child: _PressScale(
+                      child: _SecondaryButton(
+                        label: 'Decline',
+                        onPressed: busy ? null : state.declineDriverOffer,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.space3),
+                  Expanded(
+                    child: _ActionButton(
+                      label: 'Accept',
+                      onPressed: busy ? null : state.acceptDriverOffer,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    return AnimatedBuilder(
+      animation: entrance,
+      builder: (context, child) {
+        final value = entrance.value;
+        final scale = value > 1 ? value : 0.92 + 0.08 * value;
+        return Opacity(
+          opacity: value.clamp(0.0, 1.0),
+          child: Transform.scale(
+            key: const Key('driver-offer-entrance'),
+            scale: scale,
+            child: child,
+          ),
+        );
+      },
+      child: card,
+    );
+  }
+}
+
+class _OfferDisclosure extends StatefulWidget {
+  const _OfferDisclosure({required this.label, required this.body});
+
+  final String label;
+  final String body;
+
+  @override
+  State<_OfferDisclosure> createState() => _OfferDisclosureState();
+}
+
+class _OfferDisclosureState extends State<_OfferDisclosure>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController reveal = AnimationController.unbounded(
+    vsync: this,
+  );
+  var open = false;
+
+  @override
+  void dispose() {
+    reveal.dispose();
+    super.dispose();
+  }
+
+  void toggle() {
+    setState(() {
+      open = !open;
+    });
+    final target = open ? 1.0 : 0.0;
+    if(MediaQuery.disableAnimationsOf(context)) {
+      reveal.value = target;
+      return;
+    }
+    reveal
+        .animateWith(
+          SpringSimulation(_settleSpring, reveal.value, target, reveal.velocity),
+        )
+        .then((_) {
+          if(mounted) {
+            reveal.value = open ? 1 : 0;
+          }
+        });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          onTap: toggle,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.label,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: AppColors.ink,
+                    ),
+                  ),
+                ),
+                AnimatedBuilder(
+                  animation: reveal,
+                  builder: (context, child) {
+                    return Transform.rotate(
+                      angle: math.pi * reveal.value.clamp(0.0, 1.0),
+                      child: child,
+                    );
+                  },
+                  child: Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: AppColors.muted,
+                    semanticLabel: open
+                        ? 'Hide ${widget.label.toLowerCase()}'
+                        : 'Show ${widget.label.toLowerCase()}',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        AnimatedBuilder(
+          animation: reveal,
+          builder: (context, child) {
+            final shown = reveal.value.clamp(0.0, 1.0);
+            if(shown <= 0) {
+              return const SizedBox.shrink();
+            }
+            return ClipRect(
+              child: Align(
+                alignment: Alignment.topLeft,
+                heightFactor: shown,
+                child: child,
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.space3),
+            child: Text(
+              widget.body,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: AppColors.ink,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _DriverJobScreen extends StatefulWidget {
   const _DriverJobScreen();
 
@@ -1229,11 +1610,15 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
     }
 
     final call = state.driverCall;
+    final offer = call == null ? state.driverOffer : null;
     final atPickup = _pickupStatuses.contains(call?.status);
     final toHospital = _hospitalStatuses.contains(call?.status);
     final atDropoff = call?.status == 'ARRIVED';
     final String title;
-    if(call == null) {
+    if(offer != null) {
+      title = state.driverAmbulanceLabel ?? 'Ambulance';
+    }
+    else if(call == null) {
       title = 'No active call';
     }
     else if(atPickup) {
@@ -1255,120 +1640,144 @@ class _DriverJobScreenState extends State<_DriverJobScreen> {
       _ => AppColors.orange,
     };
     final busy = state.driverLoading;
+    final groundOpacity = offer == null ? 1.0 : 0.4;
+
+    final below = Opacity(
+            opacity: groundOpacity,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: AppSpacing.space3),
+                Text(
+                  state.driverAmbulanceLabel ?? 'Ambulance',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+                const SizedBox(height: AppSpacing.space2),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.space3,
+                      vertical: AppSpacing.space1,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      status,
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(color: AppColors.surface),
+                    ),
+                  ),
+                ),
+                if(offer == null) ...[
+                  const SizedBox(height: AppSpacing.space3),
+                  Text(
+                    'Details',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: AppSpacing.space2),
+                ],
+                if(call == null && offer == null)
+                  Text(
+                    state.driverOfferNotice ?? 'No call on this ambulance.',
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                if(call != null)
+                  for(final line in _driverDetailLines(
+                    call,
+                    atHospital: toHospital || atDropoff,
+                  ))
+                    Text(
+                      line,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                if(state.driverError != null) ...[
+                  const SizedBox(height: AppSpacing.space4),
+                  _ErrorNotice(message: state.driverError!),
+                ],
+                const SizedBox(height: AppSpacing.space5),
+                if(atPickup)
+                  _ActionButton(
+                    label: 'Picked up',
+                    onPressed: busy
+                        ? null
+                        : () {
+                            state.sendDriverUpdate('pickup');
+                          },
+                  ),
+                if(toHospital)
+                  _ActionButton(
+                    label: 'Reached the hospital',
+                    onPressed: busy
+                        ? null
+                        : () {
+                            state.sendDriverUpdate('hospital');
+                          },
+                  ),
+                if(atDropoff)
+                  _ArrivalSwipe(
+                    onConfirmed: () {
+                      confirmDropoff(state);
+                    },
+                  ),
+                if(call == null && status == 'FREE')
+                  _SecondaryButton(
+                    label: 'Mark as unavailable',
+                    onPressed: state.markDriverUnavailable,
+                  ),
+                if(call == null && status == 'UNAVAILABLE')
+                  _SecondaryButton(
+                    label: 'Mark as available',
+                    onPressed: state.markDriverAvailable,
+                  ),
+                if(atPickup || toHospital) ...[
+                  const SizedBox(height: AppSpacing.space3),
+                  _SecondaryButton(
+                    label: 'Mark as unavailable',
+                    onPressed: busy
+                        ? null
+                        : () {
+                            confirmUnavailable(state);
+                          },
+                  ),
+                ],
+                const SizedBox(height: AppSpacing.space3),
+                _SecondaryButton(
+                  label: 'Refresh',
+                  onPressed: state.loadDriverPortal,
+                ),
+                const SizedBox(height: AppSpacing.space3),
+                _SecondaryButton(
+                  label: 'Sign out',
+                  onPressed: state.signOutDriver,
+                ),
+              ],
+            ),
+          );
 
     return _FlowFrame(
       title: title,
+      groundOpacity: groundOpacity,
       onBack: () {
         state.goTo(EmergencyScreen.login);
       },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _TripMap(),
-          const SizedBox(height: AppSpacing.space3),
-          Text(
-            state.driverAmbulanceLabel ?? 'Ambulance',
-            style: Theme.of(context).textTheme.labelLarge,
+          if(offer != null)
+            _DriverOfferCard(
+              key: ValueKey(offer.requestId),
+              offer: offer,
+            ),
+          Opacity(
+            key: const Key('driver-trip-map'),
+            opacity: groundOpacity,
+            child: const _TripMap(),
           ),
-          const SizedBox(height: AppSpacing.space2),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.space3,
-                vertical: AppSpacing.space1,
-              ),
-              decoration: BoxDecoration(
-                color: statusColor,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                status,
-                style: Theme.of(context).textTheme.labelSmall
-                    ?.copyWith(color: AppColors.surface),
-              ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.space3),
-          Text(
-            'Details',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: AppSpacing.space2),
-          if(call == null)
-            Text(
-              'No call on this ambulance.',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-          if(call != null)
-            for(final line in _driverDetailLines(
-              call,
-              atHospital: toHospital || atDropoff,
-            ))
-              Text(
-                line,
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-          if(state.driverError != null) ...[
-            const SizedBox(height: AppSpacing.space4),
-            _ErrorNotice(message: state.driverError!),
-          ],
-          const SizedBox(height: AppSpacing.space5),
-          if(atPickup)
-            _ActionButton(
-              label: 'Picked up',
-              onPressed: busy
-                  ? null
-                  : () {
-                      state.sendDriverUpdate('pickup');
-                    },
-            ),
-          if(toHospital)
-            _ActionButton(
-              label: 'Reached the hospital',
-              onPressed: busy
-                  ? null
-                  : () {
-                      state.sendDriverUpdate('hospital');
-                    },
-            ),
-          if(atDropoff)
-            _ArrivalSwipe(
-              onConfirmed: () {
-                confirmDropoff(state);
-              },
-            ),
-          if(call == null && status == 'FREE')
-            _SecondaryButton(
-              label: 'Mark as unavailable',
-              onPressed: state.markDriverUnavailable,
-            ),
-          if(call == null && status == 'UNAVAILABLE')
-            _SecondaryButton(
-              label: 'Mark as available',
-              onPressed: state.markDriverAvailable,
-            ),
-          if(atPickup || toHospital) ...[
-            const SizedBox(height: AppSpacing.space3),
-            _SecondaryButton(
-              label: 'Mark as unavailable',
-              onPressed: busy
-                  ? null
-                  : () {
-                      confirmUnavailable(state);
-                    },
-            ),
-          ],
-          const SizedBox(height: AppSpacing.space3),
-          _SecondaryButton(
-            label: 'Refresh',
-            onPressed: state.loadDriverPortal,
-          ),
-          const SizedBox(height: AppSpacing.space3),
-          _SecondaryButton(
-            label: 'Sign out',
-            onPressed: state.signOutDriver,
-          ),
+          below,
         ],
       ),
     );
@@ -3940,6 +4349,7 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
       DomesticJob.inProgress ||
       DomesticJob.costReview => inProgress(context, state),
       DomesticJob.refused => refused(context, state),
+      DomesticJob.presence => const _PresenceCodeScreen(),
       DomesticJob.complete => rating(context, state),
     };
   }
@@ -5722,6 +6132,281 @@ class _ProviderJobScreenState extends State<_ProviderJobScreen> {
   }
 }
 
+class _ProviderScanScreen extends StatefulWidget {
+  const _ProviderScanScreen();
+
+  @override
+  State<_ProviderScanScreen> createState() => _ProviderScanScreenState();
+}
+
+class _ProviderScanScreenState extends State<_ProviderScanScreen> {
+  String? lastCode;
+
+  Widget cameraProblem(BuildContext context) {
+    return ColoredBox(
+      color: AppColors.surface,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.space4),
+          child: Text(
+            'The camera is needed to scan the code.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    return _FlowFrame(
+      title: 'Scan QR code',
+      onBack: state.leaveProviderScan,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            child: SizedBox(
+              height: 360,
+              child: MobileScanner(
+                onDetect: (capture) {
+                  final code = capture.barcodes.isEmpty
+                      ? null
+                      : capture.barcodes.first.rawValue;
+                  if(code == null || code == lastCode || state.presenceChecking) {
+                    return;
+                  }
+                  lastCode = code;
+                  state.submitPresenceScan(code);
+                },
+                errorBuilder: (context, _) => cameraProblem(context),
+              ),
+            ),
+          ),
+          if(state.presenceNotice != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            Text(
+              state.presenceNotice!,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PresenceCodeScreen extends StatefulWidget {
+  const _PresenceCodeScreen();
+
+  @override
+  State<_PresenceCodeScreen> createState() => _PresenceCodeScreenState();
+}
+
+class _PresenceCodeScreenState extends State<_PresenceCodeScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController entrance = AnimationController.unbounded(
+    vsync: this,
+  );
+  Timer? refresh;
+  var started = false;
+  var leaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final state = context.read<EmergencyRequestState>();
+    state.refreshPresenceCode();
+    refresh = Timer.periodic(const Duration(seconds: 5), (_) {
+      state.refreshPresenceCode();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if(started) {
+      return;
+    }
+    started = true;
+    settle(1);
+  }
+
+  TickerFuture settle(double target) {
+    if(MediaQuery.disableAnimationsOf(context)) {
+      return entrance.animateTo(
+        target,
+        duration: const Duration(milliseconds: 200),
+      );
+    }
+    return entrance.animateWith(
+      SpringSimulation(_presenceSpring, entrance.value, target, entrance.velocity),
+    );
+  }
+
+  Future<void> leave(EmergencyRequestState state) async {
+    if(leaving) {
+      return;
+    }
+    leaving = true;
+    await settle(0);
+    if(mounted) {
+      state.leavePresence();
+    }
+  }
+
+  @override
+  void dispose() {
+    refresh?.cancel();
+    entrance.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final name = state.domesticBooking?.userName?.trim() ?? '';
+    final initial = name.isEmpty ? '' : name.characters.first.toUpperCase();
+    final code = state.presenceCode;
+    final textTheme = Theme.of(context).textTheme;
+
+    final card = Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.topCenter,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 36),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.space4,
+            48,
+            AppSpacing.space4,
+            AppSpacing.space5,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x1F000000),
+                blurRadius: 24,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                name,
+                textAlign: TextAlign.center,
+                style: textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.space4),
+              SizedBox.square(
+                dimension: 220,
+                child: code == null
+                    ? const Center(
+                        child: CircularProgressIndicator(color: AppColors.blue),
+                      )
+                    : QrImageView(
+                        data: code,
+                        size: 220,
+                        padding: EdgeInsets.zero,
+                        backgroundColor: AppColors.surface,
+                      ),
+              ),
+              const SizedBox(height: AppSpacing.space4),
+              Text(
+                'Hold this up for the worker to scan.',
+                textAlign: TextAlign.center,
+                style: textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          width: 72,
+          height: 72,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColors.blue,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.surface, width: 4),
+          ),
+          child: Text(
+            initial,
+            style: textTheme.headlineSmall?.copyWith(color: AppColors.surface),
+          ),
+        ),
+      ],
+    );
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SizedBox(
+              height: 56,
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    tooltip: 'Back',
+                    onPressed: () {
+                      leave(state);
+                    },
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Scan QR code',
+                      textAlign: TextAlign.center,
+                      style: textTheme.labelLarge?.copyWith(
+                        color: AppColors.ink,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 48),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space5),
+                  child: AnimatedBuilder(
+                    animation: entrance,
+                    builder: (context, child) {
+                      final t = entrance.value;
+                      return Opacity(
+                        opacity: t.clamp(0.0, 1.0),
+                        child: Transform.translate(
+                          offset: Offset(0, reduceMotion ? 0 : (1 - t) * 48),
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: card,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ProviderEnRouteScreen extends StatefulWidget {
   const _ProviderEnRouteScreen();
 
@@ -6152,6 +6837,7 @@ class _FlowFrame extends StatelessWidget {
     this.tab,
     this.plainChrome = false,
     this.fill = false,
+    this.groundOpacity = 1,
   });
 
   final Widget child;
@@ -6162,6 +6848,7 @@ class _FlowFrame extends StatelessWidget {
   final _UserTab? tab;
   final bool plainChrome;
   final bool fill;
+  final double groundOpacity;
 
   TextStyle? titleStyle(BuildContext context) {
     return Theme.of(context).textTheme.labelLarge?.copyWith(
@@ -6196,55 +6883,58 @@ class _FlowFrame extends StatelessWidget {
                 ),
               ),
             if(title != null)
-              SizedBox(
-                height: 56,
-                child: Row(
-                  children: [
-                    if(onBack != null)
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back_rounded),
-                        onPressed: onBack,
-                        tooltip: 'Back',
-                      )
-                    else
-                      const SizedBox(width: 48),
-                    Expanded(
-                      child: onTitle == null
-                          ? Text(
-                              title!,
-                              textAlign: onBack == null
-                                  ? TextAlign.center
-                                  : TextAlign.left,
-                              style: titleStyle(context),
-                            )
-                          : InkWell(
-                              onTap: onTitle,
-                              borderRadius: BorderRadius.circular(AppRadius.sm),
-                              child: SizedBox(
-                                height: 44,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        title!,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: titleStyle(context),
+              Opacity(
+                opacity: groundOpacity,
+                child: SizedBox(
+                  height: 56,
+                  child: Row(
+                    children: [
+                      if(onBack != null)
+                        IconButton(
+                          icon: const Icon(Icons.arrow_back_rounded),
+                          onPressed: onBack,
+                          tooltip: 'Back',
+                        )
+                      else
+                        const SizedBox(width: 48),
+                      Expanded(
+                        child: onTitle == null
+                            ? Text(
+                                title!,
+                                textAlign: onBack == null
+                                    ? TextAlign.center
+                                    : TextAlign.left,
+                                style: titleStyle(context),
+                              )
+                            : InkWell(
+                                onTap: onTitle,
+                                borderRadius: BorderRadius.circular(AppRadius.sm),
+                                child: SizedBox(
+                                  height: 44,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          title!,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: titleStyle(context),
+                                        ),
                                       ),
-                                    ),
-                                    const Icon(
-                                      Icons.expand_more_rounded,
-                                      size: 20,
-                                      color: AppColors.muted,
-                                    ),
-                                  ],
+                                      const Icon(
+                                        Icons.expand_more_rounded,
+                                        size: 20,
+                                        color: AppColors.muted,
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                    ),
-                    const SizedBox(width: 48),
-                  ],
+                      ),
+                      const SizedBox(width: 48),
+                    ],
+                  ),
                 ),
               ),
             Expanded(
@@ -7050,7 +7740,7 @@ LatLng _pointAlongRoute(List<LatLng> points, double fraction) {
 }
 
 class _TripMap extends StatefulWidget {
-  const _TripMap();
+  const _TripMap({super.key});
 
   @override
   State<_TripMap> createState() => _TripMapState();

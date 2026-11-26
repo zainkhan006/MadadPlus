@@ -14,6 +14,26 @@ import 'emergency_service.dart';
 import 'emergency_socket_service.dart';
 import 'provider_notifier.dart';
 
+// Reads the driving distance and time from an OSRM route response.
+// Returns null when the response holds no route.
+({double km, int minutes})? parseRoadEstimate(String body) {
+  final routes = (jsonDecode(body) as Map<String, dynamic>)['routes'];
+  if(routes is! List || routes.isEmpty) {
+    return null;
+  }
+  final route = routes.first as Map;
+  final metres = route['distance'];
+  final seconds = route['duration'];
+  if(metres is! num || seconds is! num) {
+    return null;
+  }
+  var minutes = (seconds / 60).round();
+  if(seconds > 0 && minutes == 0) {
+    minutes = 1;
+  }
+  return (km: metres / 1000, minutes: minutes);
+}
+
 enum EmergencyScreen {
   splash,
   onboarding,
@@ -54,6 +74,7 @@ enum EmergencyScreen {
   providerAccepted,
   providerEnRoute,
   providerJob,
+  providerScan,
   providerPaid,
 }
 
@@ -67,6 +88,7 @@ enum DomesticJob {
   inProgress,
   costReview,
   refused,
+  presence,
   complete,
 }
 
@@ -93,9 +115,11 @@ class EmergencyRequestState extends ChangeNotifier {
     EmergencySocketService? socketService,
     ProviderNotifier? providerNotifier,
     String? demoUserId,
+    Future<({double lat, double lng})?> Function()? positionReader,
   }) : _emergencyService = emergencyService ?? EmergencyService(),
        _emergencySocketService = socketService ?? EmergencySocketService(),
        _providerNotifier = providerNotifier,
+       _positionReader = positionReader ?? _readPhonePosition,
        demoUserId = demoUserId ?? const String.fromEnvironment('DEMO_USER_ID') {
     loadHomePlaces();
     _historyLoad = loadRequestHistory();
@@ -106,6 +130,7 @@ class EmergencyRequestState extends ChangeNotifier {
   final EmergencySocketService _emergencySocketService;
   final ProviderNotifier? _providerNotifier;
   final String demoUserId;
+  final Future<({double lat, double lng})?> Function() _positionReader;
 
   EmergencyScreen currentScreen = EmergencyScreen.splash;
   AccountPath accountPath = AccountPath.signIn;
@@ -130,6 +155,9 @@ class EmergencyRequestState extends ChangeNotifier {
   String? amountOwed;
   String? providerPaidText;
   String? providerPaidBy;
+  String? presenceCode;
+  String? presenceNotice;
+  bool presenceChecking = false;
   final List<({
     String id,
     String trade,
@@ -182,6 +210,11 @@ class EmergencyRequestState extends ChangeNotifier {
   String? driverAmbulanceLabel;
   String? driverAmbulanceStatus;
   EmergencyCall? driverCall;
+  EmergencyCall? driverOffer;
+  String? driverOfferNotice;
+  double? driverOfferKm;
+  int? driverOfferMinutes;
+  bool driverOfferRouteLoading = false;
   bool driverLoading = false;
   String? driverError;
   AmbulanceRow? matchedDriver;
@@ -252,7 +285,7 @@ class EmergencyRequestState extends ChangeNotifier {
     return raw.clamp(0.0, 1.0);
   }
 
-  double driveDurationMs(double fromLat, double fromLng, double toLat, double toLng) {
+  double straightLineKm(double fromLat, double fromLng, double toLat, double toLng) {
     const earthRadiusKm = 6371.0;
     final dLat = (toLat - fromLat) * math.pi / 180;
     final dLng = (toLng - fromLng) * math.pi / 180;
@@ -260,7 +293,11 @@ class EmergencyRequestState extends ChangeNotifier {
     final lat2 = toLat * math.pi / 180;
     final x = math.pow(math.sin(dLat / 2), 2) +
         math.cos(lat1) * math.cos(lat2) * math.pow(math.sin(dLng / 2), 2);
-    final km = 2 * earthRadiusKm * math.asin(math.sqrt(x));
+    return 2 * earthRadiusKm * math.asin(math.sqrt(x));
+  }
+
+  double driveDurationMs(double fromLat, double fromLng, double toLat, double toLng) {
+    final km = straightLineKm(fromLat, fromLng, toLat, toLng);
     return math.min(45000.0, math.max(8000.0, (km / 55) * 3600000));
   }
 
@@ -1117,7 +1154,17 @@ class EmergencyRequestState extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    if(event == 'domestic.presence_started') {
+      if(domesticJob == DomesticJob.inProgress) {
+        presenceCode = null;
+        domesticJob = DomesticJob.presence;
+        goTo(EmergencyScreen.domesticJob);
+      }
+      notifyListeners();
+      return;
+    }
     if(event == 'domestic.work_finished') {
+      presenceCode = null;
       domesticJob = DomesticJob.complete;
       goTo(EmergencyScreen.domesticJob);
       return;
@@ -1502,11 +1549,97 @@ class EmergencyRequestState extends ChangeNotifier {
     if(job == null || job.finalTotal == null) {
       return;
     }
-    _rememberProviderPayment(job);
-    final requestId = job.requestId;
-    _finishProviderJob();
-    goTo(EmergencyScreen.providerPaid);
-    _emergencySocketService.relayDomestic('domestic.work_finished', requestId);
+    presenceNotice = null;
+    goTo(EmergencyScreen.providerScan);
+    _emergencySocketService.relayDomestic('domestic.presence_started', job.requestId);
+  }
+
+  void leaveProviderScan() {
+    presenceNotice = null;
+    goTo(EmergencyScreen.providerJob);
+  }
+
+  void showPresenceNotice(String message) {
+    presenceNotice = message;
+    notifyListeners();
+  }
+
+  Future<void> submitPresenceScan(String code) async {
+    final job = activeJob;
+    if(job == null || presenceChecking) {
+      return;
+    }
+    presenceChecking = true;
+    presenceNotice = null;
+    notifyListeners();
+    try {
+      final position = await _positionReader();
+      final booking = await _emergencyService.presenceScan(
+        requestId: job.requestId,
+        code: code,
+        lat: position?.lat,
+        lng: position?.lng,
+      );
+      if(currentScreen == EmergencyScreen.providerScan) {
+        _rememberProviderPayment(booking.finalTotal == null ? job : booking);
+        _finishProviderJob();
+        goTo(EmergencyScreen.providerPaid);
+      }
+    } catch (_) {
+      presenceNotice = 'The scan did not count. Try again.';
+    } finally {
+      presenceChecking = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshPresenceCode() async {
+    final booking = domesticBooking;
+    if(booking == null || domesticJob != DomesticJob.presence) {
+      return;
+    }
+    try {
+      final position = await _positionReader();
+      final code = await _emergencyService.presenceCode(
+        requestId: booking.requestId,
+        lat: position?.lat,
+        lng: position?.lng,
+      );
+      if(domesticJob == DomesticJob.presence) {
+        presenceCode = code;
+        notifyListeners();
+      }
+    } catch (_) {
+      debugPrint('the scan code could not be refreshed this time');
+    }
+  }
+
+  void leavePresence() {
+    presenceCode = null;
+    domesticJob = DomesticJob.inProgress;
+    goTo(EmergencyScreen.domesticJob);
+  }
+
+  static Future<({double lat, double lng})?> _readPhonePosition() async {
+    try {
+      if(!await Geolocator.isLocationServiceEnabled()) {
+        return null;
+      }
+      var permission = await Geolocator.checkPermission();
+      if(permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if(permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return null;
+      }
+      final position = await Geolocator.getCurrentPosition().timeout(
+        const Duration(seconds: 4),
+      );
+      return (lat: position.latitude, lng: position.longitude);
+    } catch (_) {
+      return null;
+    }
   }
 
   void _receiveProviderBooking(DomesticBooking booking, [String event = '']) {
@@ -1529,7 +1662,7 @@ class EmergencyRequestState extends ChangeNotifier {
         booking.finalTotal == null) {
       costWaiting = false;
     }
-    if(event == 'domestic.inspecting') {
+    if(event == 'domestic.inspecting' || event == 'domestic.presence_started') {
       notifyListeners();
       return;
     }
@@ -1551,6 +1684,7 @@ class EmergencyRequestState extends ChangeNotifier {
       }
       else if(booking.receiptStatus == 'ACCEPTED' &&
           currentScreen != EmergencyScreen.providerJob &&
+          currentScreen != EmergencyScreen.providerScan &&
           currentScreen != EmergencyScreen.providerPaid) {
         goTo(EmergencyScreen.providerAccepted);
       }
@@ -1747,11 +1881,15 @@ class EmergencyRequestState extends ChangeNotifier {
     driverAmbulanceLat = ambulance.latitude;
     driverAmbulanceLng = ambulance.longitude;
     driverCall = null;
+    driverOffer = null;
+    driverOfferNotice = null;
     clearRoute();
     _emergencySocketService.connectDriver(
       driverId: id,
       onCall: _receiveDriverCall,
       onAmbulance: _receiveAmbulanceStatus,
+      onOffer: _receiveDriverOffer,
+      onTaken: _receiveOfferTaken,
     );
     loadDriverPortal();
   }
@@ -1764,6 +1902,8 @@ class EmergencyRequestState extends ChangeNotifier {
     driverAmbulanceLat = null;
     driverAmbulanceLng = null;
     driverCall = null;
+    driverOffer = null;
+    driverOfferNotice = null;
     matchedDriver = null;
     clearRoute();
     goTo(EmergencyScreen.login);
@@ -1852,10 +1992,127 @@ class EmergencyRequestState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _receiveDriverOffer(EmergencyCall offer) {
+    if(driverId == null || driverCall != null) {
+      return;
+    }
+    driverOffer = offer;
+    driverOfferNotice = null;
+    _loadOfferRoute(offer);
+    notifyListeners();
+  }
+
+  Future<void> _loadOfferRoute(EmergencyCall offer) async {
+    driverOfferKm = null;
+    driverOfferMinutes = null;
+    driverOfferRouteLoading = false;
+    final fromLat = driverAmbulanceLat;
+    final fromLng = driverAmbulanceLng;
+    final toLat = offer.pickupLatitude;
+    final toLng = offer.pickupLongitude;
+    if(fromLat == null || fromLng == null || toLat == null || toLng == null) {
+      return;
+    }
+    final straightKm = straightLineKm(fromLat, fromLng, toLat, toLng);
+    if(Platform.environment['FLUTTER_TEST'] == 'true') {
+      driverOfferKm = straightKm;
+      return;
+    }
+
+    driverOfferRouteLoading = true;
+    ({double km, int minutes})? estimate;
+    try {
+      final response = await http
+          .get(Uri.parse(
+            'https://router.project-osrm.org/route/v1/driving/$fromLng,$fromLat;$toLng,$toLat?overview=full&geometries=geojson',
+          ))
+          .timeout(const Duration(seconds: 5));
+      if(response.statusCode == 200) {
+        estimate = parseRoadEstimate(response.body);
+      }
+    } catch (error) {
+      debugPrint('could not get a road route for this offer, so the card shows the straight-line distance: $error');
+    }
+    if(!identical(driverOffer, offer)) {
+      return;
+    }
+    driverOfferKm = estimate?.km ?? straightKm;
+    driverOfferMinutes = estimate?.minutes;
+    driverOfferRouteLoading = false;
+    notifyListeners();
+  }
+
+  void _receiveOfferTaken(String requestId) {
+    if(driverOffer?.requestId != requestId) {
+      return;
+    }
+    driverOffer = null;
+    driverOfferNotice = 'The call was taken.';
+    notifyListeners();
+  }
+
+  Future<void> acceptDriverOffer() async {
+    final id = driverId;
+    final offer = driverOffer;
+    if(id == null || offer == null || driverLoading) {
+      return;
+    }
+
+    driverLoading = true;
+    driverError = null;
+    notifyListeners();
+    try {
+      driverCall = await _emergencyService.updateDriverRequest(
+        driverId: id,
+        requestId: offer.requestId,
+        action: 'accept',
+      );
+      driverOffer = null;
+      driverAmbulanceStatus = 'BUSY';
+      syncDriverRoute();
+    } on ApiException catch (error) {
+      if(error.statusCode == 409) {
+        driverOffer = null;
+        driverOfferNotice = 'The call was taken.';
+      }
+      else {
+        driverError = error.message;
+      }
+    } on TimeoutException {
+      driverError = 'The server did not answer in time. Try again.';
+    } catch (_) {
+      driverError = 'The call could not be accepted. Try again.';
+    } finally {
+      driverLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> declineDriverOffer() async {
+    final id = driverId;
+    final offer = driverOffer;
+    if(id == null || offer == null) {
+      return;
+    }
+
+    driverOffer = null;
+    notifyListeners();
+    try {
+      await _emergencyService.declineDriverRequest(
+        driverId: id,
+        requestId: offer.requestId,
+      );
+    } catch (_) {
+      // A decline that does not arrive lapses on the server when the offer times out.
+    }
+  }
+
   void _receiveDriverCall(EmergencyCall call) {
     final forThisDriver = call.assignedDriverId == driverId;
     if(forThisDriver && !_closedCallStatuses.contains(call.status)) {
       driverCall = call;
+      driverOffer = null;
+      driverOfferNotice = null;
       driverAmbulanceStatus = 'BUSY';
       syncDriverRoute();
     }
@@ -2291,6 +2548,7 @@ class EmergencyRequestState extends ChangeNotifier {
         inputMethod: detailsFromSpeech ? 'VOICE' : 'MANUAL',
         additionalDetails: additionalDetails,
         callerPhone: signedInUserPhone,
+        callerName: signedInUserName,
       );
       updateRequest(
         requestId: result!.requestId,
@@ -2298,7 +2556,10 @@ class EmergencyRequestState extends ChangeNotifier {
       );
 
       rememberEmergencyRequest();
-      if(result!.status == 'QUEUED') {
+      if(result!.status == 'QUEUED' && result!.searching) {
+        _connectToRequest(result!.requestId);
+      }
+      else if(result!.status == 'QUEUED') {
         currentScreen = EmergencyScreen.emergencyBusy;
       }
       else {
@@ -2819,7 +3080,17 @@ class EmergencyRequestState extends ChangeNotifier {
         result = incoming;
         rememberEmergencyRequest();
         beginCallerLeg(incoming);
+        if(currentScreen == EmergencyScreen.emergencySearch) {
+          currentScreen = EmergencyScreen.emergencyAssigned;
+          _startArrivalSimulation();
+        }
         notifyListeners();
+      },
+      onSearchEnded: () {
+        if(currentScreen == EmergencyScreen.emergencySearch) {
+          currentScreen = EmergencyScreen.emergencyBusy;
+          notifyListeners();
+        }
       },
       onPickedUp: receivePickup,
       onReconnected: () {

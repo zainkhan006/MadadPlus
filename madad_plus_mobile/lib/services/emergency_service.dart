@@ -86,6 +86,7 @@ class EmergencyRequestResult {
     this.pickupLatitude,
     this.pickupLongitude,
     this.updatedAt,
+    this.searching = false,
   });
 
   final String requestId;
@@ -95,12 +96,14 @@ class EmergencyRequestResult {
   final double? pickupLatitude;
   final double? pickupLongitude;
   final DateTime? updatedAt;
+  final bool searching;
 
   factory EmergencyRequestResult.fromJson(Map<String, dynamic> json) {
     final pickup = _point(json['pickupLocation']);
     return EmergencyRequestResult(
       requestId: json['requestId'] as String,
       status: json['status'] as String,
+      searching: json['searching'] == true,
       pickupLatitude: pickup?.lat,
       pickupLongitude: pickup?.lng,
       updatedAt: _time(json['updatedAt']),
@@ -172,6 +175,7 @@ class EmergencyCall {
     this.hospitalLongitude,
     this.additionalDetails,
     this.updatedAt,
+    this.callerName,
   });
 
   final String requestId;
@@ -181,6 +185,7 @@ class EmergencyCall {
   final String? emergencyDescription;
   final int? peopleCount;
   final String? callerPhone;
+  final String? callerName;
   final String? hospitalName;
   final String? hospitalAddress;
   final String? assignedDriverId;
@@ -220,6 +225,7 @@ class EmergencyCall {
       hospitalLongitude: hospitalPoint?.lng,
       additionalDetails: json['additionalDetails'] as String?,
       updatedAt: _time(json['updatedAt']),
+      callerName: json['callerName'] as String?,
     );
   }
 }
@@ -527,6 +533,7 @@ class EmergencyService {
     required String inputMethod,
     String? additionalDetails,
     String? callerPhone,
+    String? callerName,
   }) async {
     final details = additionalDetails?.trim() ?? '';
     final decoded = await _send(
@@ -544,6 +551,8 @@ class EmergencyService {
           if(details.isNotEmpty) 'additionalDetails': details,
           if(callerPhone != null && callerPhone.trim().isNotEmpty)
             'callerPhone': callerPhone.trim(),
+          if(callerName != null && callerName.trim().isNotEmpty)
+            'callerName': callerName.trim(),
         }),
       ),
       'The emergency request could not be sent.',
@@ -632,6 +641,19 @@ class EmergencyService {
       'The $action update could not be sent.',
     );
     return EmergencyCall.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<void> declineDriverRequest({
+    required String driverId,
+    required String requestId,
+  }) async {
+    await _send(
+      http.patch(
+        Uri.parse('$baseUrl/api/v1/drivers/$driverId/requests/$requestId/decline'),
+        headers: _headers,
+      ),
+      'The call could not be declined.',
+    );
   }
 
   Future<DriverReassignment> reassignDriverRequest({
@@ -891,6 +913,46 @@ class EmergencyService {
         body: jsonEncode({'decision': accept ? 'ACCEPT' : 'REFUSE'}),
       ),
       'The decision could not be sent.',
+    );
+    return DomesticBooking.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  Future<String> presenceCode({
+    required String requestId,
+    double? lat,
+    double? lng,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse('$baseUrl/api/v1/domestic-requests/$requestId/presence-code'),
+        headers: _headers,
+        body: jsonEncode({
+          if(lat != null && lng != null) 'lat': lat,
+          if(lat != null && lng != null) 'lng': lng,
+        }),
+      ),
+      'The code could not be loaded.',
+    );
+    return (decoded as Map)['code'] as String;
+  }
+
+  Future<DomesticBooking> presenceScan({
+    required String requestId,
+    required String code,
+    double? lat,
+    double? lng,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse('$baseUrl/api/v1/domestic-requests/$requestId/presence-scan'),
+        headers: _headers,
+        body: jsonEncode({
+          'code': code,
+          if(lat != null && lng != null) 'lat': lat,
+          if(lat != null && lng != null) 'lng': lng,
+        }),
+      ),
+      'The scan did not count. Try again.',
     );
     return DomesticBooking.fromJson(Map<String, dynamic>.from(decoded as Map));
   }

@@ -307,6 +307,72 @@ void main() {
     expect(session.api.emergencyPosts, 1);
   });
 
+  testWidgets('a searching ambulance request waits, then shows the ambulance', (
+    WidgetTester tester,
+  ) async {
+    final session = await reachAmbulanceRequest(tester);
+    session.api.scriptedEmergencyResult = const EmergencyRequestResult(
+      requestId: 'req-search',
+      status: 'QUEUED',
+      assignedAmbulance: null,
+      consideredNearest: null,
+      searching: true,
+    );
+
+    await tapText(tester, 'REQUEST NOW');
+    await pumpAsync(tester);
+
+    expect(find.text('FINDING HELP NOW'), findsOneWidget);
+    expect(find.text('All ambulances are busy'), findsNothing);
+
+    final assigned = EmergencyRequestResult(
+      requestId: 'req-search',
+      status: 'ASSIGNED',
+      assignedAmbulance: const AmbulanceAssignment(
+        id: 'amb-1',
+        label: 'A-01',
+        latitude: 24.805,
+        longitude: 67.0375,
+      ),
+      consideredNearest: null,
+      pickupLatitude: 24.8138,
+      pickupLongitude: 67.03,
+    );
+    session.socket.outcomeListener!(createEmergencyOutcome(assigned));
+    session.socket.assignedListener!(assigned);
+    await tester.pump();
+
+    expect(find.text('Ambulance is on its way'), findsOneWidget);
+    expect(find.text('A-01 was assigned.'), findsOneWidget);
+    expect(find.text('FINDING HELP NOW'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    session.state.dispose();
+  });
+
+  testWidgets('a search that runs out of ambulances tells the caller', (
+    WidgetTester tester,
+  ) async {
+    final session = await reachAmbulanceRequest(tester);
+    session.api.scriptedEmergencyResult = const EmergencyRequestResult(
+      requestId: 'req-search',
+      status: 'QUEUED',
+      assignedAmbulance: null,
+      consideredNearest: null,
+      searching: true,
+    );
+
+    await tapText(tester, 'REQUEST NOW');
+    await pumpAsync(tester);
+    expect(find.text('FINDING HELP NOW'), findsOneWidget);
+
+    session.socket.searchEndedListener!();
+    await tester.pump();
+
+    expect(find.text('All ambulances are busy'), findsOneWidget);
+    expect(find.text('FINDING HELP NOW'), findsNothing);
+  });
+
   testWidgets('a timed out ambulance request leaves the finding help spinner', (
     WidgetTester tester,
   ) async {
@@ -715,6 +781,230 @@ void main() {
 
     socket.driverAmbulanceListener!('amb-1', 'FREE');
     expect(state.driverAmbulanceStatus, 'FREE');
+  });
+
+  testWidgets('an offered driver accepts and gets the call', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    await reachDriverCall(tester, session.state);
+    expect(find.text('No call on this ambulance.'), findsOneWidget);
+    expect(find.text('Accept'), findsNothing);
+
+    session.socket.driverOfferListener!(offeredCall);
+    await tester.pump();
+
+    expect(find.byKey(const Key('driver-offer-card')), findsOneWidget);
+    expect(find.text('Incoming call'), findsNothing);
+    expect(find.text('Caller'), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('Accident'), findsOneWidget);
+    expect(find.text('ETA unavailable'), findsOneWidget);
+    expect(find.text('2 people still waiting'), findsNothing);
+    expect(find.text('Caller +92 300 0000000'), findsNothing);
+    expect(find.text('No call on this ambulance.'), findsNothing);
+    expect(find.text('FREE'), findsOneWidget);
+    expect(find.text('Refresh'), findsOneWidget);
+    expect(find.text('Sign out'), findsOneWidget);
+    expect(find.text('Decline'), findsOneWidget);
+    expect(
+      tester.getCenter(find.text('Decline')).dx,
+      lessThan(tester.getCenter(find.text('Accept')).dx),
+    );
+    expect(find.text('ETA'), findsNothing);
+    expect(find.text('Distance'), findsNothing);
+    expect(find.byIcon(Icons.schedule_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.route_rounded), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Text && (widget.data ?? '').contains('·'),
+      ),
+      findsNothing,
+    );
+
+    await tester.pumpAndSettle();
+    final card = find.byKey(const Key('driver-offer-card'));
+    final map = find.byKey(const Key('driver-trip-map'));
+    expect(tester.getSize(map).height, 190);
+    expect(
+      tester.getRect(card).bottom,
+      lessThanOrEqualTo(tester.getTopLeft(map).dy + 1),
+    );
+    expect(
+      tester.getTopLeft(card).dy,
+      lessThan(tester.getTopLeft(map).dy),
+    );
+    expect(tester.widget<Opacity>(map).opacity, 0.4);
+    expect(
+      tester.widget<Opacity>(
+        find.ancestor(of: find.text('FREE'), matching: find.byType(Opacity)).first,
+      ).opacity,
+      0.4,
+    );
+    expect(
+      tester.widget<Opacity>(
+        find.ancestor(of: find.text('A-01').first, matching: find.byType(Opacity)).first,
+      ).opacity,
+      0.4,
+    );
+    for(final layer in tester.widgetList<Opacity>(
+      find.ancestor(of: card, matching: find.byType(Opacity)),
+    )) {
+      expect(layer.opacity, 1);
+    }
+
+    expect(find.text('Clifton Block 5'), findsNothing);
+    await tapText(tester, 'Location');
+    await tester.pumpAndSettle();
+    expect(find.text('Clifton Block 5'), findsOneWidget);
+    expect(find.text('N/A'), findsNothing);
+    await tapText(tester, 'Notes');
+    await tester.pumpAndSettle();
+    expect(find.text('N/A'), findsOneWidget);
+
+    await tapText(tester, 'Accept');
+    await pumpAsync(tester);
+
+    expect(find.text('Pickup'), findsOneWidget);
+    expect(find.text('Picked up'), findsOneWidget);
+    expect(find.text('BUSY'), findsOneWidget);
+    expect(find.text('Accept'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    session.state.dispose();
+  });
+
+  testWidgets('an offered driver without a road route sees the straight-line distance', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    await reachDriverCall(tester, session.state);
+    session.state.driverAmbulanceLat = 24.80;
+    session.state.driverAmbulanceLng = 67.03;
+
+    session.socket.driverOfferListener!(
+      const EmergencyCall(
+        requestId: 'req-2',
+        status: 'QUEUED',
+        pickupAddress: 'Clifton Block 5',
+        emergencyDescription: 'Cardiac',
+        peopleCount: 5,
+        callerPhone: '+92 300 0000000',
+        callerName: 'Hal Jordan',
+        hospitalName: null,
+        hospitalAddress: null,
+        assignedDriverId: null,
+        pickupLatitude: 24.81,
+        pickupLongitude: 67.03,
+        additionalDetails: 'Second floor, gate 2',
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Hal Jordan'), findsOneWidget);
+    expect(find.text('4+'), findsOneWidget);
+    expect(find.text('Cardiac'), findsOneWidget);
+    expect(find.text('ETA unavailable'), findsOneWidget);
+    expect(find.text('1.1 km'), findsOneWidget);
+    expect(find.byIcon(Icons.route_rounded), findsOneWidget);
+    expect(find.text('ETA'), findsNothing);
+    expect(find.text('Distance'), findsNothing);
+    await tapText(tester, 'Notes');
+    await tester.pumpAndSettle();
+    expect(find.text('Second floor, gate 2'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    session.state.dispose();
+  });
+
+  testWidgets('an offered driver with reduced motion sees the card at full size at once', (
+    WidgetTester tester,
+  ) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    final session = testSession(withCall: false);
+    await reachDriverCall(tester, session.state);
+
+    session.socket.driverOfferListener!(offeredCall);
+    await tester.pump();
+
+    final entrance = tester.widget<Transform>(
+      find.byKey(const Key('driver-offer-entrance')),
+    );
+    expect(entrance.transform.getMaxScaleOnAxis(), 1);
+    expect(
+      tester.widget<Opacity>(
+        find.ancestor(
+          of: find.byKey(const Key('driver-offer-entrance')),
+          matching: find.byType(Opacity),
+        ).first,
+      ).opacity,
+      1,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    session.state.dispose();
+  });
+
+  test('an offered driver card reads kilometres and minutes from a road route', () {
+    final estimate = parseRoadEstimate(
+      '{"routes":[{"distance":3440.2,"duration":742.6}]}',
+    );
+    expect(estimate!.km, closeTo(3.44, 0.001));
+    expect(estimate.minutes, 12);
+    expect(
+      parseRoadEstimate('{"routes":[{"distance":120,"duration":20}]}')!.minutes,
+      1,
+    );
+    expect(parseRoadEstimate('{"routes":[]}'), isNull);
+  });
+
+  testWidgets('an offered driver is told when the call was taken', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    await reachDriverCall(tester, session.state);
+
+    session.socket.driverOfferListener!(offeredCall);
+    await tester.pump();
+    session.socket.driverTakenListener!('req-1');
+    await tester.pump();
+
+    expect(find.text('The call was taken.'), findsOneWidget);
+    expect(find.text('No active call'), findsOneWidget);
+    expect(find.text('Accept'), findsNothing);
+
+    session.socket.driverOfferListener!(offeredCall);
+    await tester.pump();
+    expect(find.text('The call was taken.'), findsNothing);
+    session.api.acceptError = const ApiException(
+      'The call was taken.',
+      statusCode: 409,
+    );
+    await tapText(tester, 'Accept');
+    await pumpAsync(tester);
+
+    expect(find.text('The call was taken.'), findsOneWidget);
+    expect(find.text('Accept'), findsNothing);
+    expect(find.text('FREE'), findsOneWidget);
+  });
+
+  testWidgets('a driver who declines an offer goes back to no call', (
+    WidgetTester tester,
+  ) async {
+    final session = testSession(withCall: false);
+    await reachDriverCall(tester, session.state);
+
+    session.socket.driverOfferListener!(offeredCall);
+    await tester.pump();
+    await tapText(tester, 'Decline');
+    await pumpAsync(tester);
+
+    expect(find.text('No active call'), findsOneWidget);
+    expect(find.text('No call on this ambulance.'), findsOneWidget);
+    expect(find.text('Accept'), findsNothing);
+    expect(session.api.declineCalls, 1);
   });
 
   testWidgets('a driver on a call cancels, then confirms, mark as unavailable', (
@@ -1278,12 +1568,22 @@ void main() {
     expect(find.text('Address'), findsNothing);
     await tapText(tester, 'Start job');
     await tapText(tester, 'Complete job');
-    expect(find.text('You were paid Rs. 2500'), findsOneWidget);
-    expect(find.text('From Test User'), findsOneWidget);
+    expect(find.text('Scan QR code'), findsOneWidget);
+    expect(find.text('You were paid Rs. 2500'), findsNothing);
+    expect(find.text('Payment received'), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(MyApp(requestState: session.state));
-    await tester.pump();
+    await pumpAsync(tester);
+    expect(find.text('Hold this up for the worker to scan.'), findsOneWidget);
+    expect(find.text('Test User'), findsOneWidget);
+    expect(session.state.presenceCode, 'presence-dom-1');
+    expect(find.text('How was Karachi Plumbers?'), findsNothing);
+
+    for(final listener in List.of(session.api.listeners)) {
+      listener(session.api.jobs.single, 'domestic.work_finished');
+    }
+    await tester.pumpAndSettle();
     expect(find.text('How was Karachi Plumbers?'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Rate 5 stars'));
@@ -1310,6 +1610,8 @@ void main() {
     await tester.pumpWidget(MyApp(requestState: providerSession));
     await tester.pump();
     expect(find.text('Payment received'), findsOneWidget);
+    expect(find.text('You were paid Rs. 2500'), findsOneWidget);
+    expect(find.text('From Test User'), findsOneWidget);
     expect(find.text('Provider dashboard'), findsNothing);
     await tapText(tester, 'Back to home');
     expect(find.text('Provider dashboard'), findsOneWidget);
@@ -2045,14 +2347,23 @@ class SilentSocketService extends EmergencySocketService {
   final FakeEmergencyService? relay;
 
   void Function(String ambulanceId, String status)? driverAmbulanceListener;
+  void Function(EmergencyCall offer)? driverOfferListener;
+  void Function(String requestId)? driverTakenListener;
+  void Function(EmergencyOutcome outcome)? outcomeListener;
+  void Function(EmergencyRequestResult result)? assignedListener;
+  void Function()? searchEndedListener;
 
   @override
   void connectDriver({
     required String driverId,
     required void Function(EmergencyCall call) onCall,
     void Function(String ambulanceId, String status)? onAmbulance,
+    void Function(EmergencyCall offer)? onOffer,
+    void Function(String requestId)? onTaken,
   }) {
     driverAmbulanceListener = onAmbulance;
+    driverOfferListener = onOffer;
+    driverTakenListener = onTaken;
   }
 
   @override
@@ -2107,9 +2418,14 @@ class SilentSocketService extends EmergencySocketService {
     void Function(EmergencyCompletion completion)? onCompleted,
     void Function(String message, AmbulanceAssignment? assignment)?
         onCallerMessage,
+    void Function()? onSearchEnded,
     void Function()? onDisconnected,
     void Function()? onReconnected,
-  }) {}
+  }) {
+    outcomeListener = onOutcome;
+    assignedListener = onAssigned;
+    searchEndedListener = onSearchEnded;
+  }
 
   @override
   void disconnect() {}
@@ -2120,9 +2436,11 @@ class FakeEmergencyService extends EmergencyService {
   var domesticPosts = 0;
   var cancelCalls = 0;
   var reassignCalls = 0;
+  var declineCalls = 0;
   double? reassignLat;
   double? reassignLng;
   ApiException? reassignError;
+  ApiException? acceptError;
   EmergencyCall? portalCall;
   String? portalStatus;
   final jobs = <DomesticBooking>[];
@@ -2222,6 +2540,7 @@ class FakeEmergencyService extends EmergencyService {
     required String inputMethod,
     String? additionalDetails,
     String? callerPhone,
+    String? callerName,
   }) async {
     emergencyPosts += 1;
     final error = scriptedEmergencyError;
@@ -2267,7 +2586,14 @@ class FakeEmergencyService extends EmergencyService {
     required String requestId,
     required String action,
   }) async {
-    if(action == 'pickup') {
+    if(action == 'accept') {
+      final error = acceptError;
+      if(error != null) {
+        throw error;
+      }
+      portalCall = callWith(status: 'ASSIGNED');
+    }
+    else if(action == 'pickup') {
       portalCall = callWith(
         status: 'PICKED_UP',
         hospitalName: 'Parklane Hospital',
@@ -2291,6 +2617,14 @@ class FakeEmergencyService extends EmergencyService {
       return completed;
     }
     return portalCall!;
+  }
+
+  @override
+  Future<void> declineDriverRequest({
+    required String driverId,
+    required String requestId,
+  }) async {
+    declineCalls += 1;
   }
 
   @override
@@ -2553,12 +2887,37 @@ class FakeEmergencyService extends EmergencyService {
       finalTotal: accept ? fee + (current.quotedTotal ?? 0) : fee,
     );
   }
+
+  var presenceCodeCalls = 0;
+
+  @override
+  Future<String> presenceCode({
+    required String requestId,
+    double? lat,
+    double? lng,
+  }) async {
+    presenceCodeCalls++;
+    return 'presence-$requestId';
+  }
 }
 
+const offeredCall = EmergencyCall(
+  requestId: 'req-1',
+  status: 'QUEUED',
+  pickupAddress: 'Clifton Block 5',
+  emergencyDescription: 'Accident',
+  peopleCount: 2,
+  callerPhone: '+92 300 0000000',
+  hospitalName: null,
+  hospitalAddress: null,
+  assignedDriverId: null,
+);
+
 class TestSession {
-  TestSession({required this.api, required this.state});
+  TestSession({required this.api, required this.socket, required this.state});
 
   final FakeEmergencyService api;
+  final SilentSocketService socket;
   final EmergencyRequestState state;
 }
 
@@ -2582,12 +2941,15 @@ TestSession testSession({
           )
         : null,
   );
+  final socket = SilentSocketService(relay: api);
   return TestSession(
     api: api,
+    socket: socket,
     state: EmergencyRequestState(
       emergencyService: api,
-      socketService: SilentSocketService(relay: api),
+      socketService: socket,
       demoUserId: demoUserId,
+      positionReader: () async => (lat: 24.8138, lng: 67.0300),
     ),
   );
 }
