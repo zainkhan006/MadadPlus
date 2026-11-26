@@ -156,6 +156,42 @@ class AmbulanceRow {
   }
 }
 
+class HospitalRow {
+  const HospitalRow({
+    required this.id,
+    required this.name,
+    this.phone,
+    this.latitude,
+    this.longitude,
+  });
+
+  final String id;
+  final String name;
+  final String? phone;
+  final double? latitude;
+  final double? longitude;
+
+  factory HospitalRow.fromJson(Map<String, dynamic> json) {
+    return HospitalRow(
+      id: json['id'].toString(),
+      name: json['name'] as String,
+      phone: json['phone'] as String?,
+      latitude: _coord(json['lat']),
+      longitude: _coord(json['lng']),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'phone': phone,
+      'lat': latitude,
+      'lng': longitude,
+    };
+  }
+}
+
 class EmergencyCall {
   const EmergencyCall({
     required this.requestId,
@@ -591,6 +627,16 @@ class EmergencyService {
     );
     return (decoded as List)
         .map((row) => AmbulanceRow.fromJson(Map<String, dynamic>.from(row as Map)))
+        .toList();
+  }
+
+  Future<List<HospitalRow>> listHospitals() async {
+    final decoded = await _send(
+      http.get(Uri.parse('$baseUrl/api/v1/hospitals'), headers: _headers),
+      'The hospital list could not be loaded.',
+    );
+    return (decoded as List)
+        .map((row) => HospitalRow.fromJson(Map<String, dynamic>.from(row as Map)))
         .toList();
   }
 

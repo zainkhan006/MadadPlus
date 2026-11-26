@@ -19,12 +19,48 @@ import 'services/emergency_request_state.dart';
 import 'services/emergency_service.dart';
 import 'theme/app_theme.dart';
 
-class EmergencyFlow extends StatelessWidget {
+class EmergencyFlow extends StatefulWidget {
   const EmergencyFlow({super.key});
+
+  @override
+  State<EmergencyFlow> createState() => _EmergencyFlowState();
+}
+
+class _EmergencyFlowState extends State<EmergencyFlow>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
+    if(lifecycle == AppLifecycleState.resumed) {
+      context.read<EmergencyRequestState>().refreshSavedHospitals();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<EmergencyRequestState>();
+
+    switch(state.offlineStage) {
+      case OfflineStage.reconnecting:
+        return const _ReconnectingScreen(notice: false);
+      case OfflineStage.notice:
+        return const _ReconnectingScreen(notice: true);
+      case OfflineStage.offline:
+        return const _OfflineScreen();
+      case OfflineStage.none:
+        break;
+    }
 
     switch (state.currentScreen) {
       case EmergencyScreen.splash:
@@ -2308,6 +2344,346 @@ class _TestTileProvider extends TileProvider {
   @override
   ImageProvider getImage(TileCoordinates coordinates, TileLayer options) {
     return MemoryImage(_pixel);
+  }
+}
+
+class _ReconnectingScreen extends StatelessWidget {
+  const _ReconnectingScreen({required this.notice});
+
+  final bool notice;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.soft,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(color: AppColors.red),
+                    const SizedBox(height: AppSpacing.space4),
+                    Text(
+                      'reconnecting....',
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if(notice)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: const Color(0x6617212F),
+                  child: Center(
+                    child: _SoftArrive(
+                      child: Semantics(
+                        liveRegion: true,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.space6,
+                          ),
+                          padding: const EdgeInsets.all(AppSpacing.space5),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Text(
+                            'offline, switching to offline mode',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.labelLarge
+                                ?.copyWith(
+                                  color: AppColors.ink,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OfflineScreen extends StatefulWidget {
+  const _OfflineScreen();
+
+  @override
+  State<_OfflineScreen> createState() => _OfflineScreenState();
+}
+
+class _OfflineScreenState extends State<_OfflineScreen> {
+  static const _openCenter = LatLng(24.8600, 67.0100);
+  final _mapController = MapController();
+  var _busy = false;
+  String? _message;
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  void _useHomeLocation() {
+    final state = context.read<EmergencyRequestState>();
+    final latitude = state.homeLatitude;
+    final longitude = state.homeLongitude;
+    if(latitude == null || longitude == null) {
+      setState(() {
+        _message = 'Set a location from the home address first.';
+      });
+      return;
+    }
+    _dropPin(state, latitude, longitude);
+  }
+
+  Future<void> _useDeviceLocation() async {
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final state = context.read<EmergencyRequestState>();
+      final place = await state.locateDevice();
+      if(!mounted) {
+        return;
+      }
+      if(place == null) {
+        setState(() {
+          _message = 'Your location could not be read.';
+        });
+        return;
+      }
+      _dropPin(state, place.latitude, place.longitude);
+    } catch (_) {
+      if(!mounted) {
+        return;
+      }
+      setState(() {
+        _message = 'Your location could not be read.';
+      });
+    } finally {
+      if(mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  void _dropPin(EmergencyRequestState state, double latitude, double longitude) {
+    state.setOfflinePin(latitude, longitude);
+    _mapController.move(LatLng(latitude, longitude), 16);
+    setState(() {
+      _message = null;
+    });
+  }
+
+  Future<void> _call(String phone) async {
+    var opened = false;
+    try {
+      opened = await launchUrl(Uri(scheme: 'tel', path: phone));
+    } catch (_) {
+      opened = false;
+    }
+    if(!opened && mounted) {
+      setState(() {
+        _message = 'The phone app could not be opened.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final pin = state.offlinePinLatitude == null || state.offlinePinLongitude == null
+        ? null
+        : LatLng(state.offlinePinLatitude!, state.offlinePinLongitude!);
+    final nearest = state.nearestSavedHospitals();
+
+    return _FlowFrame(
+      emergency: true,
+      title: 'Location',
+      trailing: IconButton(
+        icon: const Icon(Icons.refresh_rounded),
+        tooltip: 'Retry connection',
+        onPressed: state.retryConnection,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Where is the emergency?',
+            style: _largeTitle(context),
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          Container(
+            height: 220,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.red, width: 2),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  initialCenter: pin ?? _openCenter,
+                  initialZoom: pin == null ? 12 : 16,
+                ),
+                children: [
+                  TileLayer(
+                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.madadplus.madad_plus_mobile',
+                    tileProvider: Platform.environment['FLUTTER_TEST'] == 'true'
+                        ? _TestTileProvider()
+                        : NetworkTileProvider(),
+                  ),
+                  if(pin != null)
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: pin,
+                          width: 40,
+                          height: 40,
+                          child: const Icon(
+                            Icons.location_on,
+                            color: AppColors.red,
+                            size: 40,
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space4),
+          _PressScale(
+            child: _ActionButton(
+              label: 'Find my location',
+              emergency: true,
+              onPressed: _busy ? null : _useDeviceLocation,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.space3),
+          _PressScale(
+            child: _SecondaryButton(
+              label: 'Use my current location',
+              onPressed: _busy ? null : _useHomeLocation,
+            ),
+          ),
+          if(_message != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            _ErrorNotice(message: _message!),
+          ],
+          if(pin != null) ...[
+            const SizedBox(height: AppSpacing.space5),
+            if(nearest.isEmpty)
+              Text(
+                'These places are not on this phone yet.',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: AppColors.muted,
+                ),
+              )
+            else
+              _InsetGroup(
+                children: [
+                  for(final row in nearest)
+                    _HospitalCallRow(
+                      name: row.hospital.name,
+                      km: row.km,
+                      phone: row.hospital.phone,
+                      onCall: _call,
+                    ),
+                ],
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HospitalCallRow extends StatelessWidget {
+  const _HospitalCallRow({
+    required this.name,
+    required this.km,
+    required this.phone,
+    required this.onCall,
+  });
+
+  final String name;
+  final double km;
+  final String? phone;
+  final void Function(String phone) onCall;
+
+  @override
+  Widget build(BuildContext context) {
+    final number = phone?.trim() ?? '';
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.space4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: AppColors.ink,
+                    fontWeight: FontWeight.w600,
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.space1),
+                Text(
+                  '${km.toStringAsFixed(2)} km away',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if(number.isNotEmpty) ...[
+            const SizedBox(width: AppSpacing.space3),
+            _PressScale(
+              child: OutlinedButton(
+                onPressed: () {
+                  onCall(number);
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.blue,
+                  side: const BorderSide(color: AppColors.line),
+                  minimumSize: const Size(44, 44),
+                  shape: const StadiumBorder(),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.call_rounded, size: 18),
+                    const SizedBox(width: AppSpacing.space2),
+                    Text(number),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 
@@ -6838,6 +7214,7 @@ class _FlowFrame extends StatelessWidget {
     this.plainChrome = false,
     this.fill = false,
     this.groundOpacity = 1,
+    this.trailing,
   });
 
   final Widget child;
@@ -6849,6 +7226,7 @@ class _FlowFrame extends StatelessWidget {
   final bool plainChrome;
   final bool fill;
   final double groundOpacity;
+  final Widget? trailing;
 
   TextStyle? titleStyle(BuildContext context) {
     return Theme.of(context).textTheme.labelLarge?.copyWith(
@@ -6932,7 +7310,7 @@ class _FlowFrame extends StatelessWidget {
                                 ),
                               ),
                       ),
-                      const SizedBox(width: 48),
+                      trailing ?? const SizedBox(width: 48),
                     ],
                   ),
                 ),

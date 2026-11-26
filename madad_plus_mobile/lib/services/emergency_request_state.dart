@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
@@ -94,6 +95,8 @@ enum DomesticJob {
 
 enum ProviderDuty { offline, available, onJob }
 
+enum OfflineStage { none, reconnecting, notice, offline }
+
 class EmergencyRequestState extends ChangeNotifier {
   static const double demoLatitude = 24.8140;
   static const double demoLongitude = 67.0308;
@@ -109,6 +112,9 @@ class EmergencyRequestState extends ChangeNotifier {
   static const _emergencyRequestsKey = 'emergencyRequests';
   static const _domesticHistoryKey = 'domesticHistory';
   static const _declinedJobsKey = 'declinedProviderJobs';
+  static const _savedHospitalsKey = 'savedHospitals';
+  static const reconnectWait = Duration(seconds: 30);
+  static const offlineNoticeTime = Duration(seconds: 3);
 
   EmergencyRequestState({
     EmergencyService? emergencyService,
@@ -116,14 +122,39 @@ class EmergencyRequestState extends ChangeNotifier {
     ProviderNotifier? providerNotifier,
     String? demoUserId,
     Future<({double lat, double lng})?> Function()? positionReader,
+    Stream<bool>? radioStream,
   }) : _emergencyService = emergencyService ?? EmergencyService(),
        _emergencySocketService = socketService ?? EmergencySocketService(),
        _providerNotifier = providerNotifier,
        _positionReader = positionReader ?? _readPhonePosition,
        demoUserId = demoUserId ?? const String.fromEnvironment('DEMO_USER_ID') {
     loadHomePlaces();
+    loadSavedHospitals();
     _historyLoad = loadRequestHistory();
+    _radioWatch = (radioStream ?? _phoneRadio()).listen(_radioChanged);
   }
+
+  static Stream<bool> _phoneRadio() async* {
+    if(Platform.environment['FLUTTER_TEST'] == 'true') {
+      return;
+    }
+    final connectivity = Connectivity();
+    yield _hasRadio(await connectivity.checkConnectivity());
+    yield* connectivity.onConnectivityChanged.map(_hasRadio);
+  }
+
+  static bool _hasRadio(List<ConnectivityResult> results) {
+    return results.contains(ConnectivityResult.wifi) ||
+        results.contains(ConnectivityResult.mobile);
+  }
+
+  late final StreamSubscription<bool> _radioWatch;
+  Timer? _offlineTimer;
+  bool radioUp = true;
+  OfflineStage offlineStage = OfflineStage.none;
+  List<HospitalRow> savedHospitals = [];
+  double? offlinePinLatitude;
+  double? offlinePinLongitude;
 
   late final Future<void> _historyLoad;
   final EmergencyService _emergencyService;
@@ -507,6 +538,7 @@ class EmergencyRequestState extends ChangeNotifier {
       signedInUserPhone = match.phone;
       await switchRequestHistory(match.id);
       accountPath = AccountPath.signIn;
+      unawaited(refreshSavedHospitals());
       otpFromRegistration = false;
       goTo(EmergencyScreen.otp);
     } on ApiException catch (error) {
@@ -703,6 +735,7 @@ class EmergencyRequestState extends ChangeNotifier {
       signedInUserPhone = created.phone;
       await switchRequestHistory(created.id);
       continueRegistration();
+      unawaited(refreshSavedHospitals());
     } on ApiException catch (error) {
       registerNotice = error.message;
     } on TimeoutException {
@@ -2274,6 +2307,114 @@ class EmergencyRequestState extends ChangeNotifier {
 
   String get homeTitle => homeAddress ?? defaultHomeTitle;
 
+  bool get isCaller =>
+      signedInUserId != null &&
+      accountPath != AccountPath.driver &&
+      accountPath != AccountPath.provider;
+
+  void _radioChanged(bool up) {
+    radioUp = up;
+    if(!up && offlineStage == OfflineStage.none && isCaller) {
+      _startReconnecting();
+      return;
+    }
+    if(up && offlineStage == OfflineStage.reconnecting) {
+      _offlineTimer?.cancel();
+      offlineStage = OfflineStage.none;
+      notifyListeners();
+    }
+  }
+
+  void _startReconnecting() {
+    _offlineTimer?.cancel();
+    offlineStage = OfflineStage.reconnecting;
+    notifyListeners();
+    _offlineTimer = Timer(reconnectWait, () {
+      offlineStage = OfflineStage.notice;
+      notifyListeners();
+      _offlineTimer = Timer(offlineNoticeTime, () {
+        offlineStage = OfflineStage.offline;
+        notifyListeners();
+      });
+    });
+  }
+
+  void retryConnection() {
+    if(offlineStage != OfflineStage.offline) {
+      return;
+    }
+    if(radioUp) {
+      offlineStage = OfflineStage.none;
+      notifyListeners();
+      return;
+    }
+    _startReconnecting();
+  }
+
+  Future<void> loadSavedHospitals() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_savedHospitalsKey);
+    final decoded = raw == null ? null : jsonDecode(raw);
+    if(decoded is! List) {
+      return;
+    }
+    savedHospitals = [
+      for(final item in decoded)
+        if(item is Map && item['id'] != null && item['name'] is String)
+          HospitalRow.fromJson(Map<String, dynamic>.from(item)),
+    ];
+    notifyListeners();
+  }
+
+  Future<void> refreshSavedHospitals() async {
+    if(!radioUp || !isCaller) {
+      return;
+    }
+    final List<HospitalRow> rows;
+    try {
+      rows = await _emergencyService.listHospitals();
+    } catch (_) {
+      return;
+    }
+    savedHospitals = rows;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _savedHospitalsKey,
+      jsonEncode([for(final row in rows) row.toJson()]),
+    );
+  }
+
+  void setOfflinePin(double latitude, double longitude) {
+    offlinePinLatitude = latitude;
+    offlinePinLongitude = longitude;
+    notifyListeners();
+  }
+
+  List<({HospitalRow hospital, double km})> nearestSavedHospitals() {
+    final latitude = offlinePinLatitude;
+    final longitude = offlinePinLongitude;
+    if(latitude == null || longitude == null) {
+      return const [];
+    }
+    const distance = Distance();
+    final pin = LatLng(latitude, longitude);
+    final rows = [
+      for(final hospital in savedHospitals)
+        if(hospital.latitude != null && hospital.longitude != null)
+          (
+            hospital: hospital,
+            km: distance.distance(
+                  pin,
+                  LatLng(hospital.latitude!, hospital.longitude!),
+                ) /
+                1000,
+          ),
+    ];
+    rows.sort((a, b) => a.km.compareTo(b.km));
+    return rows;
+  }
+
   Future<void> loadHomePlaces() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_homePlacesKey);
@@ -3261,6 +3402,8 @@ class EmergencyRequestState extends ChangeNotifier {
   void dispose() {
     _arrivalTimer?.cancel();
     _routeTimer?.cancel();
+    _offlineTimer?.cancel();
+    _radioWatch.cancel();
     _disconnectFromRequest();
     _emergencySocketService.disconnectDriver();
     _emergencySocketService.disconnectProvider();

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -50,6 +51,146 @@ void main() {
       findsOneWidget,
     );
     expect(session.state.pinLatitude, isNull);
+  });
+
+  testWidgets('no wifi and no mobile data waits 30 seconds, then offline mode', (
+    WidgetTester tester,
+  ) async {
+    final radio = StreamController<bool>();
+    addTearDown(radio.close);
+    final session = testSession(radioStream: radio.stream);
+    await reachHome(tester, session.state);
+
+    radio.add(false);
+    await tester.pump();
+    final spinner = tester.getTopLeft(find.byType(CircularProgressIndicator)).dy;
+    final word = tester.getTopLeft(find.text('reconnecting....')).dy;
+    expect(spinner < word, isTrue);
+    expect(find.byTooltip('Retry connection'), findsNothing);
+    expect(find.text('Where is the emergency?'), findsNothing);
+
+    await tester.pump(const Duration(seconds: 30));
+    expect(find.text('offline, switching to offline mode'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(find.text('offline, switching to offline mode'), findsNothing);
+    expect(find.text('Where is the emergency?'), findsOneWidget);
+    expect(find.text('Find my location'), findsOneWidget);
+    expect(find.text('Use my current location'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+    expect(find.text('Show on map'), findsNothing);
+    expect(find.text('CONTINUE'), findsNothing);
+    expect(find.byTooltip('Retry connection'), findsOneWidget);
+  });
+
+  testWidgets('a link back at 10 seconds restores the screen with no popup', (
+    WidgetTester tester,
+  ) async {
+    final radio = StreamController<bool>();
+    addTearDown(radio.close);
+    final session = testSession(radioStream: radio.stream);
+    await reachHome(tester, session.state);
+    expect(find.text('Karachi, DHA Phase 5'), findsOneWidget);
+
+    radio.add(false);
+    await tester.pump();
+    expect(find.text('reconnecting....'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 10));
+    radio.add(true);
+    await tester.pump();
+    expect(find.text('reconnecting....'), findsNothing);
+    expect(find.text('Karachi, DHA Phase 5'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 25));
+    expect(find.text('offline, switching to offline mode'), findsNothing);
+    expect(find.text('Karachi, DHA Phase 5'), findsOneWidget);
+  });
+
+  testWidgets('offline mode lists saved hospitals nearest first after a pin', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'homePlaces': jsonEncode([
+        {'address': 'Clifton Block 5', 'latitude': 24.8138, 'longitude': 67.0300},
+      ]),
+      'homeChosen': 'Clifton Block 5',
+      'savedHospitals': jsonEncode([
+        {
+          'id': 'h-far',
+          'name': 'South City Hospital',
+          'phone': '021 555 0101',
+          'lat': 24.9000,
+          'lng': 67.1000,
+        },
+        {
+          'id': 'h-near',
+          'name': 'Parklane Hospital',
+          'phone': '021 555 0202',
+          'lat': 24.8146,
+          'lng': 67.0298,
+        },
+      ]),
+    });
+    final radio = StreamController<bool>();
+    addTearDown(radio.close);
+    final session = testSession(radioStream: radio.stream);
+    await reachHome(tester, session.state);
+    await reachOfflineMode(tester, radio);
+
+    expect(find.text('Parklane Hospital'), findsNothing);
+    await tapText(tester, 'Use my current location');
+
+    final near = tester.getTopLeft(find.text('Parklane Hospital')).dy;
+    final far = tester.getTopLeft(find.text('South City Hospital')).dy;
+    expect(near < far, isTrue);
+
+    final distances = find.textContaining('km away');
+    expect(distances, findsNWidgets(2));
+    for(final element in distances.evaluate()) {
+      final line = (element.widget as Text).data!;
+      expect(RegExp(r'^\d+\.\d{2} km away$').hasMatch(line), isTrue);
+    }
+    final nearDistance = tester.getTopLeft(distances.first).dy;
+    expect(near < nearDistance, isTrue);
+    expect(nearDistance < far, isTrue);
+
+    expect(find.text('021 555 0202'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, '021 555 0202'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, '021 555 0101'), findsOneWidget);
+  });
+
+  testWidgets('the retry arrow runs the wait again and a quiet link stays offline', (
+    WidgetTester tester,
+  ) async {
+    final radio = StreamController<bool>();
+    addTearDown(radio.close);
+    final session = testSession(radioStream: radio.stream);
+    await reachHome(tester, session.state);
+    await reachOfflineMode(tester, radio);
+
+    await tester.tap(find.byTooltip('Retry connection'));
+    await tester.pump();
+    expect(find.text('reconnecting....'), findsOneWidget);
+    expect(find.text('Where is the emergency?'), findsNothing);
+
+    await tester.pump(const Duration(seconds: 30));
+    expect(find.text('offline, switching to offline mode'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(find.text('Where is the emergency?'), findsOneWidget);
+
+    radio.add(true);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 40));
+    expect(find.text('Where is the emergency?'), findsOneWidget);
+    expect(find.text('reconnecting....'), findsNothing);
+
+    await tester.tap(find.byTooltip('Retry connection'));
+    await tester.pump();
+    expect(find.text('Where is the emergency?'), findsNothing);
+    expect(find.text('Karachi, DHA Phase 5'), findsOneWidget);
   });
 
   testWidgets('Find my location gives up when no position arrives', (
@@ -2480,6 +2621,11 @@ class FakeEmergencyService extends EmergencyService {
 
   FakeEmergencyService({this.portalCall});
 
+  @override
+  Future<List<HospitalRow>> listHospitals() async {
+    throw const ApiException('The hospital list could not be loaded.');
+  }
+
   DomesticBooking booking({
     required String requestId,
     required String description,
@@ -2924,6 +3070,7 @@ class TestSession {
 TestSession testSession({
   String demoUserId = 'user-1',
   bool withCall = true,
+  Stream<bool>? radioStream,
 }) {
   final api = FakeEmergencyService(
     portalCall: withCall
@@ -2950,8 +3097,20 @@ TestSession testSession({
       socketService: socket,
       demoUserId: demoUserId,
       positionReader: () async => (lat: 24.8138, lng: 67.0300),
+      radioStream: radioStream,
     ),
   );
+}
+
+Future<void> reachOfflineMode(
+  WidgetTester tester,
+  StreamController<bool> radio,
+) async {
+  radio.add(false);
+  await tester.pump();
+  await tester.pump(const Duration(seconds: 30));
+  await tester.pump(const Duration(seconds: 3));
+  await tester.pump();
 }
 
 Future<void> pumpAsync(WidgetTester tester) async {
