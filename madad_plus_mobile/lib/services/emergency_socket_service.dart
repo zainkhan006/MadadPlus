@@ -169,6 +169,7 @@ class EmergencySocketService {
       'domestic.cost_submitted',
       'domestic.cost_decided',
       'domestic.inspecting',
+      'domestic.presence_started',
       'domestic.work_finished',
     ]) {
       providerSocket.on(eventName, (data) {
@@ -200,6 +201,7 @@ class EmergencySocketService {
       'domestic.cost_submitted',
       'domestic.cost_decided',
       'domestic.inspecting',
+      'domestic.presence_started',
       'domestic.work_finished',
     ]) {
       domesticSocket.on(eventName, (data) {

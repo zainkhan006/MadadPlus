@@ -916,4 +916,44 @@ class EmergencyService {
     );
     return DomesticBooking.fromJson(Map<String, dynamic>.from(decoded as Map));
   }
+
+  Future<String> presenceCode({
+    required String requestId,
+    double? lat,
+    double? lng,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse('$baseUrl/api/v1/domestic-requests/$requestId/presence-code'),
+        headers: _headers,
+        body: jsonEncode({
+          if(lat != null && lng != null) 'lat': lat,
+          if(lat != null && lng != null) 'lng': lng,
+        }),
+      ),
+      'The code could not be loaded.',
+    );
+    return (decoded as Map)['code'] as String;
+  }
+
+  Future<DomesticBooking> presenceScan({
+    required String requestId,
+    required String code,
+    double? lat,
+    double? lng,
+  }) async {
+    final decoded = await _send(
+      http.post(
+        Uri.parse('$baseUrl/api/v1/domestic-requests/$requestId/presence-scan'),
+        headers: _headers,
+        body: jsonEncode({
+          'code': code,
+          if(lat != null && lng != null) 'lat': lat,
+          if(lat != null && lng != null) 'lng': lng,
+        }),
+      ),
+      'The scan did not count. Try again.',
+    );
+    return DomesticBooking.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
 }

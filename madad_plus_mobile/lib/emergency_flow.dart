@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
@@ -8,7 +9,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -74,6 +77,8 @@ class EmergencyFlow extends StatelessWidget {
         return const _ProviderEnRouteScreen();
       case EmergencyScreen.providerJob:
         return const _ProviderJobScreen();
+      case EmergencyScreen.providerScan:
+        return const _ProviderScanScreen();
       case EmergencyScreen.providerPaid:
         return const _ProviderPaidScreen();
       case EmergencyScreen.home:
@@ -118,6 +123,10 @@ final _settleSpring = SpringDescription.withDampingRatio(
   mass: 1,
   stiffness: 440,
   ratio: 1,
+);
+
+final _presenceSpring = SpringDescription.withDurationAndBounce(
+  duration: const Duration(milliseconds: 400),
 );
 
 final _offerSpring = SpringDescription.withDampingRatio(
@@ -4340,6 +4349,7 @@ class _DomesticJobScreenState extends State<_DomesticJobScreen> {
       DomesticJob.inProgress ||
       DomesticJob.costReview => inProgress(context, state),
       DomesticJob.refused => refused(context, state),
+      DomesticJob.presence => const _PresenceCodeScreen(),
       DomesticJob.complete => rating(context, state),
     };
   }
@@ -6117,6 +6127,281 @@ class _ProviderJobScreenState extends State<_ProviderJobScreen> {
             onPressed: state.finishProviderWork,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ProviderScanScreen extends StatefulWidget {
+  const _ProviderScanScreen();
+
+  @override
+  State<_ProviderScanScreen> createState() => _ProviderScanScreenState();
+}
+
+class _ProviderScanScreenState extends State<_ProviderScanScreen> {
+  String? lastCode;
+
+  Widget cameraProblem(BuildContext context) {
+    return ColoredBox(
+      color: AppColors.surface,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.space4),
+          child: Text(
+            'The camera is needed to scan the code.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    return _FlowFrame(
+      title: 'Scan QR code',
+      onBack: state.leaveProviderScan,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            child: SizedBox(
+              height: 360,
+              child: MobileScanner(
+                onDetect: (capture) {
+                  final code = capture.barcodes.isEmpty
+                      ? null
+                      : capture.barcodes.first.rawValue;
+                  if(code == null || code == lastCode || state.presenceChecking) {
+                    return;
+                  }
+                  lastCode = code;
+                  state.submitPresenceScan(code);
+                },
+                errorBuilder: (context, _) => cameraProblem(context),
+              ),
+            ),
+          ),
+          if(state.presenceNotice != null) ...[
+            const SizedBox(height: AppSpacing.space4),
+            Text(
+              state.presenceNotice!,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PresenceCodeScreen extends StatefulWidget {
+  const _PresenceCodeScreen();
+
+  @override
+  State<_PresenceCodeScreen> createState() => _PresenceCodeScreenState();
+}
+
+class _PresenceCodeScreenState extends State<_PresenceCodeScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController entrance = AnimationController.unbounded(
+    vsync: this,
+  );
+  Timer? refresh;
+  var started = false;
+  var leaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final state = context.read<EmergencyRequestState>();
+    state.refreshPresenceCode();
+    refresh = Timer.periodic(const Duration(seconds: 5), (_) {
+      state.refreshPresenceCode();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if(started) {
+      return;
+    }
+    started = true;
+    settle(1);
+  }
+
+  TickerFuture settle(double target) {
+    if(MediaQuery.disableAnimationsOf(context)) {
+      return entrance.animateTo(
+        target,
+        duration: const Duration(milliseconds: 200),
+      );
+    }
+    return entrance.animateWith(
+      SpringSimulation(_presenceSpring, entrance.value, target, entrance.velocity),
+    );
+  }
+
+  Future<void> leave(EmergencyRequestState state) async {
+    if(leaving) {
+      return;
+    }
+    leaving = true;
+    await settle(0);
+    if(mounted) {
+      state.leavePresence();
+    }
+  }
+
+  @override
+  void dispose() {
+    refresh?.cancel();
+    entrance.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<EmergencyRequestState>();
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final name = state.domesticBooking?.userName?.trim() ?? '';
+    final initial = name.isEmpty ? '' : name.characters.first.toUpperCase();
+    final code = state.presenceCode;
+    final textTheme = Theme.of(context).textTheme;
+
+    final card = Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.topCenter,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 36),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.space4,
+            48,
+            AppSpacing.space4,
+            AppSpacing.space5,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x1F000000),
+                blurRadius: 24,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                name,
+                textAlign: TextAlign.center,
+                style: textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.space4),
+              SizedBox.square(
+                dimension: 220,
+                child: code == null
+                    ? const Center(
+                        child: CircularProgressIndicator(color: AppColors.blue),
+                      )
+                    : QrImageView(
+                        data: code,
+                        size: 220,
+                        padding: EdgeInsets.zero,
+                        backgroundColor: AppColors.surface,
+                      ),
+              ),
+              const SizedBox(height: AppSpacing.space4),
+              Text(
+                'Hold this up for the worker to scan.',
+                textAlign: TextAlign.center,
+                style: textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          width: 72,
+          height: 72,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColors.blue,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.surface, width: 4),
+          ),
+          child: Text(
+            initial,
+            style: textTheme.headlineSmall?.copyWith(color: AppColors.surface),
+          ),
+        ),
+      ],
+    );
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SizedBox(
+              height: 56,
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    tooltip: 'Back',
+                    onPressed: () {
+                      leave(state);
+                    },
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Scan QR code',
+                      textAlign: TextAlign.center,
+                      style: textTheme.labelLarge?.copyWith(
+                        color: AppColors.ink,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 48),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space5),
+                  child: AnimatedBuilder(
+                    animation: entrance,
+                    builder: (context, child) {
+                      final t = entrance.value;
+                      return Opacity(
+                        opacity: t.clamp(0.0, 1.0),
+                        child: Transform.translate(
+                          offset: Offset(0, reduceMotion ? 0 : (1 - t) * 48),
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: card,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

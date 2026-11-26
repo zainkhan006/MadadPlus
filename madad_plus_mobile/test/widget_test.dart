@@ -1568,12 +1568,22 @@ void main() {
     expect(find.text('Address'), findsNothing);
     await tapText(tester, 'Start job');
     await tapText(tester, 'Complete job');
-    expect(find.text('You were paid Rs. 2500'), findsOneWidget);
-    expect(find.text('From Test User'), findsOneWidget);
+    expect(find.text('Scan QR code'), findsOneWidget);
+    expect(find.text('You were paid Rs. 2500'), findsNothing);
+    expect(find.text('Payment received'), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(MyApp(requestState: session.state));
-    await tester.pump();
+    await pumpAsync(tester);
+    expect(find.text('Hold this up for the worker to scan.'), findsOneWidget);
+    expect(find.text('Test User'), findsOneWidget);
+    expect(session.state.presenceCode, 'presence-dom-1');
+    expect(find.text('How was Karachi Plumbers?'), findsNothing);
+
+    for(final listener in List.of(session.api.listeners)) {
+      listener(session.api.jobs.single, 'domestic.work_finished');
+    }
+    await tester.pumpAndSettle();
     expect(find.text('How was Karachi Plumbers?'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Rate 5 stars'));
@@ -1600,6 +1610,8 @@ void main() {
     await tester.pumpWidget(MyApp(requestState: providerSession));
     await tester.pump();
     expect(find.text('Payment received'), findsOneWidget);
+    expect(find.text('You were paid Rs. 2500'), findsOneWidget);
+    expect(find.text('From Test User'), findsOneWidget);
     expect(find.text('Provider dashboard'), findsNothing);
     await tapText(tester, 'Back to home');
     expect(find.text('Provider dashboard'), findsOneWidget);
@@ -2875,6 +2887,18 @@ class FakeEmergencyService extends EmergencyService {
       finalTotal: accept ? fee + (current.quotedTotal ?? 0) : fee,
     );
   }
+
+  var presenceCodeCalls = 0;
+
+  @override
+  Future<String> presenceCode({
+    required String requestId,
+    double? lat,
+    double? lng,
+  }) async {
+    presenceCodeCalls++;
+    return 'presence-$requestId';
+  }
 }
 
 const offeredCall = EmergencyCall(
@@ -2925,6 +2949,7 @@ TestSession testSession({
       emergencyService: api,
       socketService: socket,
       demoUserId: demoUserId,
+      positionReader: () async => (lat: 24.8138, lng: 67.0300),
     ),
   );
 }

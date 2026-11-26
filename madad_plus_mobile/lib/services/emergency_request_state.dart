@@ -74,6 +74,7 @@ enum EmergencyScreen {
   providerAccepted,
   providerEnRoute,
   providerJob,
+  providerScan,
   providerPaid,
 }
 
@@ -87,6 +88,7 @@ enum DomesticJob {
   inProgress,
   costReview,
   refused,
+  presence,
   complete,
 }
 
@@ -113,9 +115,11 @@ class EmergencyRequestState extends ChangeNotifier {
     EmergencySocketService? socketService,
     ProviderNotifier? providerNotifier,
     String? demoUserId,
+    Future<({double lat, double lng})?> Function()? positionReader,
   }) : _emergencyService = emergencyService ?? EmergencyService(),
        _emergencySocketService = socketService ?? EmergencySocketService(),
        _providerNotifier = providerNotifier,
+       _positionReader = positionReader ?? _readPhonePosition,
        demoUserId = demoUserId ?? const String.fromEnvironment('DEMO_USER_ID') {
     loadHomePlaces();
     _historyLoad = loadRequestHistory();
@@ -126,6 +130,7 @@ class EmergencyRequestState extends ChangeNotifier {
   final EmergencySocketService _emergencySocketService;
   final ProviderNotifier? _providerNotifier;
   final String demoUserId;
+  final Future<({double lat, double lng})?> Function() _positionReader;
 
   EmergencyScreen currentScreen = EmergencyScreen.splash;
   AccountPath accountPath = AccountPath.signIn;
@@ -150,6 +155,9 @@ class EmergencyRequestState extends ChangeNotifier {
   String? amountOwed;
   String? providerPaidText;
   String? providerPaidBy;
+  String? presenceCode;
+  String? presenceNotice;
+  bool presenceChecking = false;
   final List<({
     String id,
     String trade,
@@ -1146,7 +1154,17 @@ class EmergencyRequestState extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    if(event == 'domestic.presence_started') {
+      if(domesticJob == DomesticJob.inProgress) {
+        presenceCode = null;
+        domesticJob = DomesticJob.presence;
+        goTo(EmergencyScreen.domesticJob);
+      }
+      notifyListeners();
+      return;
+    }
     if(event == 'domestic.work_finished') {
+      presenceCode = null;
       domesticJob = DomesticJob.complete;
       goTo(EmergencyScreen.domesticJob);
       return;
@@ -1531,11 +1549,97 @@ class EmergencyRequestState extends ChangeNotifier {
     if(job == null || job.finalTotal == null) {
       return;
     }
-    _rememberProviderPayment(job);
-    final requestId = job.requestId;
-    _finishProviderJob();
-    goTo(EmergencyScreen.providerPaid);
-    _emergencySocketService.relayDomestic('domestic.work_finished', requestId);
+    presenceNotice = null;
+    goTo(EmergencyScreen.providerScan);
+    _emergencySocketService.relayDomestic('domestic.presence_started', job.requestId);
+  }
+
+  void leaveProviderScan() {
+    presenceNotice = null;
+    goTo(EmergencyScreen.providerJob);
+  }
+
+  void showPresenceNotice(String message) {
+    presenceNotice = message;
+    notifyListeners();
+  }
+
+  Future<void> submitPresenceScan(String code) async {
+    final job = activeJob;
+    if(job == null || presenceChecking) {
+      return;
+    }
+    presenceChecking = true;
+    presenceNotice = null;
+    notifyListeners();
+    try {
+      final position = await _positionReader();
+      final booking = await _emergencyService.presenceScan(
+        requestId: job.requestId,
+        code: code,
+        lat: position?.lat,
+        lng: position?.lng,
+      );
+      if(currentScreen == EmergencyScreen.providerScan) {
+        _rememberProviderPayment(booking.finalTotal == null ? job : booking);
+        _finishProviderJob();
+        goTo(EmergencyScreen.providerPaid);
+      }
+    } catch (_) {
+      presenceNotice = 'The scan did not count. Try again.';
+    } finally {
+      presenceChecking = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshPresenceCode() async {
+    final booking = domesticBooking;
+    if(booking == null || domesticJob != DomesticJob.presence) {
+      return;
+    }
+    try {
+      final position = await _positionReader();
+      final code = await _emergencyService.presenceCode(
+        requestId: booking.requestId,
+        lat: position?.lat,
+        lng: position?.lng,
+      );
+      if(domesticJob == DomesticJob.presence) {
+        presenceCode = code;
+        notifyListeners();
+      }
+    } catch (_) {
+      debugPrint('the scan code could not be refreshed this time');
+    }
+  }
+
+  void leavePresence() {
+    presenceCode = null;
+    domesticJob = DomesticJob.inProgress;
+    goTo(EmergencyScreen.domesticJob);
+  }
+
+  static Future<({double lat, double lng})?> _readPhonePosition() async {
+    try {
+      if(!await Geolocator.isLocationServiceEnabled()) {
+        return null;
+      }
+      var permission = await Geolocator.checkPermission();
+      if(permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if(permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return null;
+      }
+      final position = await Geolocator.getCurrentPosition().timeout(
+        const Duration(seconds: 4),
+      );
+      return (lat: position.latitude, lng: position.longitude);
+    } catch (_) {
+      return null;
+    }
   }
 
   void _receiveProviderBooking(DomesticBooking booking, [String event = '']) {
@@ -1558,7 +1662,7 @@ class EmergencyRequestState extends ChangeNotifier {
         booking.finalTotal == null) {
       costWaiting = false;
     }
-    if(event == 'domestic.inspecting') {
+    if(event == 'domestic.inspecting' || event == 'domestic.presence_started') {
       notifyListeners();
       return;
     }
@@ -1580,6 +1684,7 @@ class EmergencyRequestState extends ChangeNotifier {
       }
       else if(booking.receiptStatus == 'ACCEPTED' &&
           currentScreen != EmergencyScreen.providerJob &&
+          currentScreen != EmergencyScreen.providerScan &&
           currentScreen != EmergencyScreen.providerPaid) {
         goTo(EmergencyScreen.providerAccepted);
       }

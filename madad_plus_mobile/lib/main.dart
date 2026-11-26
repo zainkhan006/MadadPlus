@@ -7,6 +7,7 @@ import 'services/emergency_request_state.dart';
 import 'services/provider_notifier.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
