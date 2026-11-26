@@ -15,6 +15,7 @@ const {
   getRequest,
   requestPayload
 } = require("./dispatch");
+const { reading, refreshCode, checkScan } = require("./presence");
 
 const app = express();
 const server = http.createServer(app);
@@ -32,8 +33,8 @@ io.on("connection", (socket) => {
   socket.on("domestic.inspecting", (requestId) => {
     relayDomestic(requestId, "domestic.inspecting");
   });
-  socket.on("domestic.work_finished", (requestId) => {
-    relayDomestic(requestId, "domestic.work_finished");
+  socket.on("domestic.presence_started", (requestId) => {
+    relayDomestic(requestId, "domestic.presence_started");
   });
 });
 
@@ -1808,9 +1809,6 @@ app.post("/api/v1/domestic-requests", async (req, res) => {
     emitDomesticRequest(payload, "domestic.requested");
     res.status(201).json(payload);
   } catch (error) {
-    // #region agent log
-    fetch('http://127.0.0.1:7305/ingest/3123ab15-a865-40c1-9544-a2717b4e7d1d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d93d70'},body:JSON.stringify({sessionId:'d93d70',hypothesisId:'B',location:'server.js:create',message:'create domestic failed',data:{code:error.code||null,detail:String(error.message||'').slice(0,180)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     console.error(error.message);
     res.status(500).json({ error: "Unable to create domestic request" });
   }
@@ -1865,9 +1863,6 @@ app.get("/api/v1/providers/:providerId/requests", async (req, res) => {
     const grouped = await componentsForRequests(requests.map((row) => row.id));
     res.json(requests.map((row) => domesticRequestPayload(row, grouped.get(row.id) || [])));
   } catch (error) {
-    // #region agent log
-    fetch('http://127.0.0.1:7305/ingest/3123ab15-a865-40c1-9544-a2717b4e7d1d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d93d70'},body:JSON.stringify({sessionId:'d93d70',hypothesisId:'B',location:'server.js:list',message:'load provider requests failed',data:{code:error.code||null,detail:String(error.message||'').slice(0,180)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     console.error(error.message);
     res.status(500).json({ error: "Unable to load provider requests" });
   }
@@ -2033,6 +2028,45 @@ app.post("/api/v1/domestic-requests/:requestId/cost-decision", async (req, res) 
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Unable to save domestic cost decision" });
+  }
+});
+
+// Live presence codes per domestic request. A server restart clears them.
+const presenceCodes = new Map();
+
+app.post("/api/v1/domestic-requests/:requestId/presence-code", async (req, res) => {
+  try {
+    const job = await getDomesticRequest(req.params.requestId);
+    if (!job) return res.status(404).json({ error: "Domestic request not found" });
+    const entry = refreshCode(
+      presenceCodes.get(job.requestId),
+      Date.now(),
+      reading(req.body?.lat, req.body?.lng)
+    );
+    presenceCodes.set(job.requestId, entry);
+    res.json({ code: entry.current.code });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to make a presence code" });
+  }
+});
+
+app.post("/api/v1/domestic-requests/:requestId/presence-scan", async (req, res) => {
+  try {
+    const job = await getDomesticRequest(req.params.requestId);
+    if (!job) return res.status(404).json({ error: "Domestic request not found" });
+    const result = checkScan(presenceCodes.get(job.requestId), job, {
+      code: req.body?.code,
+      lat: req.body?.lat,
+      lng: req.body?.lng
+    }, Date.now());
+    if (!result.ok) return res.status(409).json({ error: result.reason });
+    presenceCodes.delete(job.requestId);
+    emitDomesticRequest(job, "domestic.work_finished");
+    res.json(job);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Unable to check the presence scan" });
   }
 });
 
